@@ -382,43 +382,29 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           </div>
         )}
 
-        {/* Check + Rebuild + Restart buttons */}
+        {/* Rebuild + Restart */}
 
-        <div className="grid grid-cols-3 gap-1.5">
-          <button
-            onClick={checkVersion}
-            disabled={checking || updating || restarting || rebuilding}
-            className="flex items-center justify-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`w-2.5 h-2.5 ${checking ? "animate-spin" : ""}`}
-            />
-
-            {checking ? "..." : "Check"}
-          </button>
-
+        <div className="flex gap-1.5">
           <button
             onClick={handleRebuild}
             disabled={updating || restarting || rebuilding}
-            className="flex items-center justify-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
           >
             <Hammer
-              className={`w-2.5 h-2.5 ${rebuilding ? "animate-spin" : ""}`}
+              className={`w-3 h-3 ${rebuilding ? "animate-spin" : ""}`}
             />
-
-            {rebuilding ? "..." : "Rebuild"}
+            {rebuilding ? "Rebuilding..." : "Rebuild"}
           </button>
 
           <button
             onClick={handleRestart}
             disabled={updating || restarting || rebuilding}
-            className="flex items-center justify-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+            title="Restart App"
           >
             <RefreshCw
-              className={`w-2.5 h-2.5 ${restarting ? "animate-spin" : ""}`}
+              className={`w-3 h-3 ${restarting ? "animate-spin" : ""}`}
             />
-
-            {restarting ? "..." : "Restart"}
           </button>
         </div>
       </div>
