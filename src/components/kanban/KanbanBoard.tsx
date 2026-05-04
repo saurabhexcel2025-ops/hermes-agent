@@ -266,9 +266,7 @@ export default function KanbanBoard({
                 key={col.id}
                 column={col}
                 cards={colCards}
-                onCardClick={(card) => {
-                  // CardDetailModal is rendered below
-                }}
+                onCardClick={onStartGoalLoop}
                 onCardDelete={handleDeleteCard}
                 onAddCard={(title) => handleAddCard(col.id, title)}
                 onDeleteColumn={() => handleDeleteColumn(col.id)}

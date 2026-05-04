@@ -158,7 +158,6 @@ const RESTRICTED_HREFS = [
   "/workspaces",
   "/packages",
   "/command-room",
-  "/kanban",
 ];
 
 export function isRestrictedNavHref(href: string): boolean {
