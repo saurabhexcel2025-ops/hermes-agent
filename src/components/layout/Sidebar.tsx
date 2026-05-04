@@ -23,7 +23,6 @@ import {
   RefreshCw,
   AlertTriangle,
   Check,
-  Download,
   Hammer,
   Power,
 } from "lucide-react";
@@ -307,114 +306,33 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="rounded-lg bg-white/5 border border-white/5 p-2.5">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider">
-            Control Hub
-          </span>
+    <div className="flex gap-1.5">
+      <button
+        onClick={checkVersion}
+        disabled={checking || updating || restarting || rebuilding}
+        className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-[9px] font-mono text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+      >
+        <RefreshCw className={`w-2.5 h-2.5 flex-shrink-0 ${checking ? "animate-spin" : ""}`} />
+        {checking ? "..." : "Check"}
+      </button>
 
-          {version && !version.updateAvailable && (
-            <span className="text-[9px] font-mono text-neon-green flex items-center gap-1">
-              <Check className="w-2.5 h-2.5" /> {version.localHash}
-            </span>
-          )}
+      <button
+        onClick={handleRebuild}
+        disabled={updating || restarting || rebuilding}
+        className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-[9px] font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+      >
+        <Hammer className={`w-2.5 h-2.5 flex-shrink-0 ${rebuilding ? "animate-spin" : ""}`} />
+        {rebuilding ? "..." : "Rebuild"}
+      </button>
 
-          {version?.updateAvailable && (
-            <span className="text-[9px] font-mono text-neon-orange flex items-center gap-1">
-              <AlertTriangle className="w-2.5 h-2.5" /> {version.behind} behind
-            </span>
-          )}
-        </div>
-
-        {/* State 1: Unknown — no check yet */}
-
-        {!version && !checking && (
-          <button
-            onClick={checkVersion}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-400 hover:bg-blue-500/20 transition-colors mb-1.5"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Check for Update
-          </button>
-        )}
-
-        {/* Checking spinner */}
-
-        {checking && (
-          <div className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-white/5 text-[10px] font-mono text-white/40 mb-1.5">
-            <RefreshCw className="w-3 h-3 animate-spin" />
-            Checking...
-          </div>
-        )}
-
-        {/* State 2: Up to date */}
-
-        {version && !version.updateAvailable && (
-          <div className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-green-500/10 border border-green-500/20 text-[10px] font-mono text-neon-green mb-1.5">
-            <Check className="w-3 h-3" />
-            Up to date
-          </div>
-        )}
-
-        {/* State 3: Update available */}
-
-        {version?.updateAvailable && (
-          <button
-            onClick={handleUpdate}
-            disabled={updating || restarting}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/20 text-[10px] font-mono text-neon-orange hover:bg-orange-500/20 transition-colors disabled:opacity-50 mb-1.5"
-          >
-            {updating ? (
-              <RefreshCw className="w-3 h-3 animate-spin" />
-            ) : (
-              <Download className="w-3 h-3" />
-            )}
-
-            {updating ? "Updating..." : "Update Now"}
-          </button>
-        )}
-
-        {/* Status message */}
-
-        {message && (
-          <div className="text-[9px] font-mono text-white/40 text-center mb-1">
-            {message}
-          </div>
-        )}
-
-        {/* Primary action buttons */}
-
-        <div className="flex gap-1.5">
-          <button
-            onClick={checkVersion}
-            disabled={checking || updating || restarting || rebuilding}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${checking ? "animate-spin" : ""}`} />
-            {checking ? "Checking..." : "Check for Update"}
-          </button>
-
-          <button
-            onClick={handleRebuild}
-            disabled={updating || restarting || rebuilding}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
-          >
-            <Hammer className={`w-3 h-3 ${rebuilding ? "animate-spin" : ""}`} />
-            {rebuilding ? "Rebuilding..." : "Rebuild"}
-          </button>
-
-          <button
-            onClick={handleRestart}
-            disabled={updating || restarting || rebuilding}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-[10px] font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-            title="Restart App"
-          >
-            <Power className={`w-3 h-3 ${restarting ? "animate-spin" : ""}`} />
-            {restarting ? "Restarting..." : "Restart"}
-          </button>
-        </div>
-      </div>
+      <button
+        onClick={handleRestart}
+        disabled={updating || restarting || rebuilding}
+        className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-[9px] font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+      >
+        <Power className={`w-2.5 h-2.5 flex-shrink-0 ${restarting ? "animate-spin" : ""}`} />
+        {restarting ? "..." : "Restart"}
+      </button>
     </div>
   );
 }
@@ -616,7 +534,7 @@ export default function Sidebar() {
 
       {/* Footer */}
 
-      <div className="px-3 py-3 border-t border-white/10 space-y-2">
+      <div className="px-3 py-3 border-t border-white/10 space-y-2 flex-shrink-0 overflow-hidden">
         <VersionFooter collapsed={collapsed} />
 
         <button
