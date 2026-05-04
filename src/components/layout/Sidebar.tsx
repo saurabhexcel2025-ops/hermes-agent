@@ -25,6 +25,7 @@ import {
   Check,
   Download,
   Hammer,
+  Power,
 } from "lucide-react";
 
 import { iconColorMap } from "@/lib/theme";
@@ -294,10 +295,10 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         <button
           onClick={handleRestart}
           disabled={restarting}
-          className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
+          className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
           title="Restart App"
         >
-          <RefreshCw
+          <Power
             className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`}
           />
         </button>
@@ -382,29 +383,35 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           </div>
         )}
 
-        {/* Rebuild + Restart */}
+        {/* Primary action buttons */}
 
         <div className="flex gap-1.5">
+          <button
+            onClick={checkVersion}
+            disabled={checking || updating || restarting || rebuilding}
+            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${checking ? "animate-spin" : ""}`} />
+            {checking ? "Checking..." : "Check for Update"}
+          </button>
+
           <button
             onClick={handleRebuild}
             disabled={updating || restarting || rebuilding}
             className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
           >
-            <Hammer
-              className={`w-3 h-3 ${rebuilding ? "animate-spin" : ""}`}
-            />
+            <Hammer className={`w-3 h-3 ${rebuilding ? "animate-spin" : ""}`} />
             {rebuilding ? "Rebuilding..." : "Rebuild"}
           </button>
 
           <button
             onClick={handleRestart}
             disabled={updating || restarting || rebuilding}
-            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-[10px] font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
             title="Restart App"
           >
-            <RefreshCw
-              className={`w-3 h-3 ${restarting ? "animate-spin" : ""}`}
-            />
+            <Power className={`w-3 h-3 ${restarting ? "animate-spin" : ""}`} />
+            {restarting ? "Restarting..." : "Restart"}
           </button>
         </div>
       </div>

@@ -17,6 +17,7 @@ import { appendAuditLine } from "@/lib/audit-log";
 // ═══════════════════════════════════════════════════════════════
 // GET  /api/update                       → check for updates
 // POST /api/update { action: "update" }  → pull + build + restart (gated)
+// POST /api/update { action: "rebuild" } → build + restart (no git, gated)
 // POST /api/update { action: "restart" } → restart only (gated)
 //
 // CH_ENABLE_DEPLOY_API=true required for POST.
@@ -175,6 +176,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ data: { action: "restart", status: "started" } });
     }
 
+    if (action === "rebuild") {
+      try {
+        execSync("npm run build", {
+          cwd: APP_DIR,
+          timeout: 180000,
+          stdio: "pipe",
+        });
+      } catch (error) {
+        logApiError("POST /api/update", "build", error);
+        appendAuditLine({
+          action: "deploy.rebuild",
+          resource: "build",
+          ok: false,
+          correlationId,
+        });
+        return NextResponse.json(
+          { error: "Build failed — server still running" },
+          { status: 500 }
+        );
+      }
+
+      spawnScript(RESTART_SCRIPT);
+      appendAuditLine({
+        action: "deploy.rebuild",
+        resource: "restart",
+        ok: true,
+        correlationId,
+      });
+      return NextResponse.json({ data: { action: "rebuild", status: "started" } });
+    }
+
     if (action === "update") {
       try {
         runGit(["fetch", "origin", UPDATE_BRANCH, "--quiet"]);
@@ -265,7 +297,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Unknown action. Use 'update' or 'restart'" },
+      { error: "Unknown action. Use 'update', 'rebuild', or 'restart'" },
       { status: 400 }
     );
   } catch (error) {
