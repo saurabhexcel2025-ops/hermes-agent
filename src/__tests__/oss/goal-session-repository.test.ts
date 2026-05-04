@@ -235,3 +235,79 @@ describe("deleteGoalSession", () => {
     expect(deleteGoalSession("gs_nonexistent")).toBe(false);
   });
 });
+
+describe("saveGoalSession", () => {
+  it("persists a session correctly to disk", () => {
+    resetMocks();
+    const session = {
+      ...BASE_SESSION,
+      id: "gs_test_persist",
+      status: "active" as const,
+    };
+    saveGoalSession(session);
+    expect(mockMkdirSync).toHaveBeenCalled();
+    expect(mockWriteFileSync).toHaveBeenCalled();
+    const writeCall = mockWriteFileSync.mock.calls[0];
+    expect(writeCall[0]).toContain("gs_test_persist.goal.json");
+    const written = JSON.parse(writeCall[1] as string);
+    expect(written.id).toBe("gs_test_persist");
+    expect(written.boardId).toBe("board_abc");
+    expect(written.status).toBe("active");
+  });
+
+  it("updates an existing session", () => {
+    resetMocks();
+    const session = {
+      ...BASE_SESSION,
+      id: "gs_test123",
+      status: "paused" as const,
+      currentGoalIndex: 2,
+    };
+    saveGoalSession(session);
+    expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+    const writeCall = mockWriteFileSync.mock.calls[0];
+    const written = JSON.parse(writeCall[1] as string);
+    expect(written.status).toBe("paused");
+    expect(written.currentGoalIndex).toBe(2);
+  });
+
+  it("does not write when session id is sanitized to empty", () => {
+    resetMocks();
+    // "!!!" becomes "" after sanitization (all non-alphanumeric chars stripped)
+    const session = { ...BASE_SESSION, id: "!!!" } as unknown as typeof BASE_SESSION;
+    saveGoalSession(session);
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadGoalSession — invalid IDs", () => {
+  it("returns null for session with invalid characters in id", () => {
+    resetMocks();
+    expect(loadGoalSession("gs_../../../etc/passwd")).toBeNull();
+    expect(loadGoalSession("")).toBeNull();
+  });
+});
+
+describe("concurrent saves", () => {
+  it("does not raise errors when multiple saves occur in sequence", () => {
+    resetMocks();
+    const session1 = { ...BASE_SESSION, id: "gs_concurrent_a" };
+    const session2 = { ...BASE_SESSION, id: "gs_concurrent_b" };
+    saveGoalSession(session1);
+    saveGoalSession(session2);
+    // Both writes should succeed without throwing
+    expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it("each concurrent save writes to a distinct file path", () => {
+    resetMocks();
+    const session1 = { ...BASE_SESSION, id: "gs_concurrent_a" };
+    const session2 = { ...BASE_SESSION, id: "gs_concurrent_b" };
+    saveGoalSession(session1);
+    saveGoalSession(session2);
+    const paths = mockWriteFileSync.mock.calls.map((c) => c[0]);
+    expect(paths[0]).not.toEqual(paths[1]);
+    expect(paths[0]).toContain("gs_concurrent_a");
+    expect(paths[1]).toContain("gs_concurrent_b");
+  });
+});

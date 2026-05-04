@@ -110,6 +110,16 @@ const SESSION_DATA = {
   updatedAt: "2025-01-01T00:00:00.000Z",
 };
 
+const SESSION_DATA_PARALLEL = {
+  ...SESSION_DATA,
+  id: "gs_test_parallel",
+  goalLoopMode: "parallel" as const,
+  steps: [
+    { index: 0, goal: "Goal One", status: "pending" as const, missionId: null, assignedProfileId: null, completedAt: null, error: null },
+    { index: 1, goal: "Goal Two", status: "pending" as const, missionId: null, assignedProfileId: null, completedAt: null, error: null },
+  ],
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockExistsSync.mockReturnValue(false);
@@ -119,6 +129,10 @@ beforeEach(() => {
   mockUnlinkSync.mockReturnValue(undefined);
   mockReadFileSync.mockImplementation(() => { throw new Error("unexpected read"); });
 });
+
+// ─────────────────────────────────────────────────────────────────
+// GET /api/goals
+// ─────────────────────────────────────────────────────────────────
 
 describe("GET /api/goals", () => {
   it("returns empty list when no sessions exist", async () => {
@@ -148,7 +162,26 @@ describe("GET /api/goals", () => {
     const data = await res.json();
     expect((data as Record<string, unknown>).data).toHaveProperty("sessions");
   });
+
+  it("returns 404 when session id is not found", async () => {
+    mockExistsSync.mockReturnValue(false);
+    const res = await getRoute("/api/goals?id=nonexistent");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns a single session by id", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
+    const res = await getRoute("/api/goals?id=gs_test123");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect((data as Record<string, unknown>).data).toHaveProperty("session");
+  });
 });
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — start
+// ─────────────────────────────────────────────────────────────────
 
 describe("POST /api/goals — start", () => {
   it("creates a new goal session from goals array", async () => {
@@ -175,7 +208,89 @@ describe("POST /api/goals — start", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("rejects start without boardId", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "start",
+      cardId: "card_xyz",
+      goalLoopMode: "sequential",
+      goals: ["Goal One"],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects start without cardId", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "start",
+      boardId: "board_abc",
+      goalLoopMode: "sequential",
+      goals: ["Goal One"],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects start without goalLoopMode", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "start",
+      boardId: "board_abc",
+      cardId: "card_xyz",
+      goals: ["Goal One"],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects start when an active session already exists for the same card", async () => {
+    // Simulate an existing active session
+    mockExistsSync.mockReturnValue(true);
+    mockReaddirSync.mockReturnValue(["gs_existing.goal.json"]);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, status: "active" }));
+    const res = await postRoute("/api/goals", {
+      action: "start",
+      boardId: "board_abc",
+      cardId: "card_xyz",
+      goalLoopMode: "sequential",
+      goals: ["Goal One"],
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("allows start when only cancelled sessions exist for the same card", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReaddirSync.mockReturnValue(["gs_old.goal.json"]);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, id: "gs_old", status: "cancelled" }));
+    const res = await postRoute("/api/goals", {
+      action: "start",
+      boardId: "board_abc",
+      cardId: "card_xyz",
+      goalLoopMode: "sequential",
+      goals: ["Goal One"],
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("creates session in parallel mode", async () => {
+    mockExistsSync.mockReturnValue(false);
+    const res = await postRoute("/api/goals", {
+      action: "start",
+      boardId: "board_parallel",
+      cardId: "card_parallel",
+      goalLoopMode: "parallel",
+      goals: ["Goal Alpha", "Goal Beta"],
+      assignedProfileId: "researcher",
+    });
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
+    expect(session).toHaveProperty("session");
+    const sess = (session as Record<string, unknown>).session as Record<string, unknown>;
+    expect(sess.goalLoopMode).toBe("parallel");
+    expect(sess.goals).toEqual(["Goal Alpha", "Goal Beta"]);
+  });
 });
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — advance
+// ─────────────────────────────────────────────────────────────────
 
 describe("POST /api/goals — advance", () => {
   it("advances a step to completed and moves currentGoalIndex forward", async () => {
@@ -206,16 +321,6 @@ describe("POST /api/goals — advance", () => {
     expect(res.status).toBe(200);
   });
 
-  it("pauses a session", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
-    const res = await postRoute("/api/goals", {
-      action: "pause",
-      sessionId: "gs_test123",
-    });
-    expect(res.status).toBe(200);
-  });
-
   it("returns 404 for non-existent session", async () => {
     mockExistsSync.mockReturnValue(false);
     const res = await postRoute("/api/goals", {
@@ -226,11 +331,191 @@ describe("POST /api/goals — advance", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it("returns 400 when sessionId is missing", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "advance",
+      goalIndex: 0,
+      status: "completed",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when goalIndex is missing", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "advance",
+      sessionId: "gs_test123",
+      status: "completed",
+    });
+    expect(res.status).toBe(400);
+  });
 });
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — pause
+// ─────────────────────────────────────────────────────────────────
+
+describe("POST /api/goals — pause", () => {
+  it("pauses an active session", async () => {
+    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
+    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
+    const res = await postRoute("/api/goals", {
+      action: "pause",
+      sessionId: "gs_test123",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
+    expect(session).toHaveProperty("session");
+    expect((session as Record<string, unknown>).session).toHaveProperty("status", "paused");
+  });
+
+  it("returns 404 for non-existent session", async () => {
+    mockExistsSync.mockReturnValue(false);
+    const res = await postRoute("/api/goals", {
+      action: "pause",
+      sessionId: "nonexistent",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when sessionId is missing", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "pause",
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — resume
+// ─────────────────────────────────────────────────────────────────
+
+describe("POST /api/goals — resume", () => {
+  it("resumes a paused session", async () => {
+    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
+    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, status: "paused" }));
+    const res = await postRoute("/api/goals", {
+      action: "resume",
+      sessionId: "gs_test123",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
+    expect(session).toHaveProperty("session");
+    expect((session as Record<string, unknown>).session).toHaveProperty("status", "active");
+  });
+
+  it("returns 404 for non-existent session", async () => {
+    mockExistsSync.mockReturnValue(false);
+    const res = await postRoute("/api/goals", {
+      action: "resume",
+      sessionId: "nonexistent",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when sessionId is missing", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "resume",
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — cancel
+// ─────────────────────────────────────────────────────────────────
+
+describe("POST /api/goals — cancel", () => {
+  it("cancels an active session", async () => {
+    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
+    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
+    const res = await postRoute("/api/goals", {
+      action: "cancel",
+      sessionId: "gs_test123",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
+    expect(session).toHaveProperty("session");
+    expect((session as Record<string, unknown>).session).toHaveProperty("status", "cancelled");
+  });
+
+  it("cancels a paused session", async () => {
+    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
+    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, status: "paused" }));
+    const res = await postRoute("/api/goals", {
+      action: "cancel",
+      sessionId: "gs_test123",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
+    expect((session as Record<string, unknown>).session).toHaveProperty("status", "cancelled");
+  });
+
+  it("returns 404 for non-existent session", async () => {
+    mockExistsSync.mockReturnValue(false);
+    const res = await postRoute("/api/goals", {
+      action: "cancel",
+      sessionId: "nonexistent",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when sessionId is missing", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "cancel",
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — delete
+// ─────────────────────────────────────────────────────────────────
+
+describe("POST /api/goals — delete", () => {
+  it("deletes an existing session", async () => {
+    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
+    const res = await postRoute("/api/goals", {
+      action: "delete",
+      sessionId: "gs_test123",
+    });
+    expect(res.status).toBe(200);
+    expect(mockUnlinkSync).toHaveBeenCalled();
+  });
+
+  it("returns 404 for non-existent session on delete", async () => {
+    mockExistsSync.mockReturnValue(false);
+    const res = await postRoute("/api/goals", {
+      action: "delete",
+      sessionId: "nonexistent",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when sessionId is missing for delete", async () => {
+    const res = await postRoute("/api/goals", {
+      action: "delete",
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// POST /api/goals — unknown action
+// ─────────────────────────────────────────────────────────────────
 
 describe("POST /api/goals — unknown action", () => {
   it("returns 400 for an unknown action", async () => {
     const res = await postRoute("/api/goals", { action: "invalid" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when action is missing", async () => {
+    const res = await postRoute("/api/goals", {});
     expect(res.status).toBe(400);
   });
 });
