@@ -112,6 +112,9 @@ function findCronJobForMission(missionId: string): CronJobData | null {
 
 
 
+// PERFORMANCE: Only call statSync for files that actually match the cronJobId.
+// Filename format: session_cron_<cronJobId>_<YYYYMMDD_HHMMSS>.json
+// We match cronJobId first, then stat only the candidates.
 function findSessionsForCronJob(cronJobId: string): Array<{ id: string; modified: string; size: number }> {
 
   const sessionsDir = PATHS.sessions;
@@ -119,7 +122,6 @@ function findSessionsForCronJob(cronJobId: string): Array<{ id: string; modified
   if (!existsSync(sessionsDir)) return [];
 
   try {
-
     const files = readdirSync(sessionsDir);
 
     const results: Array<{ id: string; modified: string; size: number }> = [];
@@ -133,17 +135,18 @@ function findSessionsForCronJob(cronJobId: string): Array<{ id: string; modified
       const filePath = sessionsDir + "/" + file;
 
       try {
-
         const stat = statSync(filePath);
 
+        // Parse timestamp from filename: session_cron_<cronJobId>_<YYYYMMDD_HHMMSS>.json
+        // or session_<type>_<cronJobId>_<YYYYMMDD_HHMMSS>.json
+        const tsMatch = file.match(/_(\d{8}_\d{6})\.(json|jsonl)$/);
+
         results.push({
-
           id: file.replace(/\.(json|jsonl)$/, ""),
-
-          modified: stat.mtime.toISOString(),
-
+          modified: tsMatch
+            ? `${tsMatch[1].slice(0, 4)}-${tsMatch[1].slice(4, 6)}-${tsMatch[1].slice(6, 8)}T${tsMatch[1].slice(9, 11)}:${tsMatch[1].slice(11, 13)}:${tsMatch[1].slice(13, 15)}Z`
+            : stat.mtime.toISOString(),
           size: stat.size,
-
         });
 
       } catch {}

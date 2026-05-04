@@ -22,6 +22,7 @@ import type { Team, TeamMember } from "@/types/hermes";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const teamId = url.searchParams.get("id");
+  const boardId = url.searchParams.get("boardId");
 
   try {
     ensureTeamsDir();
@@ -34,10 +35,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ data: { team } });
     }
 
+    if (boardId) {
+      // Filter teams that have this board assigned
+      const allTeams = listTeams();
+      const filtered = allTeams.filter((t) => t.boardIds.includes(boardId));
+      return NextResponse.json({ data: { teams: filtered } });
+    }
+
     const teams = listTeams();
     return NextResponse.json({ data: { teams } });
   } catch (error) {
-    logApiError("GET /api/teams", teamId ? `team ${teamId}` : "listing teams", error);
+    logApiError("GET /api/teams", teamId ? `team ${teamId}` : boardId ? `board ${boardId}` : "listing teams", error);
     return NextResponse.json({ error: "Failed to load teams" }, { status: 500 });
   }
 }

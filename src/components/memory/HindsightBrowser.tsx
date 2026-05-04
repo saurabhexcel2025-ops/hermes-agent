@@ -26,6 +26,33 @@ interface Memory {
   metadata?: Record<string, unknown>;
 }
 
+/** Parse the raw Python repr string from the Hindsight API into clean fields */
+function parseMemoryContent(raw: string): { text: string; type: string; tags: string[] } {
+  // The content is a Python repr string like:
+  // "id='...' text='...' type='observation' entities=... tags=[] ..."
+  // Extract the `text='...'` value
+  const textMatch = raw.match(/text='((?:[^'\\]|\\.)*)'/);
+  const typeMatch = raw.match(/type='([^']*)'/);
+  // Tags appear as a Python list e.g. "tags=['ai','coding']" or "tags=[]"
+  const tagsMatch = raw.match(/tags=\[(.*?)\]/);
+  const text = textMatch ? textMatch[1] : raw;
+  const type = typeMatch ? typeMatch[1] : "unknown";
+  const tags = tagsMatch
+    ? tagsMatch[1]
+        .split(",")
+        .map((t) => t.trim().replace(/^'|'$/g, ""))
+        .filter(Boolean)
+    : [];
+  return { text, type, tags };
+}
+
+/** Parse the reflect response Python repr — extract text='...' from the repr string */
+function parseReflectResponse(raw: string): string {
+  // Format: "text='...' based_on=None structured_output=None usage=TokenUsage(...) trace=None"
+  const match = raw.match(/^text='((?:[^'\\]|\\.)*)'/);
+  return match ? match[1] : raw;
+}
+
 interface Directive {
   id: string;
   name: string;
@@ -533,7 +560,7 @@ export default function HindsightBrowser() {
             <Sparkles className="w-4 h-4 text-purple-400" />
             <span className="text-sm font-semibold text-purple-300">Reflection</span>
           </div>
-          <p className="text-sm text-white/70 leading-relaxed">{reflectResult}</p>
+          <p className="text-sm text-white/70 leading-relaxed">{parseReflectResponse(reflectResult)}</p>
         </div>
       )}
 
@@ -585,14 +612,19 @@ export default function HindsightBrowser() {
             />
           ) : (
             <div className="space-y-3">
-              {memories.map((memory, i) => (
+              {memories.map((memory, i) => {
+                const { text, type, tags } = parseMemoryContent(memory.content);
+                return (
                 <div
                   key={memory.id || i}
                   className="rounded-xl border border-white/10 bg-dark-900/50 p-4 hover:border-pink-500/20 transition-colors"
                 >
-                  <p className="text-sm text-white/70 leading-relaxed mb-2">{memory.content}</p>
-                  <div className="flex items-center gap-3 text-xs text-white/30">
-                    {memory.type && <Badge color="gray" size="sm">{memory.type}</Badge>}
+                  <p className="text-sm text-white/70 leading-relaxed mb-2">{text}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-white/30">
+                    {type && type !== "unknown" && <Badge color="gray" size="sm">{type}</Badge>}
+                    {tags.length > 0 && tags.map((tag) => (
+                      <span key={tag} className="bg-pink-500/10 text-pink-300 px-1.5 py-0.5 rounded">{tag}</span>
+                    ))}
                     {memory.score !== undefined && (
                       <span>Relevance: {(memory.score * 100).toFixed(0)}%</span>
                     )}
@@ -610,7 +642,7 @@ export default function HindsightBrowser() {
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </>

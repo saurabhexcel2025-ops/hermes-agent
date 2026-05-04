@@ -9,6 +9,92 @@ import { logApiError } from "@/lib/api-logger";
 import { readJobsFile } from "@/lib/jobs-repository";
 import type { CronJobData } from "@/lib/utils";
 
+// ── Memory stats cache (30s TTL) ────────────────────────────────
+// SQLite COUNT(*) and hindsight bridge exec are expensive per-request.
+// Caching avoids repeated DB queries and subprocess spawns.
+
+interface MemoryStatsCache {
+  factCount: number;
+  dbSize: string;
+  provider: string;
+  expiresAt: number;
+}
+
+let memoryStatsCache: MemoryStatsCache | null = null;
+
+const MEMORY_STATS_TTL_MS = 30_000;
+
+function getCachedMemoryStats(): MemoryStatsCache | null {
+  if (memoryStatsCache && Date.now() < memoryStatsCache.expiresAt) {
+    return memoryStatsCache;
+  }
+  return null;
+}
+
+async function buildMemoryStats(): Promise<MemoryStatsCache> {
+  const { getMemoryProviderType } = await import("@/lib/memory-providers");
+  const providerType = getMemoryProviderType();
+
+  if (providerType === "none") {
+    return { factCount: 0, dbSize: "N/A", provider: "Not Installed", expiresAt: 0 };
+  }
+
+  if (providerType === "holographic") {
+    const dbPath = PATHS.memoryDb;
+    if (!existsSync(dbPath)) {
+      return { factCount: 0, dbSize: "N/A", provider: "Holographic", expiresAt: 0 };
+    }
+    const stats = statSync(dbPath);
+    const sizeKB = Math.round(stats.size / 1024);
+    const dbSize = sizeKB > 1024 ? (sizeKB / 1024).toFixed(1) + " MB" : sizeKB + " KB";
+
+    const Database = (await import("better-sqlite3")).default;
+    const db = new Database(dbPath, { readonly: true });
+    let factCount = 0;
+    try {
+      const row = db.prepare("SELECT COUNT(*) as count FROM facts").get() as { count: number };
+      factCount = row.count;
+    } finally {
+      db.close();
+    }
+    return { factCount, dbSize, provider: "Holographic", expiresAt: Date.now() + MEMORY_STATS_TTL_MS };
+  }
+
+  if (providerType === "hindsight") {
+    // Fetch fact count via bridge (lightweight: limit=1, reads total field)
+    try {
+      const bridgeResult = await new Promise<{ count?: number; error?: string }>((resolve) => {
+        const cmd = HERMES_HOME + "/hermes-agent/venv/bin/python3 " + HERMES_HOME + "/scripts/hindsight_bridge.py count";
+        exec(cmd, { timeout: 8000, env: { ...process.env, PYTHONPATH: HERMES_HOME + "/hermes-agent" } }, (err, stdout) => {
+          if (err || !stdout) {
+            resolve({ count: 0, error: err?.message || "No output" });
+            return;
+          }
+          try {
+            resolve(JSON.parse(stdout));
+          } catch {
+            resolve({ count: 0, error: "Invalid JSON" });
+          }
+        });
+      });
+      return { factCount: typeof bridgeResult.count === "number" ? bridgeResult.count : 0, dbSize: "In-agent", provider: "Hindsight (embedded)", expiresAt: Date.now() + MEMORY_STATS_TTL_MS };
+    } catch {
+      return { factCount: 0, dbSize: "In-agent", provider: "Hindsight (embedded)", expiresAt: Date.now() + MEMORY_STATS_TTL_MS };
+    }
+  }
+
+  return { factCount: 0, dbSize: "N/A", provider: providerType, expiresAt: Date.now() + MEMORY_STATS_TTL_MS };
+}
+
+async function getMemoryStatsWithCache(): Promise<MemoryStatsCache> {
+  const cached = getCachedMemoryStats();
+  if (cached) return cached;
+
+  const stats = await buildMemoryStats();
+  memoryStatsCache = stats;
+  return stats;
+}
+
 interface MonitorData {
   cron: {
     total: number;
@@ -212,7 +298,7 @@ export async function GET() {
       } catch (error) { logApiError("GET /api/monitor", "reading gateway platforms", error); }
     }
 
-    // ── Memory (provider-aware) ──────────────────────────────────
+    // ── Memory (provider-aware, cached 30s) ─────────────────────
     try {
       const { getMemoryProviderType } = await import("@/lib/memory-providers");
       const providerType = getMemoryProviderType();
@@ -241,29 +327,18 @@ export async function GET() {
           }
         }
       }
-      // Hindsight — query bridge for fact count
+      // Hindsight — query bridge for fact count (cached)
       else if (providerType === "hindsight") {
         data.memory.provider = "Hindsight (embedded)";
         data.memory.dbSize = "In-agent";
         // Fetch fact count via bridge (lightweight: limit=1, reads total field)
-        try {
-          const bridgeResult = await new Promise<{ count?: number; error?: string }>((resolve) => {
-            const cmd = HERMES_HOME + "/hermes-agent/venv/bin/python3 " + HERMES_HOME + "/scripts/hindsight_bridge.py count";
-            exec(cmd, { timeout: 8000, env: { ...process.env, PYTHONPATH: HERMES_HOME + "/hermes-agent" } }, (err, stdout) => {
-              if (err || !stdout) {
-                resolve({ count: 0, error: err?.message || "No output" });
-                return;
-              }
-              try {
-                resolve(JSON.parse(stdout));
-              } catch {
-                resolve({ count: 0, error: "Invalid JSON" });
-              }
-            });
-          });
-          data.memory.factCount = typeof bridgeResult.count === "number" ? bridgeResult.count : 0;
-        } catch {
-          data.memory.factCount = 0;
+        // Cache the result to avoid repeated subprocess spawns
+        const cachedMem = getCachedMemoryStats();
+        if (cachedMem) {
+          data.memory.factCount = cachedMem.factCount;
+        } else {
+          const memStats = await getMemoryStatsWithCache();
+          data.memory.factCount = memStats.factCount;
         }
       }
     } catch (error) { logApiError("GET /api/monitor", "reading memory stats", error); }
@@ -326,7 +401,14 @@ export async function GET() {
     // Keep only most recent 10
     data.errors = data.errors.slice(0, 10);
 
-    return NextResponse.json({ data });
+    return NextResponse.json(
+      { data },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=10, stale-while-revalidate=15",
+        },
+      }
+    );
   } catch (error) {
     logApiError("GET /api/monitor", "aggregating monitor data", error);
     return NextResponse.json(

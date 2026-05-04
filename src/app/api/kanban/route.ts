@@ -21,6 +21,7 @@ import {
   saveKanbanDocument,
   newId,
 } from "@/lib/kanban-repository";
+import { loadTeam, saveTeam } from "@/lib/teams-repository";
 import type {
   KanbanBoard,
   KanbanColumn,
@@ -32,7 +33,8 @@ import type {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const boardId = url.searchParams.get("id");
+  // Support both ?id= and ?boardId= for board lookups
+  const boardId = url.searchParams.get("id") ?? url.searchParams.get("boardId");
 
   try {
     ensureKanbanDir();
@@ -146,7 +148,37 @@ export async function POST(request: NextRequest) {
 
       if (name !== undefined) doc.board.name = name.trim();
       if (description !== undefined) doc.board.description = description.trim();
-      if (teamId !== undefined) doc.board.teamId = teamId.trim();
+
+      // Handle team assignment bidirectionally
+      if (teamId !== undefined) {
+        const newTeamId = teamId.trim();
+        const oldTeamId = doc.board.teamId;
+
+        if (newTeamId !== oldTeamId) {
+          // Remove board from old team's boardIds
+          if (oldTeamId) {
+            const oldTeam = loadTeam(oldTeamId);
+            if (oldTeam) {
+              oldTeam.boardIds = oldTeam.boardIds.filter((id) => id !== boardId);
+              saveTeam(oldTeam);
+            }
+          }
+
+          // Add board to new team's boardIds
+          if (newTeamId) {
+            const newTeam = loadTeam(newTeamId);
+            if (newTeam) {
+              if (!newTeam.boardIds.includes(boardId)) {
+                newTeam.boardIds.push(boardId);
+                saveTeam(newTeam);
+              }
+            }
+          }
+
+          doc.board.teamId = newTeamId;
+        }
+      }
+
       doc.board.updatedAt = new Date().toISOString();
 
       saveBoard(doc.board);

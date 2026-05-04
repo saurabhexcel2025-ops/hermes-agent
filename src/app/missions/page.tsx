@@ -50,20 +50,31 @@ import IntervalSelector from "@/components/ui/IntervalSelector";
 import ProfileSelector from "@/components/ui/ProfileSelector";
 import CategoryAccordion from "@/components/ui/CategoryAccordion";
 import TemplateCard from "@/components/ui/TemplateCard";
-import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
+import { timeAgo, titleCase } from "@/lib/utils";
 import { useMissionsApi } from "@/hooks/useMissionsApi";
 import type { Mission } from "@/types/hermes";
 
 // Available icons for templates
 const TEMPLATE_ICONS = [
-  "Search", "Bug", "GitPullRequest", "Wrench", "PenTool", "Zap",
-  "Rocket", "Cpu", "Activity", "Shield", "Terminal", "Database",
-  "Globe", "Code", "FileText", "Layers",
+  "Search",
+  "Bug",
+  "GitPullRequest",
+  "Wrench",
+  "PenTool",
+  "Zap",
+  "Rocket",
+  "Cpu",
+  "Activity",
+  "Shield",
+  "Terminal",
+  "Database",
+  "Globe",
+  "Code",
+  "FileText",
+  "Layers",
 ] as const;
 
-const TEMPLATE_COLORS = [
-  "cyan", "purple", "pink", "green", "orange",
-] as const;
+const TEMPLATE_COLORS = ["cyan", "purple", "pink", "green", "orange"] as const;
 
 type MissionRow = Mission & {
   cronJob?: {
@@ -110,9 +121,22 @@ interface MissionDetail {
 // ── Module-level constants (avoid re-creation on every render) ──
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  Search, Bug, GitPullRequest, Wrench, PenTool, Zap,
-  Rocket, Cpu, Activity, Shield, Terminal, Database,
-  Globe, Code, FileText, Layers,
+  Search,
+  Bug,
+  GitPullRequest,
+  Wrench,
+  PenTool,
+  Zap,
+  Rocket,
+  Cpu,
+  Activity,
+  Shield,
+  Terminal,
+  Database,
+  Globe,
+  Code,
+  FileText,
+  Layers,
 };
 
 const CATEGORY_ORDER = [
@@ -128,35 +152,51 @@ const CATEGORY_ORDER = [
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  "Engineering - QA": "pink", "Engineering - DevOps": "cyan",
-  "Engineering - Software": "purple", "Engineering - Data": "green",
-  "Engineering - Data Science": "orange", "Business - Operations": "cyan",
-  "Business - Creative": "orange", "Support": "blue", "Custom": "purple",
+  "Engineering - QA": "pink",
+  "Engineering - DevOps": "cyan",
+  "Engineering - Software": "purple",
+  "Engineering - Data": "green",
+  "Engineering - Data Science": "orange",
+  "Business - Operations": "cyan",
+  "Business - Creative": "orange",
+  Support: "blue",
+  Custom: "purple",
 };
 
-function groupTemplates(templates: MissionTemplate[]): [string, MissionTemplate[]][] {
+function groupTemplates(
+  templates: MissionTemplate[],
+): [string, MissionTemplate[]][] {
   const grouped: Record<string, MissionTemplate[]> = {};
   for (const t of templates) {
-    const cat = t.isCustom ? "Custom" : (t.category || "Other");
+    const cat = t.isCustom ? "Custom" : t.category || "Other";
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(t);
   }
-  return CATEGORY_ORDER
-    .filter((c) => grouped[c])
-    .map((cat) => [cat, grouped[cat]]);
+  return CATEGORY_ORDER.filter((c) => grouped[c]).map((cat) => [
+    cat,
+    grouped[cat],
+  ]);
 }
 
-const statusColors: Record<string, { dot: "online" | "warning" | "error" | "idle"; bg: string; text: string }> = {
+const statusColors: Record<
+  string,
+  { dot: "online" | "warning" | "error" | "idle"; bg: string; text: string }
+> = {
   queued: { dot: "warning", bg: "bg-orange-500/10", text: "text-neon-orange" },
   dispatched: { dot: "online", bg: "bg-blue-500/10", text: "text-blue-400" },
   successful: { dot: "online", bg: "bg-green-500/10", text: "text-neon-green" },
   failed: { dot: "error", bg: "bg-red-500/10", text: "text-red-400" },
 };
 
-const defaultStatusColor = { dot: "idle" as const, bg: "bg-white/5", text: "text-white/40" };
+const defaultStatusColor = {
+  dot: "idle" as const,
+  bg: "bg-white/5",
+  text: "text-white/40",
+};
 
 export default function MissionsPage() {
-  const { fetchMissions, fetchTemplates, fetchMissionDetail } = useMissionsApi();
+  const { fetchMissions, fetchTemplates, fetchMissionDetail } =
+    useMissionsApi();
   const router = useRouter();
   const [missions, setMissions] = useState<MissionRow[]>([]);
   const [templates, setTemplates] = useState<MissionTemplate[]>([]);
@@ -167,13 +207,16 @@ export default function MissionsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MissionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [promptCollapsed, setPromptCollapsed] = useState(true);
   const { showToast, toastElement } = useToast();
   const templateApplied = useRef(false);
   const expandedIdRef = useRef<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
+    null,
+  );
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [templateIcon, setTemplateIcon] = useState("Zap");
@@ -185,7 +228,9 @@ export default function MissionsPage() {
   const [newInstruction, setNewInstruction] = useState("");
   const [newContext, setNewContext] = useState("");
   const [newGoals, setNewGoals] = useState("");
-  const [newDispatch, setNewDispatch] = useState<"save" | "now" | "cron">("now");
+  const [newDispatch, setNewDispatch] = useState<"save" | "now" | "cron">(
+    "now",
+  );
   const [newSchedule, setNewSchedule] = useState("every 5m");
   const [newMissionTime, setNewMissionTime] = useState(15);
   const [newTimeout, setNewTimeout] = useState(10);
@@ -207,7 +252,9 @@ export default function MissionsPage() {
           const url = new URL(window.location.href);
           const templateId = url.searchParams.get("template");
           if (templateId) {
-            const t = loaded.find((tmpl: MissionTemplate) => tmpl.id === templateId);
+            const t = loaded.find(
+              (tmpl: MissionTemplate) => tmpl.id === templateId,
+            );
             if (t) {
               setNewName(t.name);
               setNewInstruction(t.instruction);
@@ -239,7 +286,7 @@ export default function MissionsPage() {
           if (showLoading) setDetailLoading(false);
         });
     },
-    [fetchMissionDetail]
+    [fetchMissionDetail],
   );
 
   useEffect(() => {
@@ -260,6 +307,7 @@ export default function MissionsPage() {
   // Load detail once when expanded (with loading spinner)
   useEffect(() => {
     if (expandedId) {
+      setPromptCollapsed(true);
       fetchDetail(expandedId, true);
     } else {
       setDetail(null);
@@ -271,7 +319,10 @@ export default function MissionsPage() {
     const parts = [newInstruction.trim()];
     if (newContext.trim()) {
       // Strip any existing header from context (defense against round-trip duplication)
-      const cleanContext = newContext.trim().replace(/(?:## Additional Context\n\n?)+/g, "").trim();
+      const cleanContext = newContext
+        .trim()
+        .replace(/(?:## Additional Context\n\n?)+/g, "")
+        .trim();
       if (cleanContext) {
         parts.push("", "---", "", "## Additional Context", "", cleanContext);
       }
@@ -287,45 +338,80 @@ export default function MissionsPage() {
     const fullPrompt = buildPrompt();
 
     try {
-    // Update existing mission (only for active missions with a live cron job)
-    if (editingId) {
-      const existingMission = missions.find(m => m.id === editingId);
-      const isActive = existingMission && (existingMission.status === "queued" || existingMission.status === "dispatched");
+      // Update existing mission (only for active missions with a live cron job)
+      if (editingId) {
+        const existingMission = missions.find((m) => m.id === editingId);
+        const isActive =
+          existingMission &&
+          (existingMission.status === "queued" ||
+            existingMission.status === "dispatched");
 
-      if (isActive) {
-        // Active mission - update and sync to cron job
-        showToast("Updating mission...", "info");
+        if (isActive) {
+          // Active mission - update and sync to cron job
+          showToast("Updating mission...", "info");
+          const res = await fetch("/api/missions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "update",
+              missionId: editingId,
+              name: newName,
+              prompt: fullPrompt,
+              goals: newGoals.split("\n").filter((g) => g.trim()),
+              profile: newProfile || undefined,
+              missionTimeMinutes: newMissionTime,
+              timeoutMinutes: newTimeout,
+              schedule: newDispatch === "cron" ? newSchedule : undefined,
+            }),
+          });
+          if (res.ok) {
+            showToast("Mission updated - cron job prompt synced", "success");
+            setEditingId(null);
+            setShowCreate(false);
+            fetchData();
+            if (expandedId === editingId) fetchDetail(editingId);
+          } else {
+            showToast("Failed to update mission", "error");
+          }
+          setDispatching(false);
+          return;
+        }
+
+        // Completed/failed mission - create a NEW dispatch (re-dispatch)
+        setEditingId(null); // Clear so we fall through to create path
+        // Don't show info toast here - the create path below handles it
+
         const res = await fetch("/api/missions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: "update",
-            missionId: editingId,
+            action: "create",
             name: newName,
             prompt: fullPrompt,
             goals: newGoals.split("\n").filter((g) => g.trim()),
+            dispatchMode: "now",
             profile: newProfile || undefined,
             missionTimeMinutes: newMissionTime,
             timeoutMinutes: newTimeout,
-            schedule: newDispatch === "cron" ? newSchedule : undefined,
           }),
         });
+
         if (res.ok) {
-          showToast("Mission updated - cron job prompt synced", "success");
-          setEditingId(null);
-          setShowCreate(false);
-          fetchData();
-          if (expandedId === editingId) fetchDetail(editingId);
+          showToast(
+            "Mission re-dispatched! Returning to dashboard...",
+            "success",
+          );
+          setDispatching(false);
+          setTimeout(() => router.push("/"), 2000);
         } else {
-          showToast("Failed to update mission", "error");
+          showToast("Failed to re-dispatch mission", "error");
+          setDispatching(false);
         }
-        setDispatching(false);
         return;
       }
 
-      // Completed/failed mission - create a NEW dispatch (re-dispatch)
-      setEditingId(null); // Clear so we fall through to create path
-      // Don't show info toast here - the create path below handles it
+      // Create new mission
+      showToast("Dispatching mission...", "info");
 
       const res = await fetch("/api/missions", {
         method: "POST",
@@ -335,7 +421,8 @@ export default function MissionsPage() {
           name: newName,
           prompt: fullPrompt,
           goals: newGoals.split("\n").filter((g) => g.trim()),
-          dispatchMode: "now",
+          dispatchMode: newDispatch,
+          schedule: newDispatch === "cron" ? newSchedule : undefined,
           profile: newProfile || undefined,
           missionTimeMinutes: newMissionTime,
           timeoutMinutes: newTimeout,
@@ -343,59 +430,29 @@ export default function MissionsPage() {
       });
 
       if (res.ok) {
-        showToast("Mission re-dispatched! Returning to dashboard...", "success");
-        setDispatching(false);
-        setTimeout(() => router.push("/"), 2000);
+        const _res = await res.json();
+        if (newDispatch === "save") {
+          showToast("Mission saved as draft", "success");
+          setNewName("");
+          setNewInstruction("");
+          setNewContext("");
+          setNewGoals("");
+          setShowCreate(false);
+          fetchData();
+          setDispatching(false);
+        } else if (newDispatch === "now") {
+          showToast("Mission dispatched! Returning to dashboard...", "success");
+          setDispatching(false);
+          setTimeout(() => router.push("/"), 2000);
+        } else {
+          showToast(`Mission scheduled - ${newSchedule}`, "success");
+          setDispatching(false);
+          setTimeout(() => router.push("/"), 2000);
+        }
       } else {
-        showToast("Failed to re-dispatch mission", "error");
+        showToast("Failed to create mission", "error");
         setDispatching(false);
       }
-      return;
-    }
-
-    // Create new mission
-    showToast("Dispatching mission...", "info");
-
-    const res = await fetch("/api/missions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create",
-        name: newName,
-        prompt: fullPrompt,
-        goals: newGoals.split("\n").filter((g) => g.trim()),
-        dispatchMode: newDispatch,
-        schedule: newDispatch === "cron" ? newSchedule : undefined,
-        profile: newProfile || undefined,
-        missionTimeMinutes: newMissionTime,
-        timeoutMinutes: newTimeout,
-      }),
-    });
-
-    if (res.ok) {
-      const _res = await res.json();
-      if (newDispatch === "save") {
-        showToast("Mission saved as draft", "success");
-        setNewName("");
-        setNewInstruction("");
-        setNewContext("");
-        setNewGoals("");
-        setShowCreate(false);
-        fetchData();
-        setDispatching(false);
-      } else if (newDispatch === "now") {
-        showToast("Mission dispatched! Returning to dashboard...", "success");
-        setDispatching(false);
-        setTimeout(() => router.push("/"), 2000);
-      } else {
-        showToast(`Mission scheduled - ${newSchedule}`, "success");
-        setDispatching(false);
-        setTimeout(() => router.push("/"), 2000);
-      }
-    } else {
-      showToast("Failed to create mission", "error");
-      setDispatching(false);
-    }
     } catch {
       showToast("Network error — please try again", "error");
       setDispatching(false);
@@ -412,18 +469,29 @@ export default function MissionsPage() {
     let rawPrompt = m.prompt;
 
     // Remove ## Goals tracking header block
-    rawPrompt = rawPrompt.replace(/^## Goals \(complete each in order\)\n[\s\S]*?Mark each goal as done.*\n\n---\n\n/m, "");
+    rawPrompt = rawPrompt.replace(
+      /^## Goals \(complete each in order\)\n[\s\S]*?Mark each goal as done.*\n\n---\n\n/m,
+      "",
+    );
     // Remove ## MISSION SCOPE section (injected by buildMissionPrompt)
-    rawPrompt = rawPrompt.replace(/## MISSION SCOPE\n[\s\S]*?(?=\n## |\n\n---|\n\n[A-Z])/m, "\n");
+    rawPrompt = rawPrompt.replace(
+      /## MISSION SCOPE\n[\s\S]*?(?=\n## |\n\n---|\n\n[A-Z])/m,
+      "\n",
+    );
     // Remove ## SAFETY LIMITS section (injected by buildMissionPrompt)
-    rawPrompt = rawPrompt.replace(/## SAFETY LIMITS\n[\s\S]*?(?=\n## |\n\n---|\n\n[A-Z])/m, "\n");
+    rawPrompt = rawPrompt.replace(
+      /## SAFETY LIMITS\n[\s\S]*?(?=\n## |\n\n---|\n\n[A-Z])/m,
+      "\n",
+    );
 
     const parts = rawPrompt.split("\n---\n");
     setNewInstruction(parts[0]?.trim() || rawPrompt);
     setNewContext(
       parts.length > 1
-        ? parts[parts.length - 1].replace(/(?:## Additional Context\n\n?)+/g, "").trim()
-        : ""
+        ? parts[parts.length - 1]
+            .replace(/(?:## Additional Context\n\n?)+/g, "")
+            .trim()
+        : "",
     );
     setNewGoals(m.goals.join("\n"));
     // Auto-set dispatch mode to "now" for completed/failed missions (re-dispatch)
@@ -470,7 +538,10 @@ export default function MissionsPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        showToast(editingTemplateId ? "Template updated!" : "Template saved!", "success");
+        showToast(
+          editingTemplateId ? "Template updated!" : "Template saved!",
+          "success",
+        );
         setShowTemplateEditor(false);
         setEditingTemplateId(null);
         fetchData();
@@ -484,7 +555,15 @@ export default function MissionsPage() {
     }
   };
 
-  const handleEditTemplate = (t: MissionTemplate & { isCustom?: boolean; instruction?: string; context?: string; dispatchMode?: string; schedule?: string }) => {
+  const handleEditTemplate = (
+    t: MissionTemplate & {
+      isCustom?: boolean;
+      instruction?: string;
+      context?: string;
+      dispatchMode?: string;
+      schedule?: string;
+    },
+  ) => {
     setEditingTemplateId(t.id);
     setTemplateName(t.name);
     setTemplateDescription(t.description || "");
@@ -493,7 +572,8 @@ export default function MissionsPage() {
     setNewInstruction(t.instruction || "");
     setNewContext(t.context || "");
     setNewGoals((t.goals || []).join("\n"));
-    if (t.dispatchMode) setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
+    if (t.dispatchMode)
+      setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
     if (t.schedule) setNewSchedule(t.schedule);
     setShowTemplateManager(false);
     setShowTemplateEditor(true);
@@ -521,7 +601,8 @@ export default function MissionsPage() {
     setNewContext(t.context);
     setNewGoals(t.goals.join("\n"));
     setNewProfile(t.profile || "");
-    if (t.dispatchMode) setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
+    if (t.dispatchMode)
+      setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
     if (t.schedule) setNewSchedule(t.schedule);
     setShowCreate(true);
   };
@@ -560,15 +641,35 @@ export default function MissionsPage() {
     }
   };
 
-  const filtered = useMemo(() => missions.filter((m) => {
-    if (filter !== "all" && m.status !== filter) return false;
-    if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !m.prompt.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  }), [missions, filter, search]);
+  const filtered = useMemo(
+    () =>
+      missions.filter((m) => {
+        if (filter !== "all" && m.status !== filter) return false;
+        if (
+          search &&
+          !m.name.toLowerCase().includes(search.toLowerCase()) &&
+          !m.prompt.toLowerCase().includes(search.toLowerCase())
+        )
+          return false;
+        return true;
+      }),
+    [missions, filter, search],
+  );
 
-  const activeCount = useMemo(() => missions.filter((m) => m.status === "queued" || m.status === "dispatched").length, [missions]);
-  const completedCount = useMemo(() => missions.filter((m) => m.status === "successful").length, [missions]);
-  const failedCount = useMemo(() => missions.filter((m) => m.status === "failed").length, [missions]);
+  const activeCount = useMemo(
+    () =>
+      missions.filter((m) => m.status === "queued" || m.status === "dispatched")
+        .length,
+    [missions],
+  );
+  const completedCount = useMemo(
+    () => missions.filter((m) => m.status === "successful").length,
+    [missions],
+  );
+  const failedCount = useMemo(
+    () => missions.filter((m) => m.status === "failed").length,
+    [missions],
+  );
 
   if (loading) {
     return (
@@ -588,11 +689,16 @@ export default function MissionsPage() {
           <Rocket className="w-5 h-5 text-neon-cyan" />
           <div>
             <h1 className="text-lg font-bold text-white">Missions</h1>
-            <p className="text-xs text-white/40 font-mono">Dispatch and track agent missions</p>
+            <p className="text-xs text-white/40 font-mono">
+              Dispatch and track agent missions
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={fetchData} className="p-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors">
+          <button
+            onClick={fetchData}
+            className="p-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
+          >
             <RefreshCw className="w-4 h-4" />
           </button>
           <Button onClick={() => setShowCreate(true)} size="sm">
@@ -605,20 +711,36 @@ export default function MissionsPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="rounded-lg border border-white/10 bg-dark-900/50 p-3">
-            <div className="text-[10px] font-mono text-white/40 uppercase">Total</div>
-            <div className="text-xl font-bold font-mono text-white">{missions.length}</div>
+            <div className="text-[10px] font-mono text-white/40 uppercase">
+              Total
+            </div>
+            <div className="text-xl font-bold font-mono text-white">
+              {missions.length}
+            </div>
           </div>
           <div className="rounded-lg border border-orange-500/20 bg-dark-900/50 p-3">
-            <div className="text-[10px] font-mono text-neon-orange uppercase">Active</div>
-            <div className="text-xl font-bold font-mono text-neon-orange">{activeCount}</div>
+            <div className="text-[10px] font-mono text-neon-orange uppercase">
+              Active
+            </div>
+            <div className="text-xl font-bold font-mono text-neon-orange">
+              {activeCount}
+            </div>
           </div>
           <div className="rounded-lg border border-green-500/20 bg-dark-900/50 p-3">
-            <div className="text-[10px] font-mono text-neon-green uppercase">Completed</div>
-            <div className="text-xl font-bold font-mono text-neon-green">{completedCount}</div>
+            <div className="text-[10px] font-mono text-neon-green uppercase">
+              Completed
+            </div>
+            <div className="text-xl font-bold font-mono text-neon-green">
+              {completedCount}
+            </div>
           </div>
           <div className="rounded-lg border border-red-500/20 bg-dark-900/50 p-3">
-            <div className="text-[10px] font-mono text-red-400 uppercase">Failed</div>
-            <div className="text-xl font-bold font-mono text-red-400">{failedCount}</div>
+            <div className="text-[10px] font-mono text-red-400 uppercase">
+              Failed
+            </div>
+            <div className="text-xl font-bold font-mono text-red-400">
+              {failedCount}
+            </div>
           </div>
         </div>
 
@@ -643,9 +765,10 @@ export default function MissionsPage() {
               {(() => {
                 const grouped = groupTemplates(templates);
                 // Apply category filter
-                const filteredGrouped = categoryFilter === "all"
-                  ? grouped
-                  : grouped.filter(([cat]) => cat === categoryFilter);
+                const filteredGrouped =
+                  categoryFilter === "all"
+                    ? grouped
+                    : grouped.filter(([cat]) => cat === categoryFilter);
                 return filteredGrouped.map(([cat, items]) => {
                   const color = CATEGORY_COLORS[cat] || "cyan";
                   return (
@@ -686,33 +809,53 @@ export default function MissionsPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-widest">
                 {(() => {
-                  const existing = editingId ? missions.find(m => m.id === editingId) : null;
-                  if (existing && (existing.status === "successful" || existing.status === "failed")) {
+                  const existing = editingId
+                    ? missions.find((m) => m.id === editingId)
+                    : null;
+                  if (
+                    existing &&
+                    (existing.status === "successful" ||
+                      existing.status === "failed")
+                  ) {
                     return `Re-Dispatch: ${existing.name}`;
                   }
                   if (editingId) return "Edit Mission";
                   return "New Mission";
                 })()}
               </h3>
-              <button onClick={() => { setShowCreate(false); setEditingId(null); }} className="text-white/30 hover:text-white/60">
+              <button
+                onClick={() => {
+                  setShowCreate(false);
+                  setEditingId(null);
+                }}
+                className="text-white/30 hover:text-white/60"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="space-y-3">
-              {editingId && (() => {
-                const existing = missions.find(m => m.id === editingId);
-                  if (existing && (existing.status === "successful" || existing.status === "failed")) {
-                  return (
-                    <div className="rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 p-3 text-xs text-neon-cyan/80 font-mono">
-                      A new mission will be created and dispatched immediately with your changes.
-                      The previous mission record will be kept for history.
-                    </div>
-                  );
-                }
-                return null;
-              })()}
+              {editingId &&
+                (() => {
+                  const existing = missions.find((m) => m.id === editingId);
+                  if (
+                    existing &&
+                    (existing.status === "successful" ||
+                      existing.status === "failed")
+                  ) {
+                    return (
+                      <div className="rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 p-3 text-xs text-neon-cyan/80 font-mono">
+                        A new mission will be created and dispatched immediately
+                        with your changes. The previous mission record will be
+                        kept for history.
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Mission Name</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Mission Name
+                </label>
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
@@ -721,7 +864,9 @@ export default function MissionsPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Instruction Prompt</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Instruction Prompt
+                </label>
                 <AutoTextarea
                   value={newInstruction}
                   onChange={setNewInstruction}
@@ -730,11 +875,15 @@ export default function MissionsPage() {
                   placeholder="The agent's task instructions - what to do and how to do it..."
                 />
                 <p className="text-[10px] text-white/20 font-mono mt-0.5">
-                  Defines the agent&apos;s role, approach, and step-by-step process. Templates pre-fill this.
+                  Defines the agent&apos;s role, approach, and step-by-step
+                  process. Templates pre-fill this.
                 </p>
               </div>
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Context Prompt <span className="text-white/20">(optional)</span></label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Context Prompt{" "}
+                  <span className="text-white/20">(optional)</span>
+                </label>
                 <AutoTextarea
                   value={newContext}
                   onChange={setNewContext}
@@ -743,11 +892,15 @@ export default function MissionsPage() {
                   placeholder="Additional context, specifics, or direction for this particular run..."
                 />
                 <p className="text-[10px] text-white/20 font-mono mt-0.5">
-                  Added below the instructions as &quot;Additional Context&quot;. Use for topic, URL, code path, or specific requirements.
+                  Added below the instructions as &quot;Additional
+                  Context&quot;. Use for topic, URL, code path, or specific
+                  requirements.
                 </p>
               </div>
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Goals (one per line)</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Goals (one per line)
+                </label>
                 <AutoTextarea
                   value={newGoals}
                   onChange={setNewGoals}
@@ -759,20 +912,37 @@ export default function MissionsPage() {
               {/* Mission Settings */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs text-white/40 font-mono mb-1 block">Mission Scope</label>
-                  <MissionTimeSelector value={newMissionTime} onChange={setNewMissionTime} />
+                  <label className="text-xs text-white/40 font-mono mb-1 block">
+                    Mission Scope
+                  </label>
+                  <MissionTimeSelector
+                    value={newMissionTime}
+                    onChange={setNewMissionTime}
+                  />
                 </div>
                 <div>
-                  <label className="text-xs text-white/40 font-mono mb-1 block">Agent Profile</label>
-                  <ProfileSelector value={newProfile} onChange={setNewProfile} />
+                  <label className="text-xs text-white/40 font-mono mb-1 block">
+                    Agent Profile
+                  </label>
+                  <ProfileSelector
+                    value={newProfile}
+                    onChange={setNewProfile}
+                  />
                 </div>
                 <div>
-                  <label className="text-xs text-white/40 font-mono mb-1 block">Timeout (Advanced)</label>
-                  <TimeoutSelector value={newTimeout} onChange={setNewTimeout} />
+                  <label className="text-xs text-white/40 font-mono mb-1 block">
+                    Timeout (Advanced)
+                  </label>
+                  <TimeoutSelector
+                    value={newTimeout}
+                    onChange={setNewTimeout}
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <label className="text-xs text-white/40 font-mono">Dispatch:</label>
+                <label className="text-xs text-white/40 font-mono">
+                  Dispatch:
+                </label>
                 {(["save", "now", "cron"] as const).map((mode) => (
                   <button
                     key={mode}
@@ -783,27 +953,48 @@ export default function MissionsPage() {
                         : "border-white/10 text-white/40 hover:text-white/60"
                     }`}
                   >
-                    {mode === "save" ? "Save Draft" : mode === "now" ? "Run Now" : "Recurring"}
+                    {mode === "save"
+                      ? "Save Draft"
+                      : mode === "now"
+                        ? "Run Now"
+                        : "Recurring"}
                   </button>
                 ))}
               </div>
               {newDispatch === "now" && (
                 <div className="text-[10px] text-white/30 font-mono bg-dark-800/50 rounded-lg px-3 py-2 border border-white/5">
-                  ⚡ Creates a one-shot cron job that fires within ~60 seconds. Results delivered to Discord.
+                  ⚡ Creates a one-shot cron job that fires within ~60 seconds.
+                  Results delivered to Discord.
                 </div>
               )}
               {newDispatch === "cron" && (
                 <div className="space-y-2">
-                  <label className="text-xs text-white/40 font-mono block">Schedule</label>
-                  <IntervalSelector value={newSchedule} onChange={setNewSchedule} />
+                  <label className="text-xs text-white/40 font-mono block">
+                    Schedule
+                  </label>
+                  <IntervalSelector
+                    value={newSchedule}
+                    onChange={setNewSchedule}
+                  />
                 </div>
               )}
               <div className="flex gap-2 pt-1">
-                <Button onClick={handleCreate} disabled={!newName.trim() || !newInstruction.trim() || dispatching} loading={dispatching}>
+                <Button
+                  onClick={handleCreate}
+                  disabled={
+                    !newName.trim() || !newInstruction.trim() || dispatching
+                  }
+                  loading={dispatching}
+                >
                   <Send className="w-3.5 h-3.5" />
                   {(() => {
-                    const existing = editingId ? missions.find(m => m.id === editingId) : null;
-                    const isReDispatch = existing && (existing.status === "successful" || existing.status === "failed");
+                    const existing = editingId
+                      ? missions.find((m) => m.id === editingId)
+                      : null;
+                    const isReDispatch =
+                      existing &&
+                      (existing.status === "successful" ||
+                        existing.status === "failed");
                     if (isReDispatch) return "Re-Dispatch Now";
                     if (newDispatch === "save") return "Save Mission";
                     if (newDispatch === "now") return "Dispatch Now";
@@ -815,7 +1006,15 @@ export default function MissionsPage() {
                     <Save className="w-3.5 h-3.5" /> Save as Template
                   </Button>
                 )}
-                <Button variant="ghost" onClick={() => { setShowCreate(false); setEditingId(null); }}>Cancel</Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setShowCreate(false);
+                    setEditingId(null);
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
           </Card>
@@ -824,17 +1023,21 @@ export default function MissionsPage() {
         {/* Filter & Search */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-1 bg-dark-900/50 rounded-lg border border-white/10 p-1">
-            {["all", "queued", "dispatched", "successful", "failed"].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-2.5 py-1 rounded-md text-[10px] font-mono capitalize transition-colors ${
-                  filter === f ? "bg-white/10 text-white" : "text-white/30 hover:text-white/50"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
+            {["all", "queued", "dispatched", "successful", "failed"].map(
+              (f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono capitalize transition-colors ${
+                    filter === f
+                      ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30"
+                      : "text-white/30 hover:text-white/50 border border-transparent"
+                  }`}
+                >
+                  {f}
+                </button>
+              ),
+            )}
           </div>
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
@@ -842,235 +1045,353 @@ export default function MissionsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search missions..."
-              className="w-full bg-dark-900/50 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
+              className="w-full bg-dark-900/50 border border-white/10 rounded-lg pl-9 pr-8 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
             />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-white/30 hover:text-white/60 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Missions List */}
+        {/* Missions Kanban Board */}
         {filtered.length === 0 ? (
           <div className="text-center py-12">
             <Rocket className="w-10 h-10 text-white/10 mx-auto mb-3" />
             <div className="text-sm text-white/30">
-              {missions.length === 0 ? "No missions yet - create one to get started" : "No missions match your filter"}
+              {missions.length === 0
+                ? "No missions yet - create one to get started"
+                : "No missions match your filter"}
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((mission) => {
-              const sc = statusColors[mission.status] || defaultStatusColor;
-              const isExpanded = expandedId === mission.id;
-              return (
-                <div key={mission.id} className="rounded-xl border border-white/10 bg-dark-900/50 overflow-hidden">
-                  {/* Main row - clickable to expand */}
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : mission.id)}
-                    className="w-full text-left p-4 hover:bg-white/[0.02] transition-colors"
+          <div className="flex flex-col lg:flex-row gap-4 overflow-x-auto pb-2">
+            {/* Kanban columns — one per status */}
+            {(["queued", "dispatched", "successful", "failed"] as const).map(
+              (status) => {
+                const columnMissions = filtered.filter(
+                  (m) => m.status === status,
+                );
+                const sc = statusColors[status];
+                if (filter !== "all" && filter !== status) return null;
+                return (
+                  <div
+                    key={status}
+                    className="flex-1 min-w-[240px] flex flex-col"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <StatusDot status={sc.dot} pulse={mission.status === "dispatched"} />
-                          <span className="text-sm font-semibold text-white truncate">{mission.name}</span>
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>
-                            {titleCase(mission.status)}
-                          </span>
-                          {mission.cronJob && (
-                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                              mission.cronJob.enabled ? "bg-green-500/10 text-neon-green" : "bg-white/5 text-white/30"
-                            }`}>
-                              cron: {mission.cronJob.enabled ? (titleCase(mission.cronJob.state)) : "Disabled"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-white/40 font-mono line-clamp-1">{mission.prompt}</div>
-                        <div className="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-white/25">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {timeAgo(mission.createdAt)}
-                          </span>
-                          <span className="capitalize">{mission.dispatchMode}</span>
-                          {mission.cronJob?.lastRun && (
-                            <span>ran {timeAgo(mission.cronJob.lastRun)}</span>
-                          )}
-                          {mission.cronJob?.lastStatus && (
-                            <span className={mission.cronJob.lastStatus === "ok" ? "text-neon-green" : "text-red-400"}>
-                              {mission.cronJob.lastStatus}
-                            </span>
-                          )}
-                        </div>
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between mb-3 px-1">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            status === "queued"
+                              ? "bg-neon-orange"
+                              : status === "dispatched"
+                                ? "bg-blue-400"
+                                : status === "successful"
+                                  ? "bg-neon-green"
+                                  : "bg-red-400"
+                          }`}
+                        />
+                        <span className="text-[11px] font-mono text-white/50 uppercase tracking-wider">
+                          {status === "successful"
+                            ? "Completed"
+                            : status === "failed"
+                              ? "Failed"
+                              : titleCase(status)}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {mission.status === "successful" && <CheckCircle2 className="w-4 h-4 text-neon-green" />}
-                        {mission.status === "failed" && <XCircle className="w-4 h-4 text-red-400" />}
-                        {mission.status === "dispatched" && <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />}
-                        {mission.status === "queued" && <Clock className="w-4 h-4 text-neon-orange" />}
-                        <ChevronRight className={`w-4 h-4 text-white/20 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${sc?.bg} ${sc?.text}`}
+                      >
+                        {columnMissions.length}
+                      </span>
                     </div>
-                  </button>
-
-                  {/* Expanded detail panel */}
-                  {isExpanded && (
-                    <div className="border-t border-white/10 px-4 py-4 bg-dark-800/30">
-                      {detailLoading ? (
-                        <div className="flex items-center justify-center py-6">
-                          <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" />
-                        </div>
-                      ) : detail ? (
-                        <div className="space-y-4">
-                          {/* Prompt */}
-                          <div>
-                            <div className="text-[10px] font-mono text-white/30 uppercase mb-1">Prompt</div>
-                            <div className="text-xs text-white/60 font-mono whitespace-pre-wrap bg-dark-900/50 rounded-lg p-3 border border-white/5">
-                              {detail.mission.prompt}
-                            </div>
-                          </div>
-
-                          {/* Goals */}
-                          {detail.mission.goals.length > 0 && (
-                            <div>
-                              <div className="text-[10px] font-mono text-white/30 uppercase mb-1">Goals</div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {detail.mission.goals.map((goal, i) => (
-                                  <span
-                                    key={i}
-                                    className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/5 text-white/40 border border-white/5"
-                                  >
-                                    {goal}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Cron Job Status */}
-                          {detail.cronJob && (
-                            <div className="rounded-lg border border-orange-500/20 bg-dark-900/50 p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <Zap className="w-3.5 h-3.5 text-neon-orange" />
-                                  <span className="text-xs font-mono text-white/60">Cron Job</span>
-                                </div>
-                                <Link href="/cron" className="text-[10px] font-mono text-neon-orange hover:underline flex items-center gap-1">
-                                  view in cron manager <ExternalLink className="w-3 h-3" />
-                                </Link>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                                <div className="flex justify-between">
-                                  <span className="text-white/30">ID</span>
-                                  <span className="text-white/60">{detail.cronJob.id}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-white/30">State</span>
-                                  <span className={detail.cronJob.enabled ? "text-neon-green" : "text-white/40"}>
-                                    {detail.cronJob.enabled ? (titleCase(detail.cronJob.state)) : "Disabled"}
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-white/30">Schedule</span>
-                                  <span className="text-white/60">{detail.cronJob.schedule}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-white/30">Last run</span>
-                                  <span className="text-white/60">{detail.cronJob.lastRun ? timeAgo(detail.cronJob.lastRun) : "Never"}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-white/30">Status</span>
-                                  <span className={
-                                    detail.cronJob.state === "running"
-                                      ? "text-neon-green"
-                                      : detail.cronJob.lastStatus === "ok"
-                                      ? "text-neon-green"
-                                      : detail.cronJob.lastStatus
-                                      ? "text-red-400"
-                                      : "text-neon-orange"
-                                  }>
-                                    {detail.cronJob.state === "running"
-                                      ? "Executing..."
-                                      : detail.cronJob.lastRun && !detail.cronJob.nextRun
-                                      ? `${titleCase(detail.cronJob.lastStatus || "Ok")} ${timeAgo(detail.cronJob.lastRun)}`
-                                      : detail.cronJob.nextRun && new Date(detail.cronJob.nextRun).getTime() > Date.now()
-                                      ? "Next " + timeUntil(detail.cronJob.nextRun)
-                                      : detail.cronJob.lastRun
-                                      ? `Active · Ran ${timeAgo(detail.cronJob.lastRun)}`
-                                      : "Queued"}
-                                  </span>
-                                </div>
-                                {detail.cronJob.lastStatus && (
-                                  <div className="flex justify-between">
-                                    <span className="text-white/30">Last status</span>
-                                    <span className={detail.cronJob.lastStatus === "ok" ? "text-neon-green" : "text-red-400"}>
-                                      {titleCase(detail.cronJob.lastStatus)}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Sessions */}
-                          {detail.sessions.length > 0 && (
-                            <div>
-                              <div className="text-[10px] font-mono text-white/30 uppercase mb-1">Sessions</div>
-                              <div className="space-y-1">
-                                {detail.sessions.map((s) => (
-                                  <Link
-                                    key={s.id}
-                                    href={"/sessions/" + s.id}
-                                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-900/50 border border-white/5 hover:border-white/20 transition-colors text-[10px] font-mono"
-                                  >
-                                    <span className="text-neon-cyan">{s.id}</span>
-                                    <span className="text-white/30">{timeAgo(s.modified)}</span>
-                                  </Link>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Results */}
-                          {detail.mission.results && (
-                            <div>
-                              <div className="text-[10px] font-mono text-white/30 uppercase mb-1">Results</div>
-                              <div className="text-xs text-white/60 font-mono whitespace-pre-wrap bg-dark-900/50 rounded-lg p-3 border border-white/5 max-h-48 overflow-y-auto">
-                                {detail.mission.results}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Error */}
-                          {detail.mission.error && (
-                            <div className="rounded-lg bg-red-500/5 border border-red-500/10 p-3">
-                              <div className="text-[10px] font-mono text-red-400 uppercase mb-1">Error</div>
-                              <div className="text-xs text-red-400/60 font-mono">{detail.mission.error}</div>
-                            </div>
-                          )}
-
-                          {/* Actions */}
-                          <div className="flex gap-2 pt-1">
-                            {(mission.status === "queued" || mission.status === "successful" || mission.status === "failed") && (
-                              <Button variant="secondary" size="sm" onClick={() => handleEdit(mission)}>
-                                <Edit3 className="w-3.5 h-3.5" /> Edit & Re-Dispatch
-                              </Button>
-                            )}
-                            {(mission.status === "queued" || mission.status === "dispatched") && (
-                              <Button variant="danger" size="sm" onClick={() => handleCancel(mission.id)}>
-                                <StopCircle className="w-3.5 h-3.5" /> Cancel Mission
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="sm" onClick={() => handleDelete(mission.id)}>
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
-                            </Button>
-                          </div>
+                    {/* Column Cards */}
+                    <div className="space-y-2 flex-1">
+                      {columnMissions.length === 0 ? (
+                        <div
+                          className={`rounded-xl border border-dashed border-white/5 bg-dark-900/20 p-4 text-center text-[10px] font-mono text-white/20`}
+                        >
+                          No missions
                         </div>
                       ) : (
-                        <div className="text-xs text-white/30 text-center py-4">Failed to load details</div>
+                        columnMissions.map((mission) => {
+                          const sc =
+                            statusColors[mission.status] || defaultStatusColor;
+                          const isExpanded = expandedId === mission.id;
+                          return (
+                            <div
+                              key={mission.id}
+                              className="rounded-xl border border-white/10 bg-dark-900/50 overflow-hidden"
+                            >
+                              {/* Card row — clickable to expand */}
+                              <button
+                                onClick={() =>
+                                  setExpandedId(isExpanded ? null : mission.id)
+                                }
+                                className="w-full text-left p-3 hover:bg-white/[0.02] transition-colors"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                      <StatusDot
+                                        status={sc.dot}
+                                        pulse={mission.status === "dispatched"}
+                                      />
+                                      <span className="text-xs font-semibold text-white truncate">
+                                        {mission.name}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-white/40 font-mono line-clamp-1">
+                                      {mission.prompt}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1.5 text-[10px] font-mono text-white/25 flex-wrap">
+                                      <span className="flex items-center gap-0.5">
+                                        <Clock className="w-2.5 h-2.5" />
+                                        {timeAgo(mission.createdAt)}
+                                      </span>
+                                      {mission.cronJob?.lastStatus && (
+                                        <span
+                                          className={
+                                            mission.cronJob.lastStatus === "ok"
+                                              ? "text-neon-green"
+                                              : "text-red-400"
+                                          }
+                                        >
+                                          {mission.cronJob.lastStatus}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {mission.status === "successful" && (
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-neon-green" />
+                                    )}
+                                    {mission.status === "failed" && (
+                                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                    )}
+                                    {mission.status === "dispatched" && (
+                                      <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                                    )}
+                                    {mission.status === "queued" && (
+                                      <Clock className="w-3.5 h-3.5 text-neon-orange" />
+                                    )}
+                                    <ChevronRight
+                                      className={`w-3.5 h-3.5 text-white/20 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                    />
+                                  </div>
+                                </div>
+                              </button>
+
+                              {/* Expanded detail panel */}
+                              {isExpanded && (
+                                <div className="border-t border-white/10 px-3 py-3 bg-dark-800/30">
+                                  {detailLoading ? (
+                                    <div className="flex items-center justify-center py-4">
+                                      <Loader2 className="w-4 h-4 text-neon-cyan animate-spin" />
+                                    </div>
+                                  ) : detail ? (
+                                    <div className="space-y-3">
+                                      {/* Prompt */}
+                                      <div>
+                                        <button
+                                          onClick={() =>
+                                            setPromptCollapsed(!promptCollapsed)
+                                          }
+                                          className="w-full flex items-center justify-between mb-1 hover:opacity-80 transition-opacity"
+                                        >
+                                          <div className="text-[10px] font-mono text-white/30 uppercase">
+                                            Prompt
+                                          </div>
+                                          <div className="flex items-center gap-1 text-[10px] font-mono text-white/30">
+                                            <span>
+                                              {promptCollapsed
+                                                ? "show"
+                                                : "hide"}
+                                            </span>
+                                            <ChevronRight
+                                              className={`w-3 h-3 transition-transform ${promptCollapsed ? "" : "rotate-90"}`}
+                                            />
+                                          </div>
+                                        </button>
+                                        <div
+                                          className={`overflow-hidden transition-all duration-200 ${promptCollapsed ? "max-h-20" : "max-h-none"}`}
+                                        >
+                                          <div className="text-[10px] text-white/50 font-mono whitespace-pre-wrap bg-dark-900/50 rounded-lg p-2 border border-white/5">
+                                            {detail.mission.prompt}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Goals */}
+                                      {detail.mission.goals.length > 0 && (
+                                        <div>
+                                          <div className="text-[10px] font-mono text-white/30 uppercase mb-1">
+                                            Goals
+                                          </div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {detail.mission.goals
+                                              .slice(0, 3)
+                                              .map((goal, i) => (
+                                                <span
+                                                  key={i}
+                                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-white/40 border border-white/5"
+                                                >
+                                                  {goal}
+                                                </span>
+                                              ))}
+                                            {detail.mission.goals.length >
+                                              3 && (
+                                              <span className="text-[9px] font-mono text-white/25">
+                                                +
+                                                {detail.mission.goals.length -
+                                                  3}{" "}
+                                                more
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Cron Job Status */}
+                                      {detail.cronJob && (
+                                        <div className="rounded-lg border border-orange-500/20 bg-dark-900/50 p-2">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-1">
+                                              <Zap className="w-3 h-3 text-neon-orange" />
+                                              <span className="text-[10px] font-mono text-white/60">
+                                                Cron Job
+                                              </span>
+                                            </div>
+                                            <Link
+                                              href="/cron"
+                                              onClick={(e) =>
+                                                e.stopPropagation()
+                                              }
+                                              className="text-[9px] font-mono text-neon-orange hover:underline flex items-center gap-0.5"
+                                            >
+                                              view{" "}
+                                              <ExternalLink className="w-2.5 h-2.5" />
+                                            </Link>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[9px] font-mono">
+                                            <div className="flex justify-between">
+                                              <span className="text-white/20">
+                                                State
+                                              </span>
+                                              <span
+                                                className={
+                                                  detail.cronJob.enabled
+                                                    ? "text-neon-green"
+                                                    : "text-white/40"
+                                                }
+                                              >
+                                                {detail.cronJob.enabled
+                                                  ? titleCase(
+                                                      detail.cronJob.state,
+                                                    )
+                                                  : "Disabled"}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-white/20">
+                                                Last
+                                              </span>
+                                              <span className="text-white/50">
+                                                {detail.cronJob.lastRun
+                                                  ? timeAgo(
+                                                      detail.cronJob.lastRun,
+                                                    )
+                                                  : "Never"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Results */}
+                                      {detail.mission.results && (
+                                        <div>
+                                          <div className="text-[10px] font-mono text-white/30 uppercase mb-1">
+                                            Results
+                                          </div>
+                                          <div className="text-[10px] text-white/50 font-mono whitespace-pre-wrap bg-dark-900/50 rounded-lg p-2 border border-white/5 max-h-16 overflow-y-auto">
+                                            {detail.mission.results}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Error */}
+                                      {detail.mission.error && (
+                                        <div className="rounded-lg bg-red-500/5 border border-red-500/10 p-2">
+                                          <div className="text-[10px] font-mono text-red-400 uppercase mb-0.5">
+                                            Error
+                                          </div>
+                                          <div className="text-[10px] font-mono text-red-400/60">
+                                            {detail.mission.error}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Actions */}
+                                      <div className="flex gap-1.5 pt-1">
+                                        {(mission.status === "queued" ||
+                                          mission.status === "successful" ||
+                                          mission.status === "failed") && (
+                                          <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => handleEdit(mission)}
+                                          >
+                                            <Edit3 className="w-3 h-3" />{" "}
+                                            Re-dispatch
+                                          </Button>
+                                        )}
+                                        {(mission.status === "queued" ||
+                                          mission.status === "dispatched") && (
+                                          <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleCancel(mission.id)
+                                            }
+                                          >
+                                            <StopCircle className="w-3 h-3" />{" "}
+                                            Cancel
+                                          </Button>
+                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleDelete(mission.id)
+                                          }
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[10px] text-white/30 text-center py-3">
+                                      Failed to load details
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              },
+            )}
           </div>
         )}
       </div>
@@ -1085,7 +1406,12 @@ export default function MissionsPage() {
           iconColor="text-neon-cyan"
           size="lg"
           footer={
-            <Button variant="ghost" onClick={() => setShowTemplateManager(false)}>Close</Button>
+            <Button
+              variant="ghost"
+              onClick={() => setShowTemplateManager(false)}
+            >
+              Close
+            </Button>
           }
         >
           <div className="space-y-2">
@@ -1108,9 +1434,13 @@ export default function MissionsPage() {
                           className="flex items-center justify-between p-2.5 rounded-lg border border-white/5 bg-dark-800/30 hover:border-white/10 transition-colors group"
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="text-sm text-white/80 truncate">{t.name}</div>
+                            <div className="text-sm text-white/80 truncate">
+                              {t.name}
+                            </div>
                             {!t.isCustom && (
-                              <span className="text-[9px] font-mono text-white/15 flex-shrink-0">built-in</span>
+                              <span className="text-[9px] font-mono text-white/15 flex-shrink-0">
+                                built-in
+                              </span>
                             )}
                           </div>
                           {t.isCustom && (
@@ -1153,7 +1483,15 @@ export default function MissionsPage() {
           size="lg"
           footer={
             <>
-              <Button variant="ghost" onClick={() => { setShowTemplateEditor(false); setEditingTemplateId(null); }}>Cancel</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowTemplateEditor(false);
+                  setEditingTemplateId(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button
                 variant="primary"
                 color="cyan"
@@ -1169,7 +1507,9 @@ export default function MissionsPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Template Name</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Template Name
+                </label>
                 <input
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
@@ -1178,7 +1518,9 @@ export default function MissionsPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Description</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Description
+                </label>
                 <input
                   value={templateDescription}
                   onChange={(e) => setTemplateDescription(e.target.value)}
@@ -1188,7 +1530,9 @@ export default function MissionsPage() {
               </div>
             </div>
             <div>
-              <label className="text-xs text-white/40 font-mono block mb-1">Instruction Prompt</label>
+              <label className="text-xs text-white/40 font-mono block mb-1">
+                Instruction Prompt
+              </label>
               <AutoTextarea
                 value={newInstruction}
                 onChange={setNewInstruction}
@@ -1198,7 +1542,9 @@ export default function MissionsPage() {
               />
             </div>
             <div>
-              <label className="text-xs text-white/40 font-mono block mb-1">Context Prompt <span className="text-white/20">(optional)</span></label>
+              <label className="text-xs text-white/40 font-mono block mb-1">
+                Context Prompt <span className="text-white/20">(optional)</span>
+              </label>
               <AutoTextarea
                 value={newContext}
                 onChange={setNewContext}
@@ -1208,7 +1554,9 @@ export default function MissionsPage() {
               />
             </div>
             <div>
-              <label className="text-xs text-white/40 font-mono block mb-1">Goals (one per line)</label>
+              <label className="text-xs text-white/40 font-mono block mb-1">
+                Goals (one per line)
+              </label>
               <AutoTextarea
                 value={newGoals}
                 onChange={setNewGoals}
@@ -1219,7 +1567,9 @@ export default function MissionsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Icon</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Icon
+                </label>
                 <div className="flex flex-wrap gap-1.5">
                   {TEMPLATE_ICONS.map((icon) => {
                     const Icon = ICON_MAP[icon] || Zap;
@@ -1234,27 +1584,37 @@ export default function MissionsPage() {
                         }`}
                         title={icon}
                       >
-                        <Icon className={`w-4 h-4 ${templateIcon === icon ? "text-neon-cyan" : "text-white/40"}`} />
+                        <Icon
+                          className={`w-4 h-4 ${templateIcon === icon ? "text-neon-cyan" : "text-white/40"}`}
+                        />
                       </button>
                     );
                   })}
                 </div>
               </div>
               <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">Color</label>
+                <label className="text-xs text-white/40 font-mono block mb-1">
+                  Color
+                </label>
                 <div className="flex gap-1.5">
                   {TEMPLATE_COLORS.map((color) => (
                     <button
                       key={color}
                       onClick={() => setTemplateColor(color)}
                       className={`w-8 h-8 rounded-lg border-2 transition-colors ${
-                        templateColor === color ? "border-white" : "border-transparent"
+                        templateColor === color
+                          ? "border-white"
+                          : "border-transparent"
                       } ${
-                        color === "cyan" ? "bg-cyan-500/30" :
-                        color === "purple" ? "bg-purple-500/30" :
-                        color === "pink" ? "bg-pink-500/30" :
-                        color === "green" ? "bg-green-500/30" :
-                        "bg-orange-500/30"
+                        color === "cyan"
+                          ? "bg-cyan-500/30"
+                          : color === "purple"
+                            ? "bg-purple-500/30"
+                            : color === "pink"
+                              ? "bg-pink-500/30"
+                              : color === "green"
+                                ? "bg-green-500/30"
+                                : "bg-orange-500/30"
                       }`}
                       title={color}
                     />
@@ -1265,7 +1625,6 @@ export default function MissionsPage() {
           </div>
         </Modal>
       )}
-
     </div>
   );
 }

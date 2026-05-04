@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   Clock,
   Plus,
@@ -31,6 +31,7 @@ import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { baseInputStyles } from "@/lib/theme";
 import { parseSchedule } from "@/lib/utils";
+import { useApiData } from "@/hooks/useApiData";
 
 interface CronJob {
   id: string;
@@ -61,18 +62,45 @@ function formatSchedule(schedule: string): string {
   if (parts.length === 5 || parts.length === 6) {
     const offset = parts.length - 5; // skip seconds field in 6-part
     const [min, hour, dom, mon, dow] = parts.slice(offset);
-    if (min === "*" && hour === "*" && dom === "*" && mon === "*" && dow === "*") return "Every minute";
-    if (min !== "*" && hour !== "*" && dom === "*" && mon === "*" && dow === "*") return `Daily at ${hour}:${min.padStart(2, "0")}`;
-    if (min !== "*" && hour !== "*" && dow !== "*" && dom === "*" && mon === "*") {
+    if (
+      min === "*" &&
+      hour === "*" &&
+      dom === "*" &&
+      mon === "*" &&
+      dow === "*"
+    )
+      return "Every minute";
+    if (
+      min !== "*" &&
+      hour !== "*" &&
+      dom === "*" &&
+      mon === "*" &&
+      dow === "*"
+    )
+      return `Daily at ${hour}:${min.padStart(2, "0")}`;
+    if (
+      min !== "*" &&
+      hour !== "*" &&
+      dow !== "*" &&
+      dom === "*" &&
+      mon === "*"
+    ) {
       const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const dayIndex = parseInt(dow);
-      const dayLabel = Number.isFinite(dayIndex) && dayIndex >= 0 && dayIndex <= 6
-        ? days[dayIndex]
-        : dow;
+      const dayLabel =
+        Number.isFinite(dayIndex) && dayIndex >= 0 && dayIndex <= 6
+          ? days[dayIndex]
+          : dow;
       return `Every ${dayLabel} at ${hour}:${min.padStart(2, "0")}`;
     }
     // Every N minutes pattern (e.g., */5 * * * *)
-    if (min.startsWith("*/") && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    if (
+      min.startsWith("*/") &&
+      hour === "*" &&
+      dom === "*" &&
+      mon === "*" &&
+      dow === "*"
+    ) {
       const n = min.slice(2);
       return `Every ${n} minute${n === "1" ? "" : "s"}`;
     }
@@ -121,10 +149,10 @@ function JobCard({
                   !job.enabled
                     ? "bg-white/20"
                     : job.state === "paused"
-                    ? "bg-neon-orange"
-                    : job.state === "run_requested"
-                    ? "bg-neon-cyan pulse-glow"
-                    : "bg-neon-green pulse-glow"
+                      ? "bg-neon-orange"
+                      : job.state === "run_requested"
+                        ? "bg-neon-cyan pulse-glow"
+                        : "bg-neon-green pulse-glow"
                 }`}
               />
               <h3 className="font-semibold text-white truncate">{job.name}</h3>
@@ -147,8 +175,7 @@ function JobCard({
               )}
               {job.deliver && job.deliver !== "none" && (
                 <span className="flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3" />
-                  → {job.deliver}
+                  <MessageSquare className="w-3 h-3" />→ {job.deliver}
                 </span>
               )}
             </div>
@@ -237,7 +264,9 @@ function JobCard({
             )}
             <div className="flex items-center gap-4 text-xs text-white/30 font-mono">
               <span>ID: {job.id}</span>
-              {job.lastRun && <span>Last run: {new Date(job.lastRun).toLocaleString()}</span>}
+              {job.lastRun && (
+                <span>Last run: {new Date(job.lastRun).toLocaleString()}</span>
+              )}
             </div>
           </div>
         )}
@@ -332,7 +361,9 @@ function EditJobModal({
         )}
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">Cron Schedule</label>
+          <label className="text-sm font-medium text-white/70">
+            Cron Schedule
+          </label>
           <input
             type="text"
             value={schedule}
@@ -409,7 +440,14 @@ function CreateJobModal({
       const res = await fetch("/api/cron", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, schedule, prompt, deliver, model, repeat }),
+        body: JSON.stringify({
+          name,
+          schedule,
+          prompt,
+          deliver,
+          model,
+          repeat,
+        }),
       });
       if (!res.ok) {
         const body = await res.json();
@@ -466,7 +504,9 @@ function CreateJobModal({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">Cron Schedule</label>
+          <label className="text-sm font-medium text-white/70">
+            Cron Schedule
+          </label>
           <input
             type="text"
             value={schedule}
@@ -475,7 +515,8 @@ function CreateJobModal({
             className={baseInputStyles}
           />
           <p className="text-xs text-white/30 font-mono">
-            min hour day month weekday — e.g. &quot;*/30 * * * *&quot; for every 30 min
+            min hour day month weekday — e.g. &quot;*/30 * * * *&quot; for every
+            30 min
           </p>
         </div>
 
@@ -505,7 +546,9 @@ function CreateJobModal({
             ]}
           />
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-white/70">Model (optional)</label>
+            <label className="text-sm font-medium text-white/70">
+              Model (optional)
+            </label>
             <input
               type="text"
               value={model}
@@ -519,7 +562,9 @@ function CreateJobModal({
         <div className="flex items-center justify-between py-2">
           <div>
             <div className="text-sm font-medium text-white/70">Repeat</div>
-            <p className="text-xs text-white/40 mt-0.5">Recurring job vs one-shot</p>
+            <p className="text-xs text-white/40 mt-0.5">
+              Recurring job vs one-shot
+            </p>
           </div>
           <button
             onClick={() => setRepeat(!repeat)}
@@ -531,7 +576,9 @@ function CreateJobModal({
           >
             <div
               className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform ${
-                repeat ? "translate-x-5 bg-neon-orange" : "translate-x-0.5 bg-white/40"
+                repeat
+                  ? "translate-x-5 bg-neon-orange"
+                  : "translate-x-0.5 bg-white/40"
               }`}
             />
           </button>
@@ -542,26 +589,16 @@ function CreateJobModal({
 }
 
 export default function CronPage() {
-  const [data, setData] = useState<CronData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [pauseAllBusy, setPauseAllBusy] = useState(false);
   const { showToast, toastElement } = useToast();
 
-  const loadJobs = useCallback(() => {
-    fetch("/api/cron")
-      .then((res) => res.json())
-      .then((d) => setData(d.data))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    loadJobs();
-    const interval = setInterval(loadJobs, 10000);
-    return () => clearInterval(interval);
-  }, [loadJobs]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { data, loading, error, refetch: loadJobs } = useApiData<CronData>("/api/cron", {
+    transform: (raw) => raw as CronData,
+  });
 
   const handleToggle = async (id: string) => {
     const job = data?.jobs.find((j) => j.id === id);
@@ -615,7 +652,7 @@ export default function CronPage() {
     if (!data?.jobs.length) return;
     if (
       !confirm(
-        "Pause every cron job? Hermes will not run them until you resume each job or edit jobs.json."
+        "Pause every cron job? Hermes will not run them until you resume each job or edit jobs.json.",
       )
     ) {
       return;
@@ -627,7 +664,10 @@ export default function CronPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "pauseAll" }),
       });
-      const j = (await res.json()) as { error?: string; data?: { pausedCount?: number } };
+      const j = (await res.json()) as {
+        error?: string;
+        data?: { pausedCount?: number };
+      };
       if (!res.ok) {
         showToast(j.error || "Failed to pause jobs", "error");
         return;
@@ -645,7 +685,7 @@ export default function CronPage() {
         !search ||
         job.name.toLowerCase().includes(search.toLowerCase()) ||
         job.schedule.includes(search) ||
-        job.prompt.toLowerCase().includes(search.toLowerCase())
+        job.prompt.toLowerCase().includes(search.toLowerCase()),
     ) || [];
 
   const enabledCount = data?.jobs.filter((j) => j.enabled).length || 0;
@@ -703,7 +743,9 @@ export default function CronPage() {
             icon={Clock}
             title="No cron jobs"
             description={
-              search ? "No jobs match your search" : "Create your first scheduled job"
+              search
+                ? "No jobs match your search"
+                : "Create your first scheduled job"
             }
             action={
               !search ? (

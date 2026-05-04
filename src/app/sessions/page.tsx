@@ -34,7 +34,17 @@ function formatDate(dateStr: string) {
   return date.toLocaleDateString();
 }
 
+function formatSessionTitle(rawTitle: string, modified: string): string {
+  // If title looks like a raw session ID, format it nicely
+  if (rawTitle.startsWith("session ")) {
+    const date = new Date(modified);
+    return `Session — ${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+  }
+  return rawTitle;
+}
+
 function SessionCard({ session }: { session: Session }) {
+  const displayTitle = formatSessionTitle(session.title, session.modified);
   return (
     <Link href={`/sessions/${session.id}`}>
       <div className="rounded-xl border border-white/10 bg-dark-900/50 p-4 hover:border-neon-orange/30 transition-colors group cursor-pointer">
@@ -43,7 +53,7 @@ function SessionCard({ session }: { session: Session }) {
             <div className="flex items-center gap-2 mb-1">
               <MessageSquare className="w-4 h-4 text-neon-orange flex-shrink-0" />
               <h3 className="font-semibold text-white truncate">
-                {session.title}
+                {displayTitle}
               </h3>
             </div>
             <div className="flex items-center gap-3 text-xs text-white/30 font-mono flex-wrap">
