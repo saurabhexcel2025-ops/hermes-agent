@@ -67,6 +67,9 @@ export const PATHS = {
   taskLists: CH_DATA_DIR + "/task-lists",
   packages: CH_DATA_DIR + "/packages",
   workspaces: CH_DATA_DIR + "/workspaces",
+  teams: CH_DATA_DIR + "/workspaces/teams",
+  kanban: CH_DATA_DIR + "/kanban",
+  goals: CH_DATA_DIR + "/goals",
 } as const;
 
 // Read a config value from config.yaml using js-yaml

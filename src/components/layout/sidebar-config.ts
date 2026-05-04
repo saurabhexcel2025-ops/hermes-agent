@@ -8,7 +8,7 @@ import {
   ScrollText, Sparkles, Rocket, Volume2, Mic, GitBranch,
   RotateCcw, ShieldCheck, MessageSquare, Lock, Code,
   BookOpen, Workflow, CheckSquare,
-  FolderOpen, Users,
+  FolderOpen, Users, Palette, Layout, Kanban,
 } from "lucide-react";
 
 import type { AccentColor } from "@/types/hermes";
@@ -42,6 +42,8 @@ export const mainSections: SidebarSection[] = [
     links: [
       { icon: Zap, label: "Dashboard", href: "/", color: "cyan" },
       { icon: Rocket, label: "Missions", href: "/missions", color: "cyan" },
+      { icon: Layout, label: "Kanban", href: "/kanban", color: "purple" },
+      { icon: Users, label: "Teams", href: "/kanban/teams", color: "purple" },
       { icon: Workflow, label: "Operations", href: "/operations", color: "purple" },
       { icon: CheckSquare, label: "Task Lists", href: "/task-lists", color: "orange" },
       { icon: ListTodo, label: "Cron", href: "/cron", color: "orange" },
@@ -65,6 +67,12 @@ export const mainSections: SidebarSection[] = [
           { label: "Themes", href: "/recroom/story-weaver/themes" },
         ],
       },
+      {
+        icon: Palette, label: "Creative Canvas", href: "/recroom/creative-canvas", color: "purple",
+      },
+      {
+        icon: Terminal, label: "ASCII Studio", href: "/recroom/ascii-studio", color: "cyan",
+      },
     ],
   },
   {
@@ -73,7 +81,7 @@ export const mainSections: SidebarSection[] = [
       { icon: Users, label: "Agents", href: "/agent/agents", color: "purple" },
       { icon: FileText, label: "Skills", href: "/skills", color: "green" },
       { icon: Wrench, label: "Tools", href: "/agent/tools", color: "purple" },
-      { icon: Sparkles, label: "Personalities", href: "/personalities", color: "purple" },
+      { icon: Sparkles, label: "Personalities", href: "/personalities/", color: "purple" },
       { icon: FileText, label: "HERMES.md", href: "/config/hermes_md", color: "cyan" },
       { icon: Lock, label: "Environment", href: "/config/env", color: "orange" },
     ],
@@ -144,20 +152,19 @@ export const configGroups: ConfigGroup[] = [
 
 // ── Restricted Hrefs ───────────────────────────────────────────
 
-const RESTRICTED_HREFS = new Set([
+const RESTRICTED_HREFS = [
   "/operations",
   "/task-lists",
   "/workspaces",
   "/packages",
   "/command-room",
-]);
+  "/kanban",
+];
 
 export function isRestrictedNavHref(href: string): boolean {
-  if (RESTRICTED_HREFS.has(href)) return true;
-  for (const p of RESTRICTED_HREFS) {
-    if (href.startsWith(p + "/")) return true;
-  }
-  return false;
+  return RESTRICTED_HREFS.some(
+    (p) => href === p || href.startsWith(p + "/")
+  );
 }
 
 export const showRestrictedNav = false;
