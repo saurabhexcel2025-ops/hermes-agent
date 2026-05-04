@@ -7,11 +7,11 @@
 import { useState } from "react";
 import {
   GripVertical,
-  MessageSquare,
   Zap,
   User,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Trash2,
   Edit3,
   Play,
@@ -194,6 +194,3 @@ export default function KanbanCard({
     </div>
   );
 }
-
-// ChevronUp import fix
-import { ChevronUp } from "lucide-react";

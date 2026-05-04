@@ -758,9 +758,6 @@ export default function Dashboard() {
               <Gamepad2 className="w-3.5 h-3.5 text-neon-purple" />
               <span className="text-xs font-mono text-white/60">Rec Room</span>
             </div>
-            <Link href="/recroom" className="text-[10px] font-mono text-neon-purple hover:underline flex items-center gap-1">
-              explore <ChevronRight className="w-3 h-3" />
-            </Link>
           </div>
           <Link href="/recroom/story-weaver" className="flex items-center justify-center gap-3 py-4 hover:bg-white/[0.02] transition-colors">
             <BookOpen className="w-5 h-5 text-neon-purple" />

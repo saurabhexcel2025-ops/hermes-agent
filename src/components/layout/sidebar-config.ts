@@ -8,7 +8,7 @@ import {
   ScrollText, Sparkles, Rocket, Volume2, Mic, GitBranch,
   RotateCcw, ShieldCheck, MessageSquare, Lock, Code,
   BookOpen, Workflow, CheckSquare,
-  FolderOpen, Users, Palette, Layout, Kanban,
+  FolderOpen, Users, Layout, Kanban,
 } from "lucide-react";
 
 import type { AccentColor } from "@/types/hermes";
@@ -66,12 +66,6 @@ export const mainSections: SidebarSection[] = [
           { label: "Characters", href: "/recroom/story-weaver/characters" },
           { label: "Themes", href: "/recroom/story-weaver/themes" },
         ],
-      },
-      {
-        icon: Palette, label: "Creative Canvas", href: "/recroom/creative-canvas", color: "purple",
-      },
-      {
-        icon: Terminal, label: "ASCII Studio", href: "/recroom/ascii-studio", color: "cyan",
       },
     ],
   },

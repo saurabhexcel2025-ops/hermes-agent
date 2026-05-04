@@ -5,14 +5,13 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Settings, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import KanbanCard from "./KanbanCard";
 import type {
   KanbanColumn as KanbanColumnType,
   KanbanCard as KanbanCardType,
   GoalSession,
 } from "@/types/hermes";
-import { glowClassMap } from "@/lib/theme";
 
 const ACCENT_GLOW: Record<string, string> = {
   cyan: "border-neon-cyan/30 bg-neon-cyan/5",
@@ -20,6 +19,14 @@ const ACCENT_GLOW: Record<string, string> = {
   pink: "border-neon-pink/30 bg-neon-pink/5",
   green: "border-neon-green/30 bg-neon-green/5",
   orange: "border-neon-orange/30 bg-neon-orange/5",
+};
+
+const COLOR_DOT: Record<string, string> = {
+  cyan: "bg-neon-cyan",
+  purple: "bg-neon-purple",
+  pink: "bg-neon-pink",
+  green: "bg-neon-green",
+  orange: "bg-neon-orange",
 };
 
 interface Props {
@@ -88,12 +95,7 @@ export default function KanbanColumn({
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div
-            className={`w-2 h-2 rounded-full flex-shrink-0
-              ${column.color === "cyan" ? "bg-neon-cyan" : ""}
-              ${column.color === "purple" ? "bg-neon-purple" : ""}
-              ${column.color === "pink" ? "bg-neon-pink" : ""}
-              ${column.color === "green" ? "bg-neon-green" : ""}
-              ${column.color === "orange" ? "bg-neon-orange" : ""}`}
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${COLOR_DOT[column.color] ?? "bg-white/40"}`}
           />
 
           {editingTitle ? (
