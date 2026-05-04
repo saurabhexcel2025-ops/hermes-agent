@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Check,
   Download,
+  Hammer,
 } from "lucide-react";
 
 import { iconColorMap } from "@/lib/theme";
@@ -68,6 +69,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const [updating, setUpdating] = useState(false);
 
   const [restarting, setRestarting] = useState(false);
+
+  const [rebuilding, setRebuilding] = useState(false);
 
   const [message, setMessage] = useState<string | null>(null);
 
@@ -171,6 +174,30 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
     }
   };
 
+  const handleRebuild = async () => {
+    if (rebuilding) return;
+
+    setRebuilding(true);
+    setMessage("Rebuilding...");
+
+    try {
+      const res = await fetch("/api/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rebuild" }),
+      });
+
+      if (!res.ok) throw new Error("Rebuild failed");
+
+      setMessage("Build complete — restarting...");
+
+      pollForReturn();
+    } catch {
+      setMessage("Rebuild failed");
+      setRebuilding(false);
+    }
+  };
+
   const pollForReturn = () => {
     if (pollIntervalRef.current !== null) {
       clearInterval(pollIntervalRef.current);
@@ -205,6 +232,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
 
           setRestarting(false);
 
+          setRebuilding(false);
+
           setMessage("Done!");
 
           setTimeout(() => {
@@ -223,6 +252,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
 
           setRestarting(false);
 
+          setRebuilding(false);
+
           setMessage("Timeout — check server");
         }
       }
@@ -237,7 +268,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         {version?.updateAvailable && (
           <button
             onClick={handleUpdate}
-            disabled={updating}
+            disabled={updating || rebuilding}
             className="p-1.5 rounded-lg bg-orange-500/10 text-neon-orange hover:bg-orange-500/20 transition-colors"
             title={`Update available (${version.behind} behind)`}
           >
@@ -248,6 +279,17 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             )}
           </button>
         )}
+
+        <button
+          onClick={handleRebuild}
+          disabled={rebuilding}
+          className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
+          title="Rebuild App"
+        >
+          <Hammer
+            className={`w-3.5 h-3.5 ${rebuilding ? "animate-spin" : ""}`}
+          />
+        </button>
 
         <button
           onClick={handleRestart}
@@ -340,13 +382,13 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           </div>
         )}
 
-        {/* Check + Restart buttons */}
+        {/* Check + Rebuild + Restart buttons */}
 
-        <div className="flex gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             onClick={checkVersion}
-            disabled={checking || updating || restarting}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+            disabled={checking || updating || restarting || rebuilding}
+            className="flex items-center justify-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
           >
             <RefreshCw
               className={`w-2.5 h-2.5 ${checking ? "animate-spin" : ""}`}
@@ -356,9 +398,21 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           </button>
 
           <button
+            onClick={handleRebuild}
+            disabled={updating || restarting || rebuilding}
+            className="flex items-center justify-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+          >
+            <Hammer
+              className={`w-2.5 h-2.5 ${rebuilding ? "animate-spin" : ""}`}
+            />
+
+            {rebuilding ? "..." : "Rebuild"}
+          </button>
+
+          <button
             onClick={handleRestart}
-            disabled={updating || restarting}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
+            disabled={updating || restarting || rebuilding}
+            className="flex items-center justify-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-mono text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
           >
             <RefreshCw
               className={`w-2.5 h-2.5 ${restarting ? "animate-spin" : ""}`}
