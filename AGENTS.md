@@ -80,8 +80,8 @@ control-hub/
 
 │   │   ├── page.tsx                # Dashboard
 
-│   │   ├── kanban/                 # Multi-Agent Coordination Kanban
-│   │   │   ├── page.tsx           # Kanban board view
+│   │   ├── kanban/              # Multi-Agent Coordination Kanban
+│   │   │   ├── page.tsx          # Kanban board view
 │   │   │   └── teams/page.tsx     # Team management
 │   │   ├── missions/page.tsx      # Missions page
 
@@ -94,12 +94,6 @@ control-hub/
 │   │   ├── config/             # Config editor
 
 │   │   ├── recroom/            # Rec Room — creative activities
-
-│   │   │   ├── page.tsx        # Hub — activity selection
-
-│   │   │   ├── creative-canvas/  # p5.js generative art
-
-│   │   │   ├── ascii-studio/     # ASCII art & animation
 
 │   │   │   └── story-weaver/     # Interactive fiction
 
@@ -145,7 +139,13 @@ control-hub/
 
 │   ├── missions/                   # Mission JSON files
 
-│   └── templates/                  # Custom template JSON files
+│   ├── kanban/                    # Board JSON files (board, column, card per file)
+
+│   ├── teams/                     # Team JSON files
+
+│   ├── goals/                     # Goal session JSON files
+
+│   └── templates/                 # Custom template JSON files
 
 ├── public/                         # Static assets
 
@@ -203,7 +203,7 @@ control-hub/
 
 §
 
-**Always work on `dev` branch. Never commit to `main`.**
+**Work on feature branches. Never commit directly to `dev` or `main`.**
 
 §
 
@@ -225,7 +225,7 @@ git add -A
 
 git commit -m "type: description"
 
-git push origin dev
+git push origin feature/your-feature
 
 §
 
@@ -247,7 +247,7 @@ curl -X POST https://api.github.com/repos/Daniel-Parke/hermes-control-hub/pulls 
 
 - Use conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 
-- Always `npm run build` before pushing
+- Always `npm run build` and `npm test` before pushing
 
 - Never merge your own PRs
 
