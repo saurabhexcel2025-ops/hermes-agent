@@ -21,6 +21,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      - run: npm run prebuild
       - run: npm run lint
       - run: npx tsc --noEmit -p tsconfig.json
       # One Jest run with coverage — avoids running the full suite twice (npm test + test:coverage).
@@ -60,6 +61,7 @@ jobs:
       # Chromium only; omit --with-deps to avoid large apt installs on every run (ubuntu-latest usually suffices).
       - name: Install Playwright Chromium
         run: npx playwright install chromium
+      - run: npm run prebuild
       - run: npm run build
         env:
           CH_EDITION: simple

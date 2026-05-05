@@ -20,6 +20,8 @@ jobs:
       - name: Install dependencies (with cache reset retry)
         run: |
           npm ci || (npm cache clean --force && npm ci)
+      - name: Run database migrations
+        run: npm run prebuild
       - run: npm run lint
       - run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
@@ -44,6 +46,8 @@ jobs:
       - name: Install dependencies (with cache reset retry)
         run: |
           npm ci || (npm cache clean --force && npm ci)
+      - name: Run database migrations
+        run: npm run prebuild
       - run: npm run lint
       - run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
@@ -77,6 +81,8 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Install Playwright Chromium
         run: npx playwright install chromium
+      - name: Run database migrations
+        run: npm run prebuild
       - run: npm run build
         env:
           CH_EDITION: oss
