@@ -9,6 +9,7 @@
   "scripts": {
 
     "dev": "next dev",
+    "prebuild": "node scripts/prebuild-db.mjs",
 
     "build": "next build",
 

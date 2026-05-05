@@ -1,11 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
-// KanbanRepository — Kanban board JSON under control-hub/data/kanban
+// kanban-repository.ts — Kanban board CRUD via SQLite
 // ═══════════════════════════════════════════════════════════════
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
-
-import { PATHS } from "@/lib/hermes";
-import { logApiError } from "@/lib/api-logger";
+import { db, inTransaction, uuid, now } from "./db";
 import type {
   KanbanBoard,
   KanbanColumn,
@@ -13,147 +10,381 @@ import type {
   KanbanDocument,
 } from "@/types/hermes";
 
-const DATA_DIR = PATHS.kanban;
-
-// ── Internal JSON helpers ─────────────────────────────────────
-
-function readJsonFile<T>(path: string, route: string, context: string): T | null {
-  try {
-    const text = readFileSync(path, "utf-8");
-    return JSON.parse(text) as T;
-  } catch (error) {
-    logApiError(route, `parsing JSON ${context}`, error);
-    return null;
-  }
-}
-
-// ── ID Sanitisation ────────────────────────────────────────────
-
-function sanitizeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-// ── Directory Guarantee ────────────────────────────────────────
-
-export function ensureKanbanDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
 // ── Board ─────────────────────────────────────────────────────
 
-export function getKanbanDataDir(): string {
-  return DATA_DIR;
+export function listBoards(): KanbanBoard[] {
+  const rows = db()
+    .prepare(
+      "SELECT * FROM kanban_boards WHERE deleted_at IS NULL ORDER BY updated_at DESC"
+    )
+    .all() as BoardRow[];
+  return rows.map(rowToBoard);
 }
 
-function boardPath(id: string): string {
-  return DATA_DIR + "/" + sanitizeId(id) + ".board.json";
+export function getBoard(id: string): KanbanBoard | null {
+  const row = db()
+    .prepare("SELECT * FROM kanban_boards WHERE id = ?")
+    .get(id) as BoardRow | undefined;
+  return row ? rowToBoard(row) : null;
 }
 
-export function loadBoard(id: string): KanbanBoard | null {
-  const safe = sanitizeId(id);
-  if (!safe) return null;
-  const path = boardPath(safe);
-  if (!existsSync(path)) return null;
-  return readJsonFile<KanbanBoard>(path, "loadBoard", "board") ?? null;
+export function createBoard(data: {
+  name: string;
+  description?: string;
+  teamId?: string;
+}): KanbanBoard {
+  const id = uuid();
+  const ts = now();
+
+  inTransaction(() => {
+    db()
+      .prepare(
+        `INSERT INTO kanban_boards (id, name, description, team_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, data.name, data.description ?? "", data.teamId ?? null, ts, ts);
+  });
+
+  return getBoard(id)!;
 }
 
-export function saveBoard(board: KanbanBoard): void {
-  ensureKanbanDir();
-  const safe = sanitizeId(board.id);
-  if (!safe) return;
-  writeFileSync(boardPath(safe), JSON.stringify(board, null, 2));
+export function updateBoard(
+  id: string,
+  updates: {
+    name?: string;
+    description?: string;
+    teamId?: string;
+  }
+): KanbanBoard | null {
+  const existing = getBoard(id);
+  if (!existing) return null;
+  const ts = now();
+
+  inTransaction(() => {
+    const sets: string[] = ["updated_at = ?"];
+    const vals: unknown[] = [ts];
+    if (updates.name !== undefined) { sets.push("name = ?"); vals.push(updates.name); }
+    if (updates.description !== undefined) { sets.push("description = ?"); vals.push(updates.description); }
+    if (updates.teamId !== undefined) { sets.push("team_id = ?"); vals.push(updates.teamId); }
+    vals.push(id);
+    db()
+      .prepare(`UPDATE kanban_boards SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...vals);
+  });
+
+  return getBoard(id);
 }
 
 export function deleteBoard(id: string): boolean {
-  const safe = sanitizeId(id);
-  if (!safe) return false;
-  const path = boardPath(safe);
-  if (!existsSync(path)) return false;
-  try {
-    unlinkSync(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function listBoards(): KanbanBoard[] {
-  ensureKanbanDir();
-  try {
-    const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".board.json"));
-    const boards: KanbanBoard[] = [];
-    for (const file of files) {
-      const board = readJsonFile<KanbanBoard>(DATA_DIR + "/" + file, "listBoards", file);
-      if (board) boards.push(board);
-    }
-    return boards.sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-  } catch {
-    return [];
-  }
+  const existing = getBoard(id);
+  if (!existing) return false;
+  const ts = now();
+  db()
+    .prepare("UPDATE kanban_boards SET deleted_at = ? WHERE id = ?")
+    .run(ts, id);
+  return true;
 }
 
 // ── Column ────────────────────────────────────────────────────
 
-function columnPath(boardId: string): string {
-  return DATA_DIR + "/" + sanitizeId(boardId) + ".columns.json";
+export function listColumns(boardId: string): KanbanColumn[] {
+  const rows = db()
+    .prepare(
+      "SELECT * FROM kanban_columns WHERE board_id = ? AND deleted_at IS NULL ORDER BY position"
+    )
+    .all(boardId) as ColumnRow[];
+  return rows.map(rowToColumn);
 }
 
-export function loadColumns(boardId: string): Record<string, KanbanColumn> {
-  const path = columnPath(boardId);
-  if (!existsSync(path)) return {};
-  return readJsonFile<Record<string, KanbanColumn>>(path, "loadColumns", boardId) ?? {};
+export function createColumn(data: {
+  boardId: string;
+  title: string;
+  color?: string;
+  position?: number;
+  wipLimit?: number | null;
+}): KanbanColumn {
+  const id = uuid();
+  const ts = now();
+  const position = data.position ?? 0;
+
+  inTransaction(() => {
+    db()
+      .prepare(
+        `INSERT INTO kanban_columns (id, board_id, title, color, position, wip_limit, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id, data.boardId, data.title, data.color ?? "cyan", position,
+        data.wipLimit ?? null, ts, ts
+      );
+    db()
+      .prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?")
+      .run(ts, data.boardId);
+  });
+
+  return getColumn(id)!;
 }
 
-export function saveColumns(boardId: string, columns: Record<string, KanbanColumn>): void {
-  ensureKanbanDir();
-  writeFileSync(columnPath(boardId), JSON.stringify(columns, null, 2));
+export function updateColumn(
+  id: string,
+  updates: { title?: string; color?: string; position?: number; wipLimit?: number | null }
+): KanbanColumn | null {
+  const existing = getColumn(id);
+  if (!existing) return null;
+  const ts = now();
+
+  inTransaction(() => {
+    const sets: string[] = ["updated_at = ?"];
+    const vals: unknown[] = [ts];
+    if (updates.title !== undefined) { sets.push("title = ?"); vals.push(updates.title); }
+    if (updates.color !== undefined) { sets.push("color = ?"); vals.push(updates.color); }
+    if (updates.position !== undefined) { sets.push("position = ?"); vals.push(updates.position); }
+    if (updates.wipLimit !== undefined) { sets.push("wip_limit = ?"); vals.push(updates.wipLimit); }
+    vals.push(id);
+    db()
+      .prepare(`UPDATE kanban_columns SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...vals);
+    db()
+      .prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?")
+      .run(ts, existing.boardId);
+  });
+
+  return getColumn(id);
+}
+
+export function deleteColumn(id: string): boolean {
+  const existing = getColumn(id);
+  if (!existing) return false;
+  const ts = now();
+  db()
+    .prepare("UPDATE kanban_columns SET deleted_at = ? WHERE id = ?")
+    .run(ts, id);
+  db()
+    .prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?")
+    .run(ts, existing.boardId);
+  return true;
+}
+
+export function getColumn(id: string): KanbanColumn | null {
+  const row = db()
+    .prepare("SELECT * FROM kanban_columns WHERE id = ?")
+    .get(id) as ColumnRow | undefined;
+  return row ? rowToColumn(row) : null;
 }
 
 // ── Card ──────────────────────────────────────────────────────
 
-function cardPath(boardId: string): string {
-  return DATA_DIR + "/" + sanitizeId(boardId) + ".cards.json";
+export function listCards(boardId: string): KanbanCard[] {
+  const rows = db()
+    .prepare(
+      "SELECT * FROM kanban_cards WHERE board_id = ? AND deleted_at IS NULL ORDER BY position"
+    )
+    .all(boardId) as CardRow[];
+  return rows.map(rowToCard);
 }
 
-export function loadCards(boardId: string): Record<string, KanbanCard> {
-  const path = cardPath(boardId);
-  if (!existsSync(path)) return {};
-  return readJsonFile<Record<string, KanbanCard>>(path, "loadCards", boardId) ?? {};
+export function getCard(id: string): KanbanCard | null {
+  const row = db()
+    .prepare("SELECT * FROM kanban_cards WHERE id = ?")
+    .get(id) as CardRow | undefined;
+  return row ? rowToCard(row) : null;
 }
 
-export function saveCards(boardId: string, cards: Record<string, KanbanCard>): void {
-  ensureKanbanDir();
-  writeFileSync(cardPath(boardId), JSON.stringify(cards, null, 2));
+export function createCard(data: {
+  boardId: string;
+  columnId: string;
+  title: string;
+  description?: string;
+  assigneeProfileId?: string | null;
+  labels?: string[];
+  status?: KanbanCard["status"];
+  position?: number;
+}): KanbanCard {
+  const id = uuid();
+  const ts = now();
+  const position = data.position ?? 0;
+  const status = data.status ?? "todo";
+
+  inTransaction(() => {
+    db()
+      .prepare(
+        `INSERT INTO kanban_cards
+           (id, board_id, column_id, title, description, position, status,
+            assignee_profile_id, labels, mission_ids, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)`
+      )
+      .run(
+        id, data.boardId, data.columnId, data.title,
+        data.description ?? "", position, status,
+        data.assigneeProfileId ?? null,
+        JSON.stringify(data.labels ?? []),
+        ts, ts
+      );
+    db()
+      .prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?")
+      .run(ts, data.boardId);
+  });
+
+  return getCard(id)!;
 }
 
-// ── Full Document Loader ───────────────────────────────────────
+export function updateCard(
+  id: string,
+  updates: {
+    title?: string;
+    description?: string;
+    columnId?: string;
+    position?: number;
+    status?: KanbanCard["status"];
+    assigneeProfileId?: string | null;
+    labels?: string[];
+    missionIds?: string[];
+  }
+): KanbanCard | null {
+  const existing = getCard(id);
+  if (!existing) return null;
+  const ts = now();
+
+  inTransaction(() => {
+    const sets: string[] = ["updated_at = ?"];
+    const vals: unknown[] = [ts];
+    if (updates.title !== undefined) { sets.push("title = ?"); vals.push(updates.title); }
+    if (updates.description !== undefined) { sets.push("description = ?"); vals.push(updates.description); }
+    if (updates.columnId !== undefined) { sets.push("column_id = ?"); vals.push(updates.columnId); }
+    if (updates.position !== undefined) { sets.push("position = ?"); vals.push(updates.position); }
+    if (updates.status !== undefined) { sets.push("status = ?"); vals.push(updates.status); }
+    if (updates.assigneeProfileId !== undefined) { sets.push("assignee_profile_id = ?"); vals.push(updates.assigneeProfileId); }
+    if (updates.labels !== undefined) { sets.push("labels = ?"); vals.push(JSON.stringify(updates.labels)); }
+    if (updates.missionIds !== undefined) { sets.push("mission_ids = ?"); vals.push(JSON.stringify(updates.missionIds)); }
+    vals.push(id);
+    db()
+      .prepare(`UPDATE kanban_cards SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...vals);
+    db()
+      .prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?")
+      .run(ts, existing.boardId);
+  });
+
+  return getCard(id);
+}
+
+export function moveCard(
+  cardId: string,
+  toColumnId: string,
+  toPosition: number
+): KanbanCard | null {
+  const card = getCard(cardId);
+  if (!card) return null;
+  return updateCard(cardId, {
+    columnId: toColumnId,
+    position: toPosition,
+  });
+}
+
+export function deleteCard(id: string): boolean {
+  const existing = getCard(id);
+  if (!existing) return false;
+  const ts = now();
+  db()
+    .prepare("UPDATE kanban_cards SET deleted_at = ? WHERE id = ?")
+    .run(ts, id);
+  db()
+    .prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?")
+    .run(ts, existing.boardId);
+  return true;
+}
+
+// ── Full document loader ────────────────────────────────────────
 
 export function loadKanbanDocument(boardId: string): KanbanDocument | null {
-  const board = loadBoard(boardId);
+  const board = getBoard(boardId);
   if (!board) return null;
+
+  const columns = listColumns(boardId);
+  const cards = listCards(boardId);
+
+  const columnsMap: Record<string, KanbanColumn> = {};
+  const cardsMap: Record<string, KanbanCard> = {};
+
+  for (const col of columns) {
+    columnsMap[col.id] = col;
+  }
+  for (const card of cards) {
+    cardsMap[card.id] = card;
+  }
+
+  return { board, columns: columnsMap, cards: cardsMap };
+}
+
+// ── Default board ──────────────────────────────────────────────
+
+export function ensureDefaultBoard(): KanbanBoard {
+  const existing = listBoards();
+  if (existing.length > 0) return existing[0];
+
+  const board = createBoard({ name: "My Board", description: "" });
+
+  // Create default columns
+  const columnDefs = [
+    { title: "Backlog", color: "cyan", position: 0 },
+    { title: "To Do", color: "orange", position: 1 },
+    { title: "In Progress", color: "purple", position: 2 },
+    { title: "Review", color: "pink", position: 3 },
+    { title: "Done", color: "green", position: 4 },
+  ];
+
+  for (const def of columnDefs) {
+    createColumn({ boardId: board.id, ...def });
+  }
+
+  return getBoard(board.id)!;
+}
+
+// ── Row mappers ────────────────────────────────────────────────
+
+interface BoardRow {
+  id: string; name: string; description: string;
+  team_id: string | null; created_at: string; updated_at: string; deleted_at: string | null;
+}
+interface ColumnRow {
+  id: string; board_id: string; title: string; color: string;
+  position: number; wip_limit: number | null;
+  created_at: string; updated_at: string; deleted_at: string | null;
+}
+interface CardRow {
+  id: string; board_id: string; column_id: string; title: string; description: string;
+  position: number; status: string; assignee_profile_id: string | null;
+  labels: string; mission_ids: string; created_at: string; updated_at: string; deleted_at: string | null;
+}
+
+function rowToBoard(row: BoardRow): KanbanBoard {
   return {
-    board,
-    columns: loadColumns(boardId),
-    cards: loadCards(boardId),
+    id: row.id, name: row.name, description: row.description,
+    teamId: row.team_id ?? "",
+    columnIds: [], // caller populates
+    createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
 
-// ── Atomic Board Save (board + columns + cards together) ───────
-
-export function saveKanbanDocument(doc: KanbanDocument): void {
-  saveBoard(doc.board);
-  saveColumns(doc.board.id, doc.columns);
-  saveCards(doc.board.id, doc.cards);
+function rowToColumn(row: ColumnRow): KanbanColumn {
+  return {
+    id: row.id, boardId: row.board_id, title: row.title, color: row.color as KanbanColumn["color"],
+    position: row.position, wipLimit: row.wip_limit ?? null,
+    cardIds: [], // caller populates
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
 }
 
-// ── Generate IDs ──────────────────────────────────────────────
-
-export function newId(prefix: string): string {
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 8);
-  return prefix + "_" + timestamp + randomPart;
+function rowToCard(row: CardRow): KanbanCard {
+  return {
+    id: row.id, boardId: row.board_id, columnId: row.column_id,
+    title: row.title, description: row.description,
+    position: row.position,
+    status: row.status as KanbanCard["status"],
+    assigneeProfileId: row.assignee_profile_id,
+    labels: JSON.parse(row.labels || "[]"),
+    missionIds: JSON.parse(row.mission_ids || "[]"),
+    goalIndices: [],
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
 }

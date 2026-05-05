@@ -4,7 +4,7 @@ import { exec } from "child_process";
 import yaml from "js-yaml";
 
 // Use string concatenation to avoid Turbopack NFT tracing issues
-import { PATHS, HERMES_HOME } from "@/lib/hermes";
+import { HERMES_PATHS, HERMES_HOME } from "@/lib/hermes";
 import { logApiError } from "@/lib/api-logger";
 import { readJobsFile } from "@/lib/jobs-repository";
 import type { CronJobData } from "@/lib/utils";
@@ -40,7 +40,7 @@ async function buildMemoryStats(): Promise<MemoryStatsCache> {
   }
 
   if (providerType === "holographic") {
-    const dbPath = PATHS.memoryDb;
+    const dbPath = HERMES_PATHS.memoryDb;
     if (!existsSync(dbPath)) {
       return { factCount: 0, dbSize: "N/A", provider: "Holographic", expiresAt: 0 };
     }
@@ -164,10 +164,10 @@ export async function GET() {
       },
     };
 
-    if (existsSync(PATHS.config)) {
+    if (existsSync(HERMES_PATHS.config)) {
       data.capabilities.configPresent = true;
       try {
-        const cfg = yaml.load(readFileSync(PATHS.config, "utf-8")) as Record<
+        const cfg = yaml.load(readFileSync(HERMES_PATHS.config, "utf-8")) as Record<
           string,
           unknown
         >;
@@ -184,7 +184,7 @@ export async function GET() {
     }
 
     // ── Cron Jobs ──────────────────────────────────────────────
-    const cronPath = PATHS.cronJobs;
+    const cronPath = HERMES_PATHS.cronJobs;
     const jobsParsed = readJobsFile(cronPath);
     if (!jobsParsed.ok) {
       data.capabilities.jobsJsonReadable = false;
@@ -243,7 +243,7 @@ export async function GET() {
     }
 
     // ── Sessions (recent 10) ───────────────────────────────────
-    const sessionsPath = PATHS.sessions;
+    const sessionsPath = HERMES_PATHS.sessions;
     if (existsSync(sessionsPath)) {
       try {
         const files = readdirSync(sessionsPath);
@@ -269,7 +269,7 @@ export async function GET() {
     }
 
     // ── Gateway Platforms ──────────────────────────────────────
-    const envPath = PATHS.env;
+    const envPath = HERMES_PATHS.env;
     if (existsSync(envPath)) {
       try {
         const envContent = readFileSync(envPath, "utf-8");
@@ -306,7 +306,7 @@ export async function GET() {
 
       // For holographic, read SQLite directly for stats
       if (providerType === "holographic") {
-        const dbPath = PATHS.memoryDb;
+        const dbPath = HERMES_PATHS.memoryDb;
         if (existsSync(dbPath)) {
           const stats = statSync(dbPath);
           const sizeKB = Math.round(stats.size / 1024);
@@ -344,7 +344,7 @@ export async function GET() {
     } catch (error) { logApiError("GET /api/monitor", "reading memory stats", error); }
 
     // ── Recent Errors (from gateway.log) ───────────────────────
-    const logPath = PATHS.logs + "/gateway.log";
+    const logPath = HERMES_PATHS.logs + "/gateway.log";
     if (existsSync(logPath)) {
       try {
         const content = readFileSync(logPath, "utf-8");
@@ -370,7 +370,7 @@ export async function GET() {
     }
 
     // Also check errors.log
-    const errLogPath = PATHS.logs + "/errors.log";
+    const errLogPath = HERMES_PATHS.logs + "/errors.log";
     if (existsSync(errLogPath)) {
       try {
         const content = readFileSync(errLogPath, "utf-8");

@@ -1,90 +1,198 @@
 // ═══════════════════════════════════════════════════════════════
-// TeamsRepository — Team JSON under control-hub/data/teams
+// teams-repository.ts — Teams CRUD via SQLite
 // ═══════════════════════════════════════════════════════════════
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
+import { db, inTransaction, uuid, now } from "./db";
+import type { Team, TeamMember } from "@/types/hermes";
 
-import { PATHS } from "@/lib/hermes";
-import { logApiError } from "@/lib/api-logger";
-import type { Team } from "@/types/hermes";
+// ── Row types ─────────────────────────────────────────────────
 
-const DATA_DIR = PATHS.workspaces + "/teams";
+interface TeamRow {
+  id: string; name: string; description: string;
+  leader_id: string; created_at: string; updated_at: string; deleted_at: string | null;
+}
+interface MemberRow {
+  id: string; team_id: string; profile_id: string;
+  role: string; joined_at: string;
+}
 
-// ── Internal JSON helpers ─────────────────────────────────────
+// ── Mappers ────────────────────────────────────────────────
 
-function readJsonFile<T>(path: string, route: string, context: string): T | null {
-  try {
-    const text = readFileSync(path, "utf-8");
-    return JSON.parse(text) as T;
-  } catch (error) {
-    logApiError(route, `parsing JSON ${context}`, error);
-    return null;
+function rowToMember(row: MemberRow): TeamMember {
+  return {
+    profileId: row.profile_id,
+    role: row.role as TeamMember["role"],
+    joinedAt: row.joined_at,
+  };
+}
+
+function rowToTeam(row: TeamRow, memberRows: MemberRow[]): Team {
+  return {
+    id: row.id, name: row.name, description: row.description,
+    leaderProfileId: row.leader_id,
+    members: memberRows.map(rowToMember),
+    boardIds: [],
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+// ── CRUD ─────────────────────────────────────────────────────
+
+export function listTeams(): Team[] {
+  const rows = db()
+    .prepare(
+      "SELECT * FROM teams WHERE deleted_at IS NULL ORDER BY name"
+    )
+    .all() as TeamRow[];
+  return rows.map((row) => {
+    const members = db()
+      .prepare(
+        "SELECT * FROM team_members WHERE team_id = ?"
+      )
+      .all(row.id) as MemberRow[];
+    return rowToTeam(row, members);
+  });
+}
+
+export function getTeam(id: string): Team | null {
+  const row = db()
+    .prepare("SELECT * FROM teams WHERE id = ?")
+    .get(id) as TeamRow | undefined;
+  if (!row || row.deleted_at) return null;
+  const members = db()
+    .prepare("SELECT * FROM team_members WHERE team_id = ?")
+    .all(id) as MemberRow[];
+  return rowToTeam(row, members);
+}
+
+export function createTeam(data: {
+  name: string;
+  description?: string;
+  leaderProfileId: string;
+  memberIds?: string[];
+}): Team {
+  const id = uuid();
+  const ts = now();
+
+  inTransaction(() => {
+    db()
+      .prepare(
+        `INSERT INTO teams (id, name, description, leader_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, data.name, data.description ?? "", data.leaderProfileId, ts, ts);
+
+    // Add leader as member
+    db()
+      .prepare(
+        `INSERT INTO team_members (id, team_id, profile_id, role, joined_at)
+         VALUES (?, ?, ?, 'leader', ?)`
+      )
+      .run(uuid(), id, data.leaderProfileId, ts);
+
+    // Add other members
+    for (const profileId of data.memberIds ?? []) {
+      if (profileId === data.leaderProfileId) continue;
+      db()
+        .prepare(
+          `INSERT INTO team_members (id, team_id, profile_id, role, joined_at)
+           VALUES (?, ?, ?, 'specialist', ?)`
+        )
+        .run(uuid(), id, profileId, ts);
+    }
+  });
+
+  return getTeam(id)!;
+}
+
+export function updateTeam(
+  id: string,
+  updates: {
+    name?: string;
+    description?: string;
+    leaderProfileId?: string;
   }
-}
+): Team | null {
+  const existing = getTeam(id);
+  if (!existing) return null;
+  const ts = now();
 
-function sanitizeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]/g, "");
-}
+  inTransaction(() => {
+    const sets: string[] = ["updated_at = ?"];
+    const vals: unknown[] = [ts];
+    if (updates.name !== undefined) { sets.push("name = ?"); vals.push(updates.name); }
+    if (updates.description !== undefined) { sets.push("description = ?"); vals.push(updates.description); }
+    if (updates.leaderProfileId !== undefined) {
+      sets.push("leader_id = ?"); vals.push(updates.leaderProfileId);
+      // Update leader role
+      db()
+        .prepare(
+          "UPDATE team_members SET role = 'specialist' WHERE team_id = ? AND role = 'leader'"
+        )
+        .run(id);
+    }
+    vals.push(id);
+    db()
+      .prepare(`UPDATE teams SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...vals);
+  });
 
-export function ensureTeamsDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-function teamPath(id: string): string {
-  return DATA_DIR + "/" + sanitizeId(id) + ".team.json";
-}
-
-export function getTeamsDataDir(): string {
-  return DATA_DIR;
-}
-
-export function loadTeam(id: string): Team | null {
-  const safe = sanitizeId(id);
-  if (!safe) return null;
-  return readJsonFile<Team>(teamPath(safe), "loadTeam", "team") ?? null;
-}
-
-export function saveTeam(team: Team): void {
-  ensureTeamsDir();
-  const safe = sanitizeId(team.id);
-  if (!safe) return;
-  writeFileSync(teamPath(safe), JSON.stringify(team, null, 2));
+  return getTeam(id);
 }
 
 export function deleteTeam(id: string): boolean {
-  const safe = sanitizeId(id);
-  if (!safe) return false;
-  const path = teamPath(safe);
-  if (!existsSync(path)) return false;
-  try {
-    unlinkSync(path);
-    return true;
-  } catch {
-    return false;
-  }
+  const existing = getTeam(id);
+  if (!existing) return false;
+  const ts = now();
+  db()
+    .prepare("UPDATE teams SET deleted_at = ? WHERE id = ?")
+    .run(ts, id);
+  return true;
 }
 
-export function listTeams(): Team[] {
-  ensureTeamsDir();
-  try {
-    const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".team.json"));
-    const teams: Team[] = [];
-    for (const file of files) {
-      const team = readJsonFile<Team>(DATA_DIR + "/" + file, "listTeams", file);
-      if (team) teams.push(team);
-    }
-    return teams.sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-  } catch {
-    return [];
-  }
+export function addTeamMember(
+  teamId: string,
+  profileId: string,
+  role: TeamMember["role"]
+): Team | null {
+  const team = getTeam(teamId);
+  if (!team) return null;
+  const ts = now();
+
+  inTransaction(() => {
+    db()
+      .prepare(
+        `INSERT OR IGNORE INTO team_members (id, team_id, profile_id, role, joined_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(uuid(), teamId, profileId, role, ts);
+  });
+
+  return getTeam(teamId);
 }
 
-export function newId(prefix: string): string {
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 8);
-  return prefix + "_" + timestamp + randomPart;
+export function removeTeamMember(teamId: string, profileId: string): boolean {
+  const existing = getTeam(teamId);
+  if (!existing) return false;
+  // Cannot remove the leader
+  if (existing.leaderProfileId === profileId) return false;
+  db()
+    .prepare("DELETE FROM team_members WHERE team_id = ? AND profile_id = ?")
+    .run(teamId, profileId);
+  return true;
+}
+
+export function updateTeamMemberRole(
+  teamId: string,
+  profileId: string,
+  role: TeamMember["role"]
+): Team | null {
+  const existing = getTeam(teamId);
+  if (!existing) return null;
+  db()
+    .prepare(
+      "UPDATE team_members SET role = ? WHERE team_id = ? AND profile_id = ?"
+    )
+    .run(role, teamId, profileId);
+  return getTeam(teamId);
 }

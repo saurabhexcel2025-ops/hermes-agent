@@ -1,29 +1,22 @@
+// ═══════════════════════════════════════════════════════════════
+// /api/goals — Goal Session CRUD (SQLite)
+// ═══════════════════════════════════════════════════════════════
+
 import { NextRequest, NextResponse } from "next/server";
-
-// ═══════════════════════════════════════════════════════════════
-// /api/goals — Goal Session Orchestration
-//
-// Manages the goal-loop lifecycle for Kanban cards:
-//   - Create sessions that track sequential or parallel goal execution
-//   - Advance goals as sub-agent missions complete
-//   - Poll for GOAL_DONE markers in mission sessions
-// ═══════════════════════════════════════════════════════════════
-
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import {
-  loadGoalSession,
-  saveGoalSession,
-  deleteGoalSession,
   listGoalSessions,
-  listGoalSessionsByBoard,
-  listGoalSessionsByCard,
+  getGoalSession,
   createGoalSession,
-  advanceGoalSession,
+  updateGoalSession,
+  updateGoalStep,
+  deleteGoalSession,
+  listGoalSessionsByCard,
 } from "@/lib/goal-session-repository";
-import { loadMission } from "@/lib/missions-repository";
-import type { GoalSession } from "@/types/hermes";
+import { getMission } from "@/lib/mission-repository";
+import type { GoalSession, GoalStep } from "@/types/hermes";
 
 // ── GET ───────────────────────────────────────────────────────
 
@@ -35,7 +28,7 @@ export async function GET(request: Request) {
 
   try {
     if (sessionId) {
-      const session = loadGoalSession(sessionId);
+      const session = getGoalSession(sessionId);
       if (!session) {
         return NextResponse.json({ error: "Goal session not found" }, { status: 404 });
       }
@@ -43,7 +36,7 @@ export async function GET(request: Request) {
     }
 
     if (boardId) {
-      const sessions = listGoalSessionsByBoard(boardId);
+      const sessions = listGoalSessions(boardId);
       return NextResponse.json({ data: { sessions } });
     }
 
@@ -55,11 +48,7 @@ export async function GET(request: Request) {
     const sessions = listGoalSessions();
     return NextResponse.json({ data: { sessions } });
   } catch (error) {
-    logApiError(
-      "GET /api/goals",
-      sessionId ? `session ${sessionId}` : "listing sessions",
-      error
-    );
+    logApiError("GET /api/goals", sessionId ?? "listing sessions", error);
     return NextResponse.json({ error: "Failed to load goal sessions" }, { status: 500 });
   }
 }
@@ -87,27 +76,16 @@ export async function POST(request: NextRequest) {
       };
 
       if (!boardId || !cardId) {
-        return NextResponse.json(
-          { error: "boardId and cardId are required" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "boardId and cardId are required" }, { status: 400 });
       }
-
       if (!goals || !Array.isArray(goals) || goals.length === 0) {
-        return NextResponse.json(
-          { error: "At least one goal is required" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "At least one goal is required" }, { status: 400 });
       }
-
       if (!goalLoopMode) {
-        return NextResponse.json(
-          { error: "goalLoopMode is required (sequential or parallel)" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "goalLoopMode is required" }, { status: 400 });
       }
 
-      // Prevent duplicate active sessions for same card
+      // Prevent duplicate active sessions
       const existing = listGoalSessionsByCard(cardId).filter(
         (s) => s.status === "active" || s.status === "paused"
       );
@@ -121,7 +99,7 @@ export async function POST(request: NextRequest) {
       const session = createGoalSession({
         boardId,
         cardId,
-        goalLoopMode,
+        mode: goalLoopMode,
         goals: goals.map((g: string) => g.trim()).filter(Boolean),
         assignedProfileId,
       });
@@ -135,127 +113,127 @@ export async function POST(request: NextRequest) {
       const { sessionId, goalIndex, status, missionId, error } = body as {
         sessionId?: string;
         goalIndex?: number;
-        status?: "completed" | "failed" | "paused" | "active";
+        status?: GoalStep["status"];
         missionId?: string | null;
         error?: string | null;
       };
 
       if (!sessionId || goalIndex === undefined) {
-        return NextResponse.json(
-          { error: "sessionId and goalIndex are required" },
-          { status: 400 }
+        return NextResponse.json({ error: "sessionId and goalIndex are required" }, { status: 400 });
+      }
+
+      // Update step status
+      const step = updateGoalStep(goalIndex, sessionId, {
+        status,
+        missionId: missionId ?? undefined,
+        error: error ?? undefined,
+        completedAt: status === "done" || status === "failed" ? new Date().toISOString() : undefined,
+      });
+
+      if (!step) {
+        return NextResponse.json({ error: "Step not found" }, { status: 404 });
+      }
+
+      // Advance session to next goal if sequential
+      const session = getGoalSession(sessionId);
+      if (session && (status === "done" || status === "failed") && session.goalLoopMode === "sequential") {
+        const nextIndex = goalIndex + 1;
+        if (nextIndex < session.goals.length) {
+          updateGoalSession(sessionId, { currentGoalIndex: nextIndex });
+        } else {
+          updateGoalSession(sessionId, { status: status === "done" ? "completed" : "failed" });
+        }
+      } else if (session && (status === "done" || status === "failed")) {
+        // Parallel: mark session complete when all steps done
+        const allDone = session.steps.every((s: GoalStep) =>
+          s.status === "done" || s.status === "failed"
         );
+        if (allDone) {
+          updateGoalSession(sessionId, { status: "completed" });
+        }
       }
 
-      const session = advanceGoalSession(
-        sessionId,
-        goalIndex,
-        (status as "completed" | "failed" | "paused") ?? "completed",
-        missionId,
-        error
-      );
-
-      if (!session) {
-        return NextResponse.json({ error: "Goal session not found" }, { status: 404 });
-      }
-
+      const updated = getGoalSession(sessionId);
       appendAuditLine({ action: "goals.advance", resource: sessionId, ok: true });
-      return NextResponse.json({ data: { session } });
+      return NextResponse.json({ data: { session: updated } });
     }
 
-    // ── Pause / Resume ──────────────────────────────────────────
+    // ── Pause ──────────────────────────────────────────────────
     if (action === "pause") {
       const { sessionId } = body as { sessionId?: string };
       if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
 
-      const session = loadGoalSession(sessionId);
+      const session = updateGoalSession(sessionId, { status: "paused" });
       if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-
-      session.status = "paused";
-      session.updatedAt = new Date().toISOString();
-      saveGoalSession(session);
 
       appendAuditLine({ action: "goals.pause", resource: sessionId, ok: true });
       return NextResponse.json({ data: { session } });
     }
 
+    // ── Resume ─────────────────────────────────────────────────
     if (action === "resume") {
       const { sessionId } = body as { sessionId?: string };
       if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
 
-      const session = loadGoalSession(sessionId);
+      const session = updateGoalSession(sessionId, { status: "active" });
       if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-
-      session.status = "active";
-      session.updatedAt = new Date().toISOString();
-      saveGoalSession(session);
 
       appendAuditLine({ action: "goals.resume", resource: sessionId, ok: true });
       return NextResponse.json({ data: { session } });
     }
 
-    // ── Cancel ──────────────────────────────────────────────────
+    // ── Cancel ─────────────────────────────────────────────────
     if (action === "cancel") {
       const { sessionId } = body as { sessionId?: string };
       if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
 
-      const session = loadGoalSession(sessionId);
+      const session = updateGoalSession(sessionId, { status: "cancelled" });
       if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-
-      session.status = "cancelled";
-      session.updatedAt = new Date().toISOString();
-      saveGoalSession(session);
 
       appendAuditLine({ action: "goals.cancel", resource: sessionId, ok: true });
       return NextResponse.json({ data: { session } });
     }
 
-    // ── Check Mission Completion ─────────────────────────────────
-    // Polls a sub-agent mission for GOAL_DONE marker
+    // ── Check Mission Completion ────────────────────────────────
     if (action === "check-completion") {
-      const { sessionId, goalIndex } = body as {
-        sessionId?: string;
-        goalIndex?: number;
-      };
+      const { sessionId, goalIndex } = body as { sessionId?: string; goalIndex?: number };
 
       if (!sessionId || goalIndex === undefined) {
-        return NextResponse.json(
-          { error: "sessionId and goalIndex are required" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "sessionId and goalIndex are required" }, { status: 400 });
       }
 
-      const session = loadGoalSession(sessionId);
+      const session = getGoalSession(sessionId);
       if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-      const step = session.steps.find((s) => s.index === goalIndex);
+      const step = session.steps.find((s: GoalStep) => s.index === goalIndex);
       if (!step || !step.missionId) {
         return NextResponse.json({ error: "Step or linked mission not found" }, { status: 404 });
       }
 
-      const mission = loadMission(step.missionId);
-      const done = mission?.results?.includes("GOAL_DONE") ?? false;
+      const mission = getMission(step.missionId);
+      const done = mission?.result?.includes("GOAL_DONE") ?? false;
       const failed = mission?.status === "failed";
 
       if (done) {
-        const updated = advanceGoalSession(sessionId, goalIndex, "completed", step.missionId);
-        return NextResponse.json({ data: { session: updated, goalDone: true } });
+        updateGoalStep(goalIndex, sessionId, {
+          status: "done",
+          completedAt: new Date().toISOString(),
+        });
+        const updatedSession = getGoalSession(sessionId);
+        return NextResponse.json({ data: { session: updatedSession, goalDone: true } });
       }
 
       if (failed) {
-        const updated = advanceGoalSession(
-          sessionId,
-          goalIndex,
-          "failed",
-          step.missionId,
-          mission?.error ?? "Mission failed"
-        );
-        return NextResponse.json({ data: { session: updated, goalDone: false, failed: true } });
+        updateGoalStep(goalIndex, sessionId, {
+          status: "failed",
+          error: mission?.error ?? "Mission failed",
+          completedAt: new Date().toISOString(),
+        });
+        const updatedSession = getGoalSession(sessionId);
+        return NextResponse.json({ data: { session: updatedSession, goalDone: false, failed: true } });
       }
 
-      return NextResponse.json({
-        data: { session, goalDone: false, inProgress: true },
-      });
+      return NextResponse.json({ data: { session, goalDone: false, inProgress: true } });
     }
 
     // ── Delete Session ──────────────────────────────────────────

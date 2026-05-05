@@ -852,11 +852,14 @@ export type KanbanCardStatus =
 // ── Kanban Column ──────────────────────────────────────────────
 export interface KanbanColumn {
   id: string;
+  boardId?: string;
   title: string;
   color: AccentColor;
   position: number;
   wipLimit: number | null;
   cardIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ── Kanban Card ────────────────────────────────────────────────

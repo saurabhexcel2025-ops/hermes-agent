@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { existsSync, readFileSync } from "fs";
 
-import { PATHS } from "@/lib/hermes";
+import { HERMES_PATHS } from "@/lib/hermes";
 import { logApiError } from "@/lib/api-logger";
 
 export async function GET() {
   try {
     // Read config for gateway settings
-    const configPath = PATHS.config;
+    const configPath = HERMES_PATHS.config;
     if (existsSync(configPath)) {
       try {
         const content = readFileSync(configPath, "utf-8");
@@ -27,7 +27,7 @@ export async function GET() {
     }
 
     // Check for gateway log
-    const logPath = PATHS.logs + "/gateway.log";
+    const logPath = HERMES_PATHS.logs + "/gateway.log";
     let lastLogLines: string[] = [];
     if (existsSync(logPath)) {
       try {
@@ -38,7 +38,7 @@ export async function GET() {
     }
 
     // Check platform status from .env
-    const envPath = PATHS.env;
+    const envPath = HERMES_PATHS.env;
     const platforms: Record<string, boolean> = {};
     if (existsSync(envPath)) {
       try {

@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlink
 import { parseTemplatePackManifestV1 } from "@agent-control-hub/schema";
 import { zodErrorResponse } from "@/lib/api-schemas";
 import { logApiError } from "@/lib/api-logger";
-import { PATHS } from "@/lib/hermes";
+import { PATHS } from "@/lib/paths";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 
 const DATA_DIR = PATHS.templates;

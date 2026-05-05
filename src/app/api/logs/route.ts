@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { resolve } from "path";
 
-import { PATHS } from "@/lib/hermes";
+import { HERMES_PATHS } from "@/lib/hermes";
 import { logApiError } from "@/lib/api-logger";
 
 export async function GET(request: Request) {
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const parsedLines = parseInt(searchParams.get("lines") || "200", 10);
     const maxLines = Number.isFinite(parsedLines) ? Math.min(parsedLines, 1000) : 200;
 
-    const logsDir = PATHS.logs;
+    const logsDir = HERMES_PATHS.logs;
     if (!existsSync(logsDir)) {
       return NextResponse.json({ error: "No logs directory found" }, { status: 404 });
     }

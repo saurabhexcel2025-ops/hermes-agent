@@ -1,179 +1,238 @@
 // ═══════════════════════════════════════════════════════════════
-// GoalSessionRepository — Goal session JSON under control-hub/data/goals
+// goal-session-repository.ts — Goal session CRUD via SQLite
 // ═══════════════════════════════════════════════════════════════
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
+import { db, inTransaction, uuid, now } from "./db";
+import type { GoalSession, GoalStep, GoalLoopMode, GoalSessionStatus } from "@/types/hermes";
 
-import { PATHS } from "@/lib/hermes";
-import { logApiError } from "@/lib/api-logger";
-import type { GoalSession, GoalSessionStatus, GoalStep } from "@/types/hermes";
+// ── Row types ─────────────────────────────────────────────────
 
-const DATA_DIR = PATHS.missions + "/../goals"; // ~/.control-hub/data/goals
+interface SessionRow {
+  id: string; card_id: string; board_id: string; mode: string;
+  goals: string; current_goal_index: number; status: string;
+  coordinator_mission_id: string | null;
+  created_at: string; updated_at: string; deleted_at: string | null;
+}
+interface StepRow {
+  id: string; session_id: string; step_index: number; goal: string;
+  status: string; mission_id: string | null; assigned_profile_id: string | null;
+  completed_at: string | null; error: string | null;
+  created_at: string; updated_at: string;
+}
 
-// ── Internal JSON helpers ─────────────────────────────────────
+// ── Mappers ──────────────────────────────────────────────────
 
-function readJsonFile<T>(path: string, route: string, context: string): T | null {
-  try {
-    const text = readFileSync(path, "utf-8");
-    return JSON.parse(text) as T;
-  } catch (error) {
-    logApiError(route, `parsing JSON ${context}`, error);
-    return null;
+function rowToStep(row: StepRow): GoalStep {
+  return {
+    index: row.step_index,
+    goal: row.goal,
+    status: row.status as GoalStep["status"],
+    missionId: row.mission_id ?? null,
+    assignedProfileId: row.assigned_profile_id ?? null,
+    completedAt: row.completed_at ?? null,
+    error: row.error ?? null,
+  };
+}
+
+function rowToSession(row: SessionRow, stepRows: StepRow[]): GoalSession {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    boardId: row.board_id,
+    goalLoopMode: row.mode as GoalLoopMode,
+    goals: JSON.parse(row.goals || "[]"),
+    currentGoalIndex: row.current_goal_index,
+    steps: stepRows.map(rowToStep),
+    status: row.status as GoalSessionStatus,
+    coordinatorMissionId: row.coordinator_mission_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ── CRUD ─────────────────────────────────────────────────────
+
+export function listGoalSessions(boardId?: string): GoalSession[] {
+  let rows: SessionRow[];
+  if (boardId) {
+    rows = db()
+      .prepare(
+        "SELECT * FROM goal_sessions WHERE board_id = ? AND deleted_at IS NULL ORDER BY created_at DESC"
+      )
+      .all(boardId) as SessionRow[];
+  } else {
+    rows = db()
+      .prepare(
+        "SELECT * FROM goal_sessions WHERE deleted_at IS NULL ORDER BY created_at DESC"
+      )
+      .all() as SessionRow[];
   }
-}
 
-function sanitizeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-function ensureGoalsDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-function sessionPath(id: string): string {
-  return DATA_DIR + "/" + sanitizeId(id) + ".goal.json";
-}
-
-export function getGoalsDataDir(): string {
-  return DATA_DIR;
-}
-
-export function loadGoalSession(id: string): GoalSession | null {
-  const safe = sanitizeId(id);
-  if (!safe) return null;
-  return readJsonFile<GoalSession>(sessionPath(safe), "loadGoalSession", "session") ?? null;
-}
-
-export function saveGoalSession(session: GoalSession): void {
-  ensureGoalsDir();
-  const safe = sanitizeId(session.id);
-  if (!safe) return;
-  writeFileSync(sessionPath(safe), JSON.stringify(session, null, 2));
-}
-
-export function deleteGoalSession(id: string): boolean {
-  const safe = sanitizeId(id);
-  if (!safe) return false;
-  const path = sessionPath(safe);
-  if (!existsSync(path)) return false;
-  try {
-    unlinkSync(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function listGoalSessions(): GoalSession[] {
-  ensureGoalsDir();
-  try {
-    const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".goal.json"));
-    const sessions: GoalSession[] = [];
-    for (const file of files) {
-      const session = readJsonFile<GoalSession>(
-        DATA_DIR + "/" + file,
-        "listGoalSessions",
-        file
-      );
-      if (session) sessions.push(session);
-    }
-    return sessions.sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-  } catch {
-    return [];
-  }
-}
-
-export function listGoalSessionsByBoard(boardId: string): GoalSession[] {
-  return listGoalSessions().filter((s) => s.boardId === boardId);
+  return rows.map((row) => {
+    const stepRows = db()
+      .prepare(
+        "SELECT * FROM goal_steps WHERE session_id = ? ORDER BY step_index"
+      )
+      .all(row.id) as StepRow[];
+    return rowToSession(row, stepRows);
+  });
 }
 
 export function listGoalSessionsByCard(cardId: string): GoalSession[] {
-  return listGoalSessions().filter((s) => s.cardId === cardId);
+  const rows = db()
+    .prepare(
+      "SELECT * FROM goal_sessions WHERE card_id = ? AND deleted_at IS NULL ORDER BY created_at DESC"
+    )
+    .all(cardId) as SessionRow[];
+
+  return rows.map((row) => {
+    const stepRows = db()
+      .prepare(
+        "SELECT * FROM goal_steps WHERE session_id = ? ORDER BY step_index"
+      )
+      .all(row.id) as StepRow[];
+    return rowToSession(row, stepRows);
+  });
 }
 
-export function createGoalSession(params: {
-  boardId: string;
+export function getGoalSession(id: string): GoalSession | null {
+  const row = db()
+    .prepare("SELECT * FROM goal_sessions WHERE id = ?")
+    .get(id) as SessionRow | undefined;
+  if (!row || row.deleted_at) return null;
+  const stepRows = db()
+    .prepare(
+      "SELECT * FROM goal_steps WHERE session_id = ? ORDER BY step_index"
+    )
+    .all(id) as StepRow[];
+  return rowToSession(row, stepRows);
+}
+
+export function createGoalSession(data: {
   cardId: string;
-  goalLoopMode: "sequential" | "parallel";
+  boardId: string;
+  mode: GoalLoopMode;
   goals: string[];
   assignedProfileId?: string;
 }): GoalSession {
-  const now = new Date().toISOString();
-  const steps: GoalStep[] = params.goals.map((goal, index) => ({
-    index,
-    goal,
-    status: "pending",
-    missionId: null,
-    assignedProfileId:
-      params.assignedProfileId && params.goalLoopMode === "sequential"
-        ? params.assignedProfileId
-        : null,
-    completedAt: null,
-    error: null,
-  }));
+  const id = uuid();
+  const ts = now();
 
-  const session: GoalSession = {
-    id: newGoalId(),
-    boardId: params.boardId,
-    cardId: params.cardId,
-    goalLoopMode: params.goalLoopMode,
-    goals: params.goals,
-    currentGoalIndex: 0,
-    steps,
-    status: "active",
-    coordinatorMissionId: null,
-    createdAt: now,
-    updatedAt: now,
-  };
+  inTransaction(() => {
+    db()
+      .prepare(
+        `INSERT INTO goal_sessions
+           (id, card_id, board_id, mode, goals, current_goal_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, 'active', ?, ?)`
+      )
+      .run(id, data.cardId, data.boardId, data.mode, JSON.stringify(data.goals), ts, ts);
 
-  saveGoalSession(session);
-  return session;
+    // Insert all goal steps
+    for (let i = 0; i < data.goals.length; i++) {
+      db()
+        .prepare(
+          `INSERT INTO goal_steps
+             (id, session_id, step_index, goal, status, assigned_profile_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`
+        )
+        .run(uuid(), id, i, data.goals[i], data.assignedProfileId ?? null, ts, ts);
+    }
+  });
+
+  return getGoalSession(id)!;
 }
 
-export function advanceGoalSession(
-  sessionId: string,
-  goalIndex: number,
-  status: GoalSessionStatus,
-  missionId?: string | null,
-  error?: string | null
-): GoalSession | null {
-  const session = loadGoalSession(sessionId);
-  if (!session) return null;
-
-  const now = new Date().toISOString();
-  const step = session.steps.find((s) => s.index === goalIndex);
-  if (step) {
-    step.status = status === "active" ? "active" : status === "completed" ? "done" : status === "failed" ? "failed" : "pending";
-    if (missionId !== undefined) step.missionId = missionId;
-    if (status === "completed") step.completedAt = now;
-    if (error !== undefined) step.error = error;
+export function updateGoalSession(
+  id: string,
+  updates: {
+    currentGoalIndex?: number;
+    status?: GoalSessionStatus;
+    coordinatorMissionId?: string;
   }
+): GoalSession | null {
+  const existing = getGoalSession(id);
+  if (!existing) return null;
+  const ts = now();
 
-  // Advance currentGoalIndex to next pending goal
-  const nextIndex = session.steps.findIndex(
-    (s, i) => i > goalIndex && s.status === "pending"
-  );
-  session.currentGoalIndex = nextIndex >= 0 ? nextIndex : goalIndex;
+  inTransaction(() => {
+    const sets: string[] = ["updated_at = ?"];
+    const vals: unknown[] = [ts];
+    if (updates.currentGoalIndex !== undefined) {
+      sets.push("current_goal_index = ?");
+      vals.push(updates.currentGoalIndex);
+    }
+    if (updates.status !== undefined) {
+      sets.push("status = ?");
+      vals.push(updates.status);
+    }
+    if (updates.coordinatorMissionId !== undefined) {
+      sets.push("coordinator_mission_id = ?");
+      vals.push(updates.coordinatorMissionId);
+    }
+    vals.push(id);
+    db()
+      .prepare(`UPDATE goal_sessions SET ${sets.join(", ")} WHERE id = ?`)
+      .run(...vals);
+  });
 
-  // Compute overall session status
-  const allDone = session.steps.every((s) => s.status === "done" || s.status === "skipped");
-  const anyFailed = session.steps.some((s) => s.status === "failed");
-  if (allDone) session.status = "completed";
-  else if (anyFailed) session.status = "failed";
-  else if (status === "paused") session.status = "paused";
-  else session.status = "active";
-
-  session.updatedAt = now;
-  saveGoalSession(session);
-  return session;
+  return getGoalSession(id);
 }
 
-function newGoalId(): string {
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 8);
-  return "gs_" + timestamp + randomPart;
+export function updateGoalStep(
+  stepIndex: number,
+  sessionId: string,
+  updates: {
+    status?: GoalStep["status"];
+    missionId?: string;
+    error?: string;
+    completedAt?: string;
+  }
+): GoalStep | null {
+  const existing = db()
+    .prepare("SELECT * FROM goal_steps WHERE session_id = ? AND step_index = ?")
+    .get(sessionId, stepIndex) as StepRow | undefined;
+  if (!existing) return null;
+  const ts = now();
+
+  const sets: string[] = ["updated_at = ?"];
+  const vals: unknown[] = [ts];
+  if (updates.status !== undefined) { sets.push("status = ?"); vals.push(updates.status); }
+  if (updates.missionId !== undefined) { sets.push("mission_id = ?"); vals.push(updates.missionId); }
+  if (updates.error !== undefined) { sets.push("error = ?"); vals.push(updates.error); }
+  if (updates.completedAt !== undefined) { sets.push("completed_at = ?"); vals.push(updates.completedAt); }
+  vals.push(sessionId, stepIndex);
+
+  db()
+    .prepare(`UPDATE goal_steps SET ${sets.join(", ")} WHERE session_id = ? AND step_index = ?`)
+    .run(...vals);
+
+  const updated = db()
+    .prepare("SELECT * FROM goal_steps WHERE session_id = ? AND step_index = ?")
+    .get(sessionId, stepIndex) as StepRow;
+  return rowToStep(updated);
+}
+
+export function deleteGoalSession(id: string): boolean {
+  const existing = getGoalSession(id);
+  if (!existing) return false;
+  const ts = now();
+  db()
+    .prepare("UPDATE goal_sessions SET deleted_at = ? WHERE id = ?")
+    .run(ts, id);
+  return true;
+}
+
+export function getActiveGoalSessionForCard(cardId: string): GoalSession | null {
+  const row = db()
+    .prepare(
+      "SELECT * FROM goal_sessions WHERE card_id = ? AND status = 'active' AND deleted_at IS NULL LIMIT 1"
+    )
+    .get(cardId) as SessionRow | undefined;
+  if (!row) return null;
+  const stepRows = db()
+    .prepare(
+      "SELECT * FROM goal_steps WHERE session_id = ? ORDER BY step_index"
+    )
+    .all(row.id) as StepRow[];
+  return rowToSession(row, stepRows);
 }

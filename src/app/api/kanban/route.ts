@@ -1,43 +1,52 @@
+// ═══════════════════════════════════════════════════════════════
+// /api/kanban — Kanban Board CRUD (SQLite)
+// ═══════════════════════════════════════════════════════════════
+
 import { NextRequest, NextResponse } from "next/server";
-
-// ═══════════════════════════════════════════════════════════════
-// /api/kanban — Kanban Board CRUD
-// ═══════════════════════════════════════════════════════════════
-
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import {
-  ensureKanbanDir,
   listBoards,
-  saveBoard,
+  getBoard,
+  createBoard,
+  updateBoard,
   deleteBoard,
   loadKanbanDocument,
-  saveKanbanDocument,
-  newId,
+  ensureDefaultBoard,
+  // Column
+  createColumn,
+  updateColumn,
+  deleteColumn,
+  // Card
+  createCard,
+  updateCard,
+  moveCard,
+  deleteCard,
+  getColumn,
+  listColumns,
+  listCards,
 } from "@/lib/kanban-repository";
-import { loadTeam, saveTeam } from "@/lib/teams-repository";
-import type {
-  KanbanBoard,
-  KanbanColumn,
-  KanbanCard,
-  AccentColor,
-} from "@/types/hermes";
+import type { AccentColor, KanbanBoard, KanbanCard } from "@/types/hermes";
 
 // ── GET ───────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  // Support both ?id= and ?boardId= for board lookups
   const boardId = url.searchParams.get("id") ?? url.searchParams.get("boardId");
 
   try {
-    ensureKanbanDir();
-
     if (boardId) {
       const doc = loadKanbanDocument(boardId);
       if (!doc) {
         return NextResponse.json({ error: "Board not found" }, { status: 404 });
+      }
+      // Populate columnIds and cardIds
+      doc.board.columnIds = Object.keys(doc.columns);
+      for (const col of Object.values(doc.columns) as Array<{ id: string; title: string; cardIds?: string[] }>) {
+        col.cardIds = listCards(boardId)
+          .filter((c) => c.columnId === col.id)
+          .map((c) => c.id);
       }
       return NextResponse.json({ data: doc });
     }
@@ -62,7 +71,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body as { action?: string };
 
-    // ── Create Board ────────────────────────────────────────────
+    // ── Create Board ──────────────────────────────────────────
     if (action === "create-board") {
       const { name, description, teamId, columns } = body as {
         name?: string;
@@ -75,59 +84,43 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Board name is required" }, { status: 400 });
       }
 
-      const now = new Date().toISOString();
-      const boardId = newId("board");
+      const board = createBoard({
+        name: name.trim(),
+        description: (description ?? "").trim(),
+        teamId: teamId?.trim(),
+      });
 
       // Default columns
-      const defaultColumns: Array<{
-        title: string;
-        color: AccentColor;
-        position: number;
-        wipLimit: number | null;
-      }> = [
-        { title: "Backlog", color: "cyan", position: 0, wipLimit: null },
-        { title: "To Do", color: "orange", position: 1, wipLimit: null },
-        { title: "In Progress", color: "purple", position: 2, wipLimit: null },
-        { title: "Review", color: "pink", position: 3, wipLimit: null },
-        { title: "Done", color: "green", position: 4, wipLimit: null },
+      const defaultColumns = [
+        { title: "Backlog", color: "cyan" as AccentColor, position: 0, wipLimit: null },
+        { title: "To Do", color: "orange" as AccentColor, position: 1, wipLimit: null },
+        { title: "In Progress", color: "purple" as AccentColor, position: 2, wipLimit: null },
+        { title: "Review", color: "pink" as AccentColor, position: 3, wipLimit: null },
+        { title: "Done", color: "green" as AccentColor, position: 4, wipLimit: null },
       ];
 
       const columnDefs = columns && columns.length > 0 ? columns : defaultColumns;
-
-      const colMap: Record<string, KanbanColumn> = {};
+      const colMap: Record<string, unknown> = {};
       const columnIds: string[] = [];
 
       for (const def of columnDefs) {
-        const colId = newId("col");
-        columnIds.push(colId);
-        colMap[colId] = {
-          id: colId,
+        const col = createColumn({
+          boardId: board.id,
           title: def.title,
           color: def.color ?? "cyan",
           position: def.position ?? 0,
           wipLimit: def.wipLimit ?? null,
-          cardIds: [],
-        };
+        });
+        columnIds.push(col.id);
+        colMap[col.id] = col;
       }
 
-      const board: KanbanBoard = {
-        id: boardId,
-        name: name.trim(),
-        description: (description ?? "").trim(),
-        columnIds,
-        teamId: (teamId ?? "").trim(),
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const doc = { board, columns: colMap, cards: {} as Record<string, KanbanCard> };
-      saveKanbanDocument(doc);
-
-      appendAuditLine({ action: "kanban.board.create", resource: boardId, ok: true });
+      const doc = { board: { ...board, columnIds }, columns: colMap, cards: {} as Record<string, KanbanCard> };
+      appendAuditLine({ action: "kanban.board.create", resource: board.id, ok: true });
       return NextResponse.json({ data: doc }, { status: 201 });
     }
 
-    // ── Update Board ────────────────────────────────────────────
+    // ── Update Board ──────────────────────────────────────────
     if (action === "update-board") {
       const { boardId, name, description, teamId } = body as {
         boardId?: string;
@@ -138,50 +131,19 @@ export async function POST(request: NextRequest) {
 
       if (!boardId) return NextResponse.json({ error: "boardId is required" }, { status: 400 });
 
+      const board = updateBoard(boardId, {
+        name: name?.trim(),
+        description: description?.trim(),
+        teamId: teamId?.trim(),
+      });
+      if (!board) return NextResponse.json({ error: "Board not found" }, { status: 404 });
+
       const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-
-      if (name !== undefined) doc.board.name = name.trim();
-      if (description !== undefined) doc.board.description = description.trim();
-
-      // Handle team assignment bidirectionally
-      if (teamId !== undefined) {
-        const newTeamId = teamId.trim();
-        const oldTeamId = doc.board.teamId;
-
-        if (newTeamId !== oldTeamId) {
-          // Remove board from old team's boardIds
-          if (oldTeamId) {
-            const oldTeam = loadTeam(oldTeamId);
-            if (oldTeam) {
-              oldTeam.boardIds = oldTeam.boardIds.filter((id) => id !== boardId);
-              saveTeam(oldTeam);
-            }
-          }
-
-          // Add board to new team's boardIds
-          if (newTeamId) {
-            const newTeam = loadTeam(newTeamId);
-            if (newTeam) {
-              if (!newTeam.boardIds.includes(boardId)) {
-                newTeam.boardIds.push(boardId);
-                saveTeam(newTeam);
-              }
-            }
-          }
-
-          doc.board.teamId = newTeamId;
-        }
-      }
-
-      doc.board.updatedAt = new Date().toISOString();
-
-      saveBoard(doc.board);
       appendAuditLine({ action: "kanban.board.update", resource: boardId, ok: true });
-      return NextResponse.json({ data: doc });
+      return NextResponse.json({ data: doc ?? { board } });
     }
 
-    // ── Delete Board ───────────────────────────────────────────
+    // ── Delete Board ─────────────────────────────────────────
     if (action === "delete-board") {
       const { boardId } = body as { boardId?: string };
       if (!boardId) return NextResponse.json({ error: "boardId is required" }, { status: 400 });
@@ -193,7 +155,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ data: { deleted: boardId } });
     }
 
-    // ── Add / Update / Delete Column ────────────────────────────
+    // ── Add Column ───────────────────────────────────────────
     if (action === "add-column") {
       const { boardId, title, color, wipLimit } = body as {
         boardId?: string;
@@ -206,27 +168,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "boardId and title are required" }, { status: 400 });
       }
 
-      const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
+      const board = getBoard(boardId);
+      if (!board) return NextResponse.json({ error: "Board not found" }, { status: 404 });
 
-      const colId = newId("col");
-      const position = doc.board.columnIds.length;
-      doc.board.columnIds.push(colId);
-      doc.columns[colId] = {
-        id: colId,
+      const existing = listColumns(boardId);
+      const col = createColumn({
+        boardId,
         title: title.trim(),
         color: color ?? "cyan",
-        position,
+        position: existing.length,
         wipLimit: wipLimit ?? null,
-        cardIds: [],
-      };
-      doc.board.updatedAt = new Date().toISOString();
+      });
 
-      saveKanbanDocument(doc);
-      appendAuditLine({ action: "kanban.column.add", resource: colId, ok: true });
+      const doc = loadKanbanDocument(boardId);
+      appendAuditLine({ action: "kanban.column.add", resource: col.id, ok: true });
       return NextResponse.json({ data: doc }, { status: 201 });
     }
 
+    // ── Update Column ─────────────────────────────────────────
     if (action === "update-column") {
       const { boardId, columnId, title, color, wipLimit } = body as {
         boardId?: string;
@@ -240,23 +199,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "boardId and columnId are required" }, { status: 400 });
       }
 
+      const col = updateColumn(columnId, {
+        title: title?.trim(),
+        color,
+        wipLimit,
+      });
+      if (!col) return NextResponse.json({ error: "Column not found" }, { status: 404 });
+
       const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-      if (!doc.columns[columnId]) {
-        return NextResponse.json({ error: "Column not found" }, { status: 404 });
-      }
-
-      const col = doc.columns[columnId];
-      if (title !== undefined) col.title = title.trim();
-      if (color !== undefined) col.color = color;
-      if (wipLimit !== undefined) col.wipLimit = wipLimit;
-      doc.board.updatedAt = new Date().toISOString();
-
-      saveKanbanDocument(doc);
       appendAuditLine({ action: "kanban.column.update", resource: columnId, ok: true });
       return NextResponse.json({ data: doc });
     }
 
+    // ── Delete Column ─────────────────────────────────────────
     if (action === "delete-column") {
       const { boardId, columnId } = body as { boardId?: string; columnId?: string };
 
@@ -264,27 +219,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "boardId and columnId are required" }, { status: 400 });
       }
 
+      const ok = deleteColumn(columnId);
+      if (!ok) return NextResponse.json({ error: "Column not found" }, { status: 404 });
+
       const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-
-      // Remove cards in this column
-      const col = doc.columns[columnId];
-      if (col) {
-        for (const cardId of col.cardIds) {
-          delete doc.cards[cardId];
-        }
-      }
-
-      delete doc.columns[columnId];
-      doc.board.columnIds = doc.board.columnIds.filter((id) => id !== columnId);
-      doc.board.updatedAt = new Date().toISOString();
-
-      saveKanbanDocument(doc);
       appendAuditLine({ action: "kanban.column.delete", resource: columnId, ok: true });
-      return NextResponse.json({ data: doc });
+      return NextResponse.json({ data: doc ?? {} });
     }
 
-    // ── Add / Update / Delete Card ───────────────────────────────
+    // ── Add Card ─────────────────────────────────────────────
     if (action === "add-card") {
       const { boardId, columnId, title, description, assigneeProfileId, labels } = body as {
         boardId?: string;
@@ -296,47 +239,33 @@ export async function POST(request: NextRequest) {
       };
 
       if (!boardId || !columnId || !title) {
-        return NextResponse.json(
-          { error: "boardId, columnId and title are required" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "boardId, columnId and title are required" }, { status: 400 });
       }
 
-      const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-      if (!doc.columns[columnId]) {
-        return NextResponse.json({ error: "Column not found" }, { status: 404 });
-      }
+      const board = getBoard(boardId);
+      if (!board) return NextResponse.json({ error: "Board not found" }, { status: 404 });
 
-      const now = new Date().toISOString();
-      const cardId = newId("card");
-      const position = doc.columns[columnId].cardIds.length;
+      const col = getColumn(columnId);
+      if (!col) return NextResponse.json({ error: "Column not found" }, { status: 404 });
 
-      const card: KanbanCard = {
-        id: cardId,
+      const existingCards = listCards(boardId).filter((c) => c.columnId === columnId);
+      const card = createCard({
+        boardId,
+        columnId,
         title: title.trim(),
         description: (description ?? "").trim(),
-        columnId,
-        boardId,
-        position,
-        status: "todo",
         assigneeProfileId: assigneeProfileId ?? null,
-        goalIndices: [],
-        missionIds: [],
         labels: labels ?? [],
-        createdAt: now,
-        updatedAt: now,
-      };
+        position: existingCards.length,
+        status: "todo",
+      });
 
-      doc.columns[columnId].cardIds.push(cardId);
-      doc.cards[cardId] = card;
-      doc.board.updatedAt = now;
-
-      saveKanbanDocument(doc);
-      appendAuditLine({ action: "kanban.card.add", resource: cardId, ok: true });
+      const doc = loadKanbanDocument(boardId);
+      appendAuditLine({ action: "kanban.card.add", resource: card.id, ok: true });
       return NextResponse.json({ data: { card, board: doc } }, { status: 201 });
     }
 
+    // ── Update Card ───────────────────────────────────────────
     if (action === "update-card") {
       const { boardId, cardId, title, description, assigneeProfileId, labels, status } = body as {
         boardId?: string;
@@ -352,26 +281,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "boardId and cardId are required" }, { status: 400 });
       }
 
+      const card = updateCard(cardId, {
+        title: title?.trim(),
+        description: description?.trim(),
+        assigneeProfileId,
+        labels,
+        status,
+      });
+      if (!card) return NextResponse.json({ error: "Card not found" }, { status: 404 });
+
       const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-      if (!doc.cards[cardId]) {
-        return NextResponse.json({ error: "Card not found" }, { status: 404 });
-      }
-
-      const card = doc.cards[cardId];
-      if (title !== undefined) card.title = title.trim();
-      if (description !== undefined) card.description = description.trim();
-      if (assigneeProfileId !== undefined) card.assigneeProfileId = assigneeProfileId;
-      if (labels !== undefined) card.labels = labels;
-      if (status !== undefined) card.status = status;
-      card.updatedAt = new Date().toISOString();
-      doc.board.updatedAt = card.updatedAt;
-
-      saveKanbanDocument(doc);
       appendAuditLine({ action: "kanban.card.update", resource: cardId, ok: true });
       return NextResponse.json({ data: { card, board: doc } });
     }
 
+    // ── Move Card ─────────────────────────────────────────────
     if (action === "move-card") {
       const { boardId, cardId, toColumnId, toPosition } = body as {
         boardId?: string;
@@ -381,49 +305,18 @@ export async function POST(request: NextRequest) {
       };
 
       if (!boardId || !cardId || !toColumnId) {
-        return NextResponse.json(
-          { error: "boardId, cardId and toColumnId are required" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "boardId, cardId and toColumnId are required" }, { status: 400 });
       }
+
+      const card = moveCard(cardId, toColumnId, toPosition ?? 0);
+      if (!card) return NextResponse.json({ error: "Card not found" }, { status: 404 });
 
       const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-      if (!doc.cards[cardId]) {
-        return NextResponse.json({ error: "Card not found" }, { status: 404 });
-      }
-      if (!doc.columns[toColumnId]) {
-        return NextResponse.json({ error: "Target column not found" }, { status: 404 });
-      }
-
-      const card = doc.cards[cardId];
-      const fromColumnId = card.columnId;
-
-      // Remove from source column
-      if (doc.columns[fromColumnId]) {
-        doc.columns[fromColumnId].cardIds = doc.columns[fromColumnId].cardIds.filter(
-          (id) => id !== cardId
-        );
-      }
-
-      // Insert into target column at position
-      const targetCards = doc.columns[toColumnId].cardIds.filter((id) => id !== cardId);
-      const insertAt = toPosition !== undefined
-        ? Math.min(toPosition, targetCards.length)
-        : targetCards.length;
-      targetCards.splice(insertAt, 0, cardId);
-      doc.columns[toColumnId].cardIds = targetCards;
-
-      card.columnId = toColumnId;
-      card.position = insertAt;
-      card.updatedAt = new Date().toISOString();
-      doc.board.updatedAt = card.updatedAt;
-
-      saveKanbanDocument(doc);
       appendAuditLine({ action: "kanban.card.move", resource: cardId, ok: true });
       return NextResponse.json({ data: doc });
     }
 
+    // ── Delete Card ───────────────────────────────────────────
     if (action === "delete-card") {
       const { boardId, cardId } = body as { boardId?: string; cardId?: string };
 
@@ -431,23 +324,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "boardId and cardId are required" }, { status: 400 });
       }
 
+      const ok = deleteCard(cardId);
+      if (!ok) return NextResponse.json({ error: "Card not found" }, { status: 404 });
+
       const doc = loadKanbanDocument(boardId);
-      if (!doc) return NextResponse.json({ error: "Board not found" }, { status: 404 });
-
-      const card = doc.cards[cardId];
-      if (card) {
-        // Remove from column
-        const col = doc.columns[card.columnId];
-        if (col) {
-          col.cardIds = col.cardIds.filter((id) => id !== cardId);
-        }
-        delete doc.cards[cardId];
-      }
-
-      doc.board.updatedAt = new Date().toISOString();
-      saveKanbanDocument(doc);
       appendAuditLine({ action: "kanban.card.delete", resource: cardId, ok: true });
-      return NextResponse.json({ data: doc });
+      return NextResponse.json({ data: doc ?? {} });
     }
 
     // Unknown action

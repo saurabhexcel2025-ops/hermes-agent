@@ -1,136 +1,40 @@
-import yaml from "js-yaml";
-import { readFileSync, existsSync } from "fs";
-import { homedir } from "os";
 // ═══════════════════════════════════════════════════════════════
-// Shared Hermes Configuration — centralised paths and constants
+// hermes.ts — Backward-compatibility re-export + Hermes aliases
 // ═══════════════════════════════════════════════════════════════
-// All API routes should import from here instead of constructing
-// paths independently. This ensures consistency and portability.
-// Default HERMES_HOME matches hermes-agent hermes_constants.get_hermes_home().
-//
-// Control Hub app data defaults to $HOME/control-hub/data so paths align with
-// nested Hermes cron/jobs.py (mark_job_run mission file updates).
-// Override with `CH_DATA_DIR` or `CONTROL_HUB_DATA_DIR`.
+// All new code should import from lib/paths.ts instead.
+// This file maintains backward compat for existing imports.
 
-export const HERMES_HOME =
-  process.env.HERMES_HOME || homedir() + "/.hermes";
+export {
+  AGENT_HOME,
+  CH_DATA_DIR,
+  getChDataDir,
+  PATHS,
+  getConfigValue,
+  getDefaultModelConfig,
+} from "./paths";
 
-function normalizeDirPath(dir: string): string {
-  return dir.replace(/[/\\]+$/, "");
-}
+import { AGENT_HOME, PATHS } from "./paths";
 
-/**
- * Control Hub JSON data root (missions, templates, stories, …).
- * Some keys (`operations`, `taskLists`, …) are on-disk paths used by Hermes tooling;
- * the OSS app does not ship UIs for every path listed here.
- * Default: `$HOME/control-hub/data`. Override with `CH_DATA_DIR` or `CONTROL_HUB_DATA_DIR`.
- */
-export function getChDataDir(): string {
-  const raw =
-    process.env.CH_DATA_DIR ||
-    process.env.CONTROL_HUB_DATA_DIR;
-  if (raw && String(raw).trim()) {
-    return normalizeDirPath(String(raw).trim());
-  }
-  return normalizeDirPath(homedir() + "/control-hub/data");
-}
+// Hermes-specific aliases (for backward compat with existing imports)
+export const HERMES_HOME = AGENT_HOME;
 
-export function getMcDataDir(): string {
-  return getChDataDir();
-}
+// Deferred routes still use PATHS.env, PATHS.sessions, etc.
+// Map Hermes-specific keys to agent-prefixed PATHS keys
+const _paths = PATHS as Record<string, string>;
 
-export const CH_DATA_DIR = getChDataDir();
-
-/** Canonical alias for app data root (same value as CH_DATA_DIR). */
-export const CONTROL_HUB_DATA_DIR = CH_DATA_DIR;
-
-// Standard file paths
-export const PATHS = {
-  config: HERMES_HOME + "/config.yaml",
-  env: HERMES_HOME + "/.env",
-  soul: HERMES_HOME + "/SOUL.md",
-  hermes: HERMES_HOME + "/HERMES.md",
-  agent: HERMES_HOME + "/AGENTS.md",
-  userMd: HERMES_HOME + "/memories/USER.md",
-  memoryMd: HERMES_HOME + "/memories/MEMORY.md",
-  cronJobs: HERMES_HOME + "/cron/jobs.json",
-  sessions: HERMES_HOME + "/sessions",
-  skills: HERMES_HOME + "/skills",
-  logs: HERMES_HOME + "/logs",
-  backups: HERMES_HOME + "/backups",
-  memoryDb: HERMES_HOME + "/memory_store.db",
-  missions: CH_DATA_DIR + "/missions",
-  templates: CH_DATA_DIR + "/templates",
-  operations: CH_DATA_DIR + "/operations",
-  stories: CH_DATA_DIR + "/stories",
-  recroom: CH_DATA_DIR + "/recroom",
-  taskLists: CH_DATA_DIR + "/task-lists",
-  packages: CH_DATA_DIR + "/packages",
-  workspaces: CH_DATA_DIR + "/workspaces",
-  teams: CH_DATA_DIR + "/workspaces/teams",
-  kanban: CH_DATA_DIR + "/kanban",
-  goals: CH_DATA_DIR + "/goals",
+export const HERMES_PATHS = {
+  env:       _paths.agentEnv,
+  soul:      _paths.agentSoul,
+  hermes:    _paths.agentHermes,
+  agents:    _paths.agentAgents,
+  skills:    _paths.agentSkills,
+  profiles:  _paths.agentProfiles,
+  sessions:  _paths.agentSessions,
+  logs:      _paths.agentLogs,
+  config:    _paths.agentConfig,
+  backups:   _paths.agentBackups,
+  cronJobs:  _paths.agentCronJobs,
+  memoryDb:  _paths.agentMemoryDb,
+  userMd:     _paths.agentEnv,
+  memoryMd:   _paths.agentMemoryDb,
 } as const;
-
-// Read a config value from config.yaml using js-yaml
-export function getConfigValue(content: string, dottedKey: string): string {
-  try {
-    const parsed = yaml.load(content) as Record<string, unknown>;
-    const keys = dottedKey.split(".");
-    let current: unknown = parsed;
-    for (const key of keys) {
-      if (typeof current !== "object" || current === null) return "";
-      current = (current as Record<string, unknown>)[key];
-    }
-    return typeof current === "string" ? current : current != null ? String(current) : "";
-  } catch {
-    return "";
-  }
-}
-
-// Read Discord home channel from env or config
-export function getDiscordHomeChannel(envContent: string): string {
-  // Check .env for DISCORD_HOME_CHANNEL
-  const match = envContent.match(/^DISCORD_HOME_CHANNEL=(.+)$/m);
-  if (match) return match[1].trim().replace(/^['"]|['"]$/g, "");
-  return "";
-}
-
-// Default model config — reads from config.yaml `model:` section
-export interface DefaultModelConfig {
-  model: string;
-  provider: string;
-  base_url: string;
-  api_key: string;
-}
-
-export function getDefaultModelConfig(): DefaultModelConfig {
-  try {
-    if (!existsSync(PATHS.config)) return { model: "", provider: "", base_url: "", api_key: "" };
-    const content = readFileSync(PATHS.config, "utf-8");
-    const parsed = yaml.load(content) as Record<string, unknown>;
-    const modelSection = parsed?.model;
-
-    if (typeof modelSection === "string") {
-      return { model: modelSection, provider: "", base_url: "", api_key: "" };
-    }
-    if (typeof modelSection === "object" && modelSection !== null) {
-      const ch = modelSection as Record<string, unknown>;
-      const defaultModel =
-        typeof ch.default === "string"
-          ? ch.default
-          : typeof ch.model === "string"
-            ? ch.model
-            : "";
-      return {
-        model: defaultModel,
-        provider: typeof ch.provider === "string" ? ch.provider : "",
-        base_url: typeof ch.base_url === "string" ? ch.base_url : "",
-        api_key: typeof ch.api_key === "string" ? ch.api_key : "",
-      };
-    }
-    return { model: "", provider: "", base_url: "", api_key: "" };
-  } catch {
-    return { model: "", provider: "", base_url: "", api_key: "" };
-  }
-}
