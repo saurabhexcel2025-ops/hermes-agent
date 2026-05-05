@@ -6,33 +6,34 @@
  * not silently proceed to delete the file and leave orphaned cron jobs.
  */
 
-const mockWriteFileSync = jest.fn();
-const mockExistsSync = jest.fn();
-const mockReadFileSync = jest.fn();
-const mockUnlinkSync = jest.fn();
-
-jest.mock("fs", () => ({
-  existsSync: mockExistsSync,
-  readFileSync: mockReadFileSync,
-  writeFileSync: mockWriteFileSync,
-  readdirSync: jest.fn(),
-  statSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  unlinkSync: mockUnlinkSync,
-}));
-
-jest.mock("@/lib/hermes", () => ({
-  HERMES_HOME: "/tmp/test-hermes",
-  PATHS: {
-    config: "/tmp/test-hermes/config.yaml",
-    env: "/tmp/test-hermes/.env",
-    cronJobs: "/tmp/test-hermes/cron/jobs.json",
-    backups: "/tmp/test-hermes/backups",
-    sessions: "/tmp/test-hermes/sessions",
-    missions: "/tmp/test-hermes/missions",
-    templates: "/tmp/test-hermes/templates",
+jest.mock("next/server", () => ({
+  NextRequest: class NextRequest {
+    url: string;
+    method: string;
+    headers: Headers;
+    bodyUsed: boolean = false;
+    private _body: string;
+    constructor(url: string, init?: RequestInit) {
+      this.url = url;
+      this.method = init?.method ?? "GET";
+      this.headers = new Headers(init?.headers as HeadersInit);
+      this._body = typeof init?.body === "string" ? init.body : JSON.stringify(init?.body ?? {});
+    }
+    async json() { return JSON.parse(this._body); }
   },
-  getDefaultModelConfig: () => ({ provider: "nous", model: "xiaomi/mimo-v2-pro" }),
+  NextResponse: {
+    json: (data: unknown, init?: ResponseInit) => {
+      const status = init?.status ?? 200;
+      const res = {
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: status === 404 ? "Not Found" : "OK",
+        headers: new Headers(),
+        json: () => Promise.resolve(data),
+      };
+      return res;
+    },
+  },
 }));
 
 jest.mock("@/lib/api-logger", () => ({
@@ -48,73 +49,88 @@ jest.mock("@/lib/audit-log", () => ({
   appendAuditLine: jest.fn(),
 }));
 
-const mockWithJobsFileLock = jest.fn();
+jest.mock("@/lib/backends", () => ({
+  agentBackend: {
+    dispatchMission: jest.fn(),
+    pauseMission: jest.fn(),
+    resumeMission: jest.fn(),
+    cancelMission: jest.fn(),
+    getMissionStatus: jest.fn(),
+  },
+}));
 
 jest.mock("@/lib/jobs-repository", () => ({
   readJobsFile: jest.fn(),
-  withJobsFileLock: (...args: unknown[]) => mockWithJobsFileLock(...args),
+  writeJobsFile: jest.fn(),
+  withJobsFileLock: jest.fn(),
 }));
 
-const mockLoadMission = jest.fn();
-const mockSaveMission = jest.fn();
-const mockGetMissionsDataDir = jest.fn(() => "/tmp/test-hermes/missions");
+// Mock mission-repository using require() inside factory (no closure variables)
+jest.mock("@/lib/mission-repository", () => {
+  const loadMission = jest.fn();
+  const saveMission = jest.fn();
+  const deleteMission = jest.fn();
+  const listMissions = jest.fn();
 
-jest.mock("@/lib/missions-repository", () => ({
-  ensureMissionsDir: jest.fn(),
-  getMissionsDataDir: (...args: unknown[]) => mockGetMissionsDataDir(...args),
-  loadMission: (...args: unknown[]) => mockLoadMission(...args),
-  saveMission: (...args: unknown[]) => mockSaveMission(...args),
-  sanitizeMissionId: jest.fn((id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "")),
-}));
+  return {
+    ensureMissionsDir: jest.fn(),
+    getMissionsDataDir: jest.fn(() => "/tmp/test-hermes/missions"),
+    loadMission,
+    saveMission,
+    deleteMission,
+    listMissions,
+    sanitizeMissionId: jest.fn((id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "")),
+    // Export refs for test access via require
+    __loadMission: loadMission,
+    __saveMission: saveMission,
+    __deleteMission: deleteMission,
+    __listMissions: listMissions,
+  };
+});
 
-jest.mock("@/lib/mission-helpers", () => ({
-  buildMissionPrompt: jest.fn((m: unknown) => String(m)),
-  getMissionStatus: jest.fn((_job: unknown, status: string) => ({ status })),
-  TEMPLATES: [],
-}));
-
-import { NextRequest } from "next/server";
-
-function makeDeleteRequest(missionId: string): NextRequest {
-  return new NextRequest("http://localhost/api/missions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "delete", missionId }),
-  });
-}
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const repo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
+const mockLoadMission = repo.__loadMission as jest.Mock;
+const mockDeleteMission = repo.__deleteMission as jest.Mock;
 
 describe("POST /api/missions — delete action returns 404 for missing mission", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLoadMission.mockReturnValue(null);
-    mockExistsSync.mockReturnValue(true);
-    mockUnlinkSync.mockImplementation(() => {});
   });
 
   it("returns 404 when loadMission returns null", async () => {
-    const { POST } = await import("@/app/api/missions/route");
-    const req = makeDeleteRequest("m_nonexistent");
-    const res = await POST(req);
+    mockLoadMission.mockReturnValue(null);
 
+    const { POST } = await import("@/app/api/missions/route");
+    const { NextRequest } = await import("next/server");
+
+    const req = new NextRequest("http://localhost/api/missions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete", missionId: "m_nonexistent" }),
+    });
+
+    const res = await POST(req);
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toMatch(/not found/i);
   });
 
-  it("does NOT delete the file when loadMission returns null", async () => {
+  it("does NOT call deleteMission when loadMission returns null", async () => {
+    mockLoadMission.mockReturnValue(null);
+    mockDeleteMission.mockReturnValue(true);
+
     const { POST } = await import("@/app/api/missions/route");
-    const req = makeDeleteRequest("m_nonexistent");
+    const { NextRequest } = await import("next/server");
+
+    const req = new NextRequest("http://localhost/api/missions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete", missionId: "m_nonexistent" }),
+    });
+
     await POST(req);
-
-    expect(mockUnlinkSync).not.toHaveBeenCalled();
-  });
-
-  it("does NOT attempt to remove cron job when loadMission returns null", async () => {
-    const { POST } = await import("@/app/api/missions/route");
-    const req = makeDeleteRequest("m_nonexistent");
-    await POST(req);
-
-    expect(mockWithJobsFileLock).not.toHaveBeenCalled();
+    expect(mockDeleteMission).not.toHaveBeenCalled();
   });
 
   it("successfully deletes when mission exists", async () => {
@@ -123,14 +139,34 @@ describe("POST /api/missions — delete action returns 404 for missing mission",
       name: "Test",
       cronJobId: null,
     });
+    mockDeleteMission.mockReturnValue(true);
 
     const { POST } = await import("@/app/api/missions/route");
-    const req = makeDeleteRequest("m_existing");
-    const res = await POST(req);
+    const { NextRequest } = await import("next/server");
 
+    const req = new NextRequest("http://localhost/api/missions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete", missionId: "m_existing" }),
+    });
+
+    const res = await POST(req);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.deleted).toBe(true);
-    expect(mockUnlinkSync).toHaveBeenCalled();
+  });
+
+  it("returns 400 when missionId is missing", async () => {
+    const { POST } = await import("@/app/api/missions/route");
+    const { NextRequest } = await import("next/server");
+
+    const req = new NextRequest("http://localhost/api/missions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete" }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
   });
 });

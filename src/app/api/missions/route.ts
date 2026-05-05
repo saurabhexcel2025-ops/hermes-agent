@@ -90,22 +90,23 @@ export async function POST(request: NextRequest) {
 
     // ── Update Mission ─────────────────────────────────────────
     if (action === "update") {
-      const { id, status, result } = body as {
+      const { id, missionId, status, result } = body as {
         id?: string;
+        missionId?: string;
         status?: string;
         result?: string;
       };
-
-      if (!id) return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
+      const missionIdFinal = id ?? missionId;
+      if (!missionIdFinal) return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
       const updates: { status?: MissionStatus; result?: string } = {};
       if (status) updates.status = status as MissionStatus;
       if (result !== undefined) updates.result = result;
 
-      const mission = updateMission(id, updates);
+      const mission = updateMission(missionIdFinal, updates);
       if (!mission) return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      appendAuditLine({ action: "mission.update", resource: id, ok: true });
+      appendAuditLine({ action: "mission.update", resource: missionIdFinal, ok: true });
       return NextResponse.json({ data: { mission } });
     }
 
@@ -123,14 +124,15 @@ export async function POST(request: NextRequest) {
 
     // ── Delete Mission ─────────────────────────────────────────
     if (action === "delete") {
-      const { id } = body as { id?: string };
-      if (!id) return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
+      const { id, missionId } = body as { id?: string; missionId?: string };
+      const missionIdFinal = id ?? missionId;
+      if (!missionIdFinal) return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
-      const ok = deleteMission(id);
+      const ok = deleteMission(missionIdFinal);
       if (!ok) return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      appendAuditLine({ action: "mission.delete", resource: id, ok: true });
-      return NextResponse.json({ data: { deleted: id } });
+      appendAuditLine({ action: "mission.delete", resource: missionIdFinal, ok: true });
+      return NextResponse.json({ data: { deleted: missionIdFinal } });
     }
 
     // ── Get Status ────────────────────────────────────────────

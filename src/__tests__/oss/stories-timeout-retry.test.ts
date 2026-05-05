@@ -4,20 +4,33 @@
 // Bug: AbortError handler threw immediately without checking remaining retries.
 // All other errors (network, 429, empty response) retried, but timeouts didn't.
 
-// We test the retry behavior by mocking fetch to abort on first call, succeed on second.
-
-jest.mock("fs", () => ({
-  existsSync: jest.fn(() => true),
-  readFileSync: jest.fn(() => "{}"),
-  writeFileSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  readdirSync: jest.fn(() => []),
-  unlinkSync: jest.fn(),
-}));
-
-jest.mock("@/lib/hermes", () => ({
-  HERMES_HOME: "/tmp/test-hermes",
-  PATHS: { stories: "/tmp/test-hermes/stories" },
+jest.mock("next/server", () => ({
+  NextRequest: class NextRequest {
+    url: string;
+    method: string;
+    headers: Headers;
+    bodyUsed: boolean = false;
+    private _body: string;
+    constructor(url: string, init?: RequestInit) {
+      this.url = url;
+      this.method = init?.method ?? "GET";
+      this.headers = new Headers(init?.headers as HeadersInit);
+      this._body = typeof init?.body === "string" ? init.body : JSON.stringify(init?.body ?? {});
+    }
+    async json() { return JSON.parse(this._body); }
+  },
+  NextResponse: {
+    json: (data: unknown, init?: ResponseInit) => {
+      const status = init?.status ?? 200;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: "OK",
+        headers: new Headers(),
+        json: () => Promise.resolve(data),
+      };
+    },
+  },
 }));
 
 jest.mock("@/lib/api-logger", () => ({
@@ -33,73 +46,95 @@ jest.mock("@/lib/api-auth", () => ({
   requireNotReadOnly: jest.fn(() => null),
 }));
 
-describe("callLLM timeout retry", () => {
-  let fetchCallCount: number;
+// Mock story-repository (NOT stories-repository - the file is story-repository.ts)
+jest.mock("@/lib/story-repository", () => {
+  const listStories = jest.fn();
+  const getStory = jest.fn();
+  const saveStory = jest.fn();
+  const createStory = jest.fn();
+  const updateStory = jest.fn();
+  const deleteStory = jest.fn();
 
+  return {
+    listStories,
+    getStory,
+    saveStory,
+    createStory,
+    updateStory,
+    deleteStory,
+    __listStories: listStories,
+    __getStory: getStory,
+    __saveStory: saveStory,
+    STORY_DATA_DIR: "/tmp/test-hermes/stories",
+  };
+});
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const storyRepo = require("@/lib/story-repository") as Record<string, unknown>;
+const mockGetStory = storyRepo.__getStory as jest.Mock;
+const mockSaveStory = storyRepo.__saveStory as jest.Mock;
+const mockListStories = storyRepo.__listStories as jest.Mock;
+
+describe("callLLM timeout retry", () => {
   beforeEach(() => {
-    fetchCallCount = 0;
-    jest.resetModules();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("retries on AbortError (timeout) instead of failing immediately", async () => {
-    // Mock fetch: first call aborts, second call succeeds
-    const mockFetch = jest.fn(async (_url: string, init?: RequestInit) => {
-      fetchCallCount++;
-      if (fetchCallCount === 1) {
-        // Simulate timeout: trigger abort signal, then throw AbortError
-        if (init?.signal) {
-          const signal = init.signal as AbortSignal;
-          // Immediately abort
-          (signal as unknown as { aborted: boolean }).aborted = true;
-        }
-        const err = new Error("The operation was aborted");
-        err.name = "AbortError";
-        throw err;
-      }
-      // Second call succeeds
-      return {
+    const mockStory = {
+      id: "test-story",
+      title: "Test Story",
+      masterPrompt: "A test story",
+      storyArc: {
+        storyArc: "Test arc",
+        fixedPlotPoints: [],
+        characterArcs: [],
+        worldRules: [],
+        themes: [],
+        chapterOutlines: [
+          { number: 1, title: "Chapter 1", purpose: "Introduction", keyBeats: ["Start"], emotionalTone: "Engaging" },
+        ],
+      },
+      rollingSummary: "",
+      chapters: [{ number: 1, title: "Chapter 1", status: "pending", wordCount: 0, generatedAt: null }],
+      chapterContents: {},
+      config: { premise: "Test" },
+      status: "active",
+    };
+
+    mockGetStory.mockReturnValue(mockStory);
+    mockSaveStory.mockReturnValue(undefined);
+
+    let fetchCallCount = 0;
+
+    // Mock global fetch: first call aborts, second call succeeds
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
         ok: true,
         status: 200,
-        json: async () => ({
-          choices: [{ message: { content: "Successfully generated content after retry." } }],
-        }),
-      };
-    });
-
-    // Replace global fetch
-    const originalFetch = global.fetch;
-    global.fetch = mockFetch as unknown as typeof fetch;
+        json: async () => {
+          fetchCallCount++;
+          if (fetchCallCount === 1) {
+            // Return an AbortError-like response on first call
+            const err = new Error("The operation was aborted");
+            err.name = "AbortError";
+            throw err;
+          }
+          return {
+            choices: [{ message: { content: "Successfully generated content after retry." } }],
+          };
+        },
+      })
+    ) as jest.Mock;
 
     try {
-      // Import after mocking
       const { POST } = await import("@/app/api/stories/route");
       const { NextRequest } = await import("next/server");
-
-      // Mock fs for this specific test
-      const fs = await import("fs");
-      (fs.readdirSync as jest.Mock).mockReturnValue(["test-story.json"]);
-      (fs.readFileSync as jest.Mock).mockReturnValue(
-        JSON.stringify({
-          id: "test-story",
-          title: "Test Story",
-          masterPrompt: "A test story",
-          storyArc: {
-            storyArc: "Test arc",
-            fixedPlotPoints: [],
-            characterArcs: [],
-            worldRules: [],
-            themes: [],
-            chapterOutlines: [
-              { number: 1, title: "Chapter 1", purpose: "Introduction", keyBeats: ["Start"], emotionalTone: "Engaging" },
-            ],
-          },
-          rollingSummary: "",
-          chapters: [{ number: 1, title: "Chapter 1", status: "pending", wordCount: 0, generatedAt: null }],
-          chapterContents: {},
-          config: { premise: "Test" },
-          status: "active",
-        })
-      );
 
       const request = new NextRequest("http://localhost/api/stories", {
         method: "POST",
@@ -109,16 +144,12 @@ describe("callLLM timeout retry", () => {
       const res = await POST(request);
       const data = await res.json();
 
-      // The callLLM should have been called at least twice:
-      // - First call aborted (timeout), then retried and succeeded
-      // - Additional calls for rolling summary, etc.
-      // The key assertion: it retried instead of failing immediately
+      // The callLLM should have retried after first failure
       expect(fetchCallCount).toBeGreaterThanOrEqual(2);
-      // The request should succeed (not fail with timeout)
       expect(res.status).toBe(200);
       expect(data.data?.chapter).toBe(1);
     } finally {
       global.fetch = originalFetch;
     }
-  }, 30_000); // Extended timeout since retries add delay
+  }, 30_000);
 });

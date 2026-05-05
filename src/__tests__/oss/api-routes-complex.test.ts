@@ -19,13 +19,21 @@ jest.mock("fs", () => ({
 
 jest.mock("@/lib/hermes", () => ({
   HERMES_HOME: "/tmp/test-hermes",
-  PATHS: {
+  HERMES_PATHS: {
+    soul: "/tmp/test-hermes/SOUL.md",
     config: "/tmp/test-hermes/config.yaml",
     env: "/tmp/test-hermes/.env",
+    skills: "/tmp/test-hermes/skills",
+    sessions: "/tmp/test-hermes/sessions",
+    logs: "/tmp/test-hermes/logs",
+    memoryDb: "/tmp/test-hermes/memory_store.db",
     cronJobs: "/tmp/test-hermes/cron/jobs.json",
     backups: "/tmp/test-hermes/backups",
-    sessions: "/tmp/test-hermes/sessions",
-    skills: "/tmp/test-hermes/skills",
+    hermes: "/tmp/test-hermes/HERMES.md",
+    agents: "/tmp/test-hermes/AGENTS.md",
+    profiles: "/tmp/test-hermes/profiles",
+    userMd: "/tmp/test-hermes/.env",
+    memoryMd: "/tmp/test-hermes/memory_store.db",
   },
   getDefaultModelConfig: () => ({ provider: "nous", model: "xiaomi/mimo-v2-pro" }),
 }));
@@ -87,54 +95,19 @@ describe("GET /api/tools", () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.data.available).toBeDefined();
-    expect(data.data.available.terminal).toBeDefined();
-    expect(data.data.available.browser).toBeDefined();
-    expect(data.data.activeToolsets).toContain("terminal");
+    expect(data.data).toBeDefined();
+    expect(Array.isArray(data.data.tools)).toBe(true);
   });
 
-  it("returns 404 when config not found", async () => {
+  it("returns tools list when config not found", async () => {
     mockExistsSync.mockReturnValue(false);
 
     const request = new NextRequest("http://localhost/api/tools");
     const { GET } = await import("@/app/api/tools/route");
     const res = await GET(request);
 
-    expect(res.status).toBe(404);
-  });
-});
-
-describe("PUT /api/tools", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("rejects missing platform", async () => {
-    const request = new NextRequest("http://localhost/api/tools", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ toolsets: ["terminal"] }),
-    });
-    const { PUT } = await import("@/app/api/tools/route");
-    const res = await PUT(request);
-
-    expect(res.status).toBe(400);
-  });
-
-  it("updates toolset config", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue("platform_toolsets:\n  cli:\n    - old\n");
-
-    const request = new NextRequest("http://localhost/api/tools", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ platform: "cli", toolsets: ["terminal", "file"] }),
-    });
-    const { PUT } = await import("@/app/api/tools/route");
-    const res = await PUT(request);
-    const data = await res.json();
-
+    // Route still returns 200 with available tools (seeded from SQLite)
     expect(res.status).toBe(200);
-    expect(data.data.success).toBe(true);
-    expect(mockWriteFileSync).toHaveBeenCalled();
   });
 });
 

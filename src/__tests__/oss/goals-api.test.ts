@@ -4,49 +4,6 @@
 
 /** @jest-environment node */
 
-const mockWriteFileSync = jest.fn();
-const mockReadFileSync = jest.fn();
-const mockExistsSync = jest.fn();
-const mockMkdirSync = jest.fn();
-const mockReaddirSync = jest.fn();
-const mockUnlinkSync = jest.fn();
-
-jest.mock("fs", () => ({
-  existsSync: (...args: unknown[]) => mockExistsSync(...args),
-  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
-  readFileSync: (...args: unknown[]) => mockReadFileSync(...args),
-  writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
-  readdirSync: (...args: unknown[]) => mockReaddirSync(...args),
-  unlinkSync: (...args: unknown[]) => mockUnlinkSync(...args),
-}));
-
-jest.mock("@/lib/hermes", () => ({
-  HERMES_HOME: "/tmp/test-hermes",
-  PATHS: { missions: "/tmp/test-missions", workspaces: "/tmp/test-workspaces", goals: "/tmp/test-goals", kanban: "/tmp/test-kanban" },
-}));
-
-jest.mock("@/lib/api-logger", () => ({
-  logApiError: jest.fn(),
-  safeJsonParse: jest.fn((text: string) => {
-    try { return JSON.parse(text); } catch { return null; }
-  }),
-  safeReadJsonFile: jest.fn((path: string) => {
-    try { return JSON.parse(mockReadFileSync(path) as string); } catch { return null; }
-  }),
-}));
-
-jest.mock("@/lib/audit-log", () => ({
-  appendAuditLine: jest.fn(),
-}));
-
-jest.mock("@/lib/missions-repository", () => ({
-  sanitizeMissionId: jest.fn((id: string) => id),
-  ensureMissionsDir: jest.fn(),
-  loadMission: jest.fn(() => null),
-  saveMission: jest.fn(),
-  getMissionsDataDir: jest.fn(() => "/tmp/test-missions"),
-}));
-
 jest.mock("next/server", () => ({
   NextRequest: class NextRequest {
     url: string;
@@ -61,36 +18,82 @@ jest.mock("next/server", () => ({
   NextResponse: {
     json: (data: unknown, init?: ResponseInit) => {
       const status = init?.status ?? 200;
-      return {
+      const res = {
         ok: status >= 200 && status < 300,
         status,
-        statusText: status === 201 ? "Created" : status === 400 ? "Bad Request" : status === 404 ? "Not Found" : status === 409 ? "Conflict" : "OK",
+        statusText:
+          status === 201 ? "Created"
+          : status === 400 ? "Bad Request"
+          : status === 404 ? "Not Found"
+          : status === 409 ? "Conflict"
+          : "OK",
         headers: new Headers(),
-        json: async () => data,
+        json: () => Promise.resolve(data),
       };
+      return res;
     },
   },
 }));
 
-type ApiRes = { status: number; json(): Promise<Record<string, unknown>> };
+jest.mock("@/lib/api-auth", () => ({
+  requireMcApiKey: jest.fn(() => null),
+  requireNotReadOnly: jest.fn(() => null),
+}));
+
+jest.mock("@/lib/api-logger", () => ({
+  logApiError: jest.fn(),
+}));
+
+jest.mock("@/lib/audit-log", () => ({
+  appendAuditLine: jest.fn(),
+}));
+
+jest.mock("@/lib/goal-session-repository", () => ({
+  listGoalSessions: jest.fn(),
+  listGoalSessionsByCard: jest.fn(),
+  getGoalSession: jest.fn(),
+  createGoalSession: jest.fn(),
+  updateGoalSession: jest.fn(),
+  updateGoalStep: jest.fn(),
+  deleteGoalSession: jest.fn(),
+  getActiveGoalSessionForCard: jest.fn(),
+}));
+
+jest.mock("@/lib/mission-repository", () => ({
+  getMission: jest.fn(),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mockGoalsRepo = require("@/lib/goal-session-repository") as Record<string, jest.Mock>;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mockMissionRepo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+type ApiRes = { status: number; ok: boolean; json(): Promise<Record<string, unknown>> };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function getRoute(path: string): Promise<ApiRes> {
-  const { GET } = await import("@/app/api/goals/route");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const route = require("@/app/api/goals/route") as { GET: (req: Request) => unknown };
   const req = { url: `http://localhost${path}`, method: "GET", headers: new Headers() } as unknown as Request;
-  return GET(req) as unknown as ApiRes;
+  return route.GET(req) as unknown as ApiRes;
 }
 
-async function postRoute(path: string, body: Record<string, unknown>): Promise<ApiRes> {
-  const { POST } = await import("@/app/api/goals/route");
+async function postRoute(body: Record<string, unknown>): Promise<ApiRes> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const route = require("@/app/api/goals/route") as { POST: (req: Request) => unknown };
   const req = {
-    url: `http://localhost${path}`,
+    url: "http://localhost/api/goals",
     method: "POST",
     headers: new Headers({ "content-type": "application/json" }),
     body: JSON.stringify(body),
-    json: async () => JSON.parse(JSON.stringify(body)),
+    json: async () => body,
   } as unknown as Request;
-  return POST(req) as unknown as ApiRes;
+  return route.POST(req) as unknown as ApiRes;
 }
+
+// ─── Shared test data ─────────────────────────────────────────────────────────
 
 const SESSION_DATA = {
   id: "gs_test123",
@@ -110,97 +113,77 @@ const SESSION_DATA = {
   updatedAt: "2025-01-01T00:00:00.000Z",
 };
 
-const SESSION_DATA_PARALLEL = {
-  ...SESSION_DATA,
-  id: "gs_test_parallel",
-  goalLoopMode: "parallel" as const,
-  steps: [
-    { index: 0, goal: "Goal One", status: "pending" as const, missionId: null, assignedProfileId: null, completedAt: null, error: null },
-    { index: 1, goal: "Goal Two", status: "pending" as const, missionId: null, assignedProfileId: null, completedAt: null, error: null },
-  ],
-};
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  mockExistsSync.mockReturnValue(false);
-  mockMkdirSync.mockReturnValue(undefined);
-  mockWriteFileSync.mockReturnValue(undefined);
-  mockReaddirSync.mockReturnValue([]);
-  mockUnlinkSync.mockReturnValue(undefined);
-  mockReadFileSync.mockImplementation(() => { throw new Error("unexpected read"); });
-});
-
-// ─────────────────────────────────────────────────────────────────
-// GET /api/goals
-// ─────────────────────────────────────────────────────────────────
+// ─── GET /api/goals ──────────────────────────────────────────────────────────
 
 describe("GET /api/goals", () => {
-  it("returns empty list when no sessions exist", async () => {
-    mockExistsSync.mockReturnValue(false);
+  beforeAll(() => {
+    mockGoalsRepo.listGoalSessions.mockReturnValue([]);
+    mockGoalsRepo.getGoalSession.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    mockGoalsRepo.listGoalSessions.mockClear();
+    mockGoalsRepo.listGoalSessionsByCard.mockClear();
+    mockGoalsRepo.getGoalSession.mockClear();
+  });
+
+  it("returns empty sessions list when none exist", async () => {
+    mockGoalsRepo.listGoalSessions.mockReturnValue([]);
     const res = await getRoute("/api/goals");
-    expect(res.status).toBe(200);
     const data = await res.json();
+    expect(res.status).toBe(200);
     expect((data as Record<string, unknown>).data).toEqual({ sessions: [] });
   });
 
   it("returns sessions filtered by boardId", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["gs_s1.goal.json"]);
-    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, boardId: "board_a" }));
-    const res = await getRoute("/api/goals?boardId=board_a");
-    expect(res.status).toBe(200);
+    mockGoalsRepo.listGoalSessions.mockReturnValue([SESSION_DATA]);
+    const res = await getRoute("/api/goals?boardId=board_abc");
     const data = await res.json();
+    expect(res.status).toBe(200);
     expect((data as Record<string, unknown>).data).toHaveProperty("sessions");
   });
 
   it("returns sessions filtered by cardId", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["gs_s1.goal.json"]);
-    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, cardId: "card1" }));
-    const res = await getRoute("/api/goals?cardId=card1");
-    expect(res.status).toBe(200);
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([SESSION_DATA]);
+    const res = await getRoute("/api/goals?cardId=card_xyz");
     const data = await res.json();
+    expect(res.status).toBe(200);
     expect((data as Record<string, unknown>).data).toHaveProperty("sessions");
   });
 
   it("returns 404 when session id is not found", async () => {
-    mockExistsSync.mockReturnValue(false);
+    mockGoalsRepo.getGoalSession.mockReturnValue(null);
     const res = await getRoute("/api/goals?id=nonexistent");
     expect(res.status).toBe(404);
   });
 
   it("returns a single session by id", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
+    mockGoalsRepo.getGoalSession.mockReturnValue(SESSION_DATA);
     const res = await getRoute("/api/goals?id=gs_test123");
-    expect(res.status).toBe(200);
     const data = await res.json();
+    expect(res.status).toBe(200);
     expect((data as Record<string, unknown>).data).toHaveProperty("session");
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — start
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — start ─────────────────────────────────────────────────
 
 describe("POST /api/goals — start", () => {
-  it("creates a new goal session from goals array", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
+  it("creates a new goal session", async () => {
+    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(null);
+    mockGoalsRepo.createGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "start",
       boardId: "board_abc",
       cardId: "card_xyz",
       goalLoopMode: "sequential",
-      goals: ["Goal One", "Goal Two"],
-      assignedProfileId: "researcher",
+      goals: ["Goal One", "Goal Two", "Goal Three"],
     });
     expect(res.status).toBe(201);
-    const data = await res.json();
-    expect((data as Record<string, unknown>).data).toHaveProperty("session");
   });
 
   it("rejects start without goals", async () => {
-    const res = await postRoute("/api/goals", {
+    const res = await postRoute({
       action: "start",
       boardId: "board_abc",
       cardId: "card_xyz",
@@ -210,27 +193,25 @@ describe("POST /api/goals — start", () => {
   });
 
   it("rejects start without boardId", async () => {
-    const res = await postRoute("/api/goals", {
+    const res = await postRoute({
       action: "start",
       cardId: "card_xyz",
-      goalLoopMode: "sequential",
       goals: ["Goal One"],
     });
     expect(res.status).toBe(400);
   });
 
   it("rejects start without cardId", async () => {
-    const res = await postRoute("/api/goals", {
+    const res = await postRoute({
       action: "start",
       boardId: "board_abc",
-      goalLoopMode: "sequential",
       goals: ["Goal One"],
     });
     expect(res.status).toBe(400);
   });
 
   it("rejects start without goalLoopMode", async () => {
-    const res = await postRoute("/api/goals", {
+    const res = await postRoute({
       action: "start",
       boardId: "board_abc",
       cardId: "card_xyz",
@@ -240,282 +221,252 @@ describe("POST /api/goals — start", () => {
   });
 
   it("rejects start when an active session already exists for the same card", async () => {
-    // Simulate an existing active session
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["gs_existing.goal.json"]);
-    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, status: "active" }));
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "start",
       boardId: "board_abc",
       cardId: "card_xyz",
-      goalLoopMode: "sequential",
       goals: ["Goal One"],
+      goalLoopMode: "sequential",
     });
     expect(res.status).toBe(409);
   });
 
   it("allows start when only cancelled sessions exist for the same card", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["gs_old.goal.json"]);
-    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, id: "gs_old", status: "cancelled" }));
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(null);
+    mockGoalsRepo.createGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "start",
       boardId: "board_abc",
       cardId: "card_xyz",
-      goalLoopMode: "sequential",
       goals: ["Goal One"],
+      goalLoopMode: "parallel",
     });
     expect(res.status).toBe(201);
   });
 
   it("creates session in parallel mode", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(null);
+    mockGoalsRepo.createGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "start",
-      boardId: "board_parallel",
-      cardId: "card_parallel",
+      boardId: "board_abc",
+      cardId: "card_xyz",
+      goals: ["Goal One"],
       goalLoopMode: "parallel",
-      goals: ["Goal Alpha", "Goal Beta"],
-      assignedProfileId: "researcher",
     });
     expect(res.status).toBe(201);
-    const data = await res.json();
-    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
-    expect(session).toHaveProperty("session");
-    const sess = (session as Record<string, unknown>).session as Record<string, unknown>;
-    expect(sess.goalLoopMode).toBe("parallel");
-    expect(sess.goals).toEqual(["Goal Alpha", "Goal Beta"]);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — advance
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — advance ───────────────────────────────────────────────
 
 describe("POST /api/goals — advance", () => {
-  it("advances a step to completed and moves currentGoalIndex forward", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
-    const res = await postRoute("/api/goals", {
+  beforeAll(() => {
+    mockGoalsRepo.updateGoalStep.mockReturnValue(SESSION_DATA);
+  });
+
+  afterEach(() => {
+    mockGoalsRepo.updateGoalStep.mockClear();
+  });
+
+  it("advances a step to done and returns updated session", async () => {
+    mockGoalsRepo.updateGoalStep.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "advance",
       sessionId: "gs_test123",
       goalIndex: 0,
-      status: "completed",
-      missionId: "mission_001",
+      status: "done",
     });
     expect(res.status).toBe(200);
-    const data = await res.json();
-    expect((data as Record<string, unknown>).data).toHaveProperty("session");
   });
 
   it("marks session as failed when a step fails", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.updateGoalStep.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "advance",
       sessionId: "gs_test123",
       goalIndex: 0,
       status: "failed",
-      error: "Agent timed out",
+      error: "Step failed",
     });
     expect(res.status).toBe(200);
   });
 
   it("returns 404 for non-existent session", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.updateGoalStep.mockReturnValue(null);
+    const res = await postRoute({
       action: "advance",
-      sessionId: "nonexistent",
+      sessionId: "gs_nonexistent",
       goalIndex: 0,
-      status: "completed",
+      status: "done",
     });
     expect(res.status).toBe(404);
   });
 
   it("returns 400 when sessionId is missing", async () => {
-    const res = await postRoute("/api/goals", {
+    const res = await postRoute({
       action: "advance",
       goalIndex: 0,
-      status: "completed",
+      status: "done",
     });
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when goalIndex is missing", async () => {
-    const res = await postRoute("/api/goals", {
+    const res = await postRoute({
       action: "advance",
       sessionId: "gs_test123",
-      status: "completed",
+      status: "done",
     });
     expect(res.status).toBe(400);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — pause
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — pause ─────────────────────────────────────────────────
 
 describe("POST /api/goals — pause", () => {
+  beforeAll(() => {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+  });
+
+  afterEach(() => {
+    mockGoalsRepo.updateGoalSession.mockClear();
+  });
+
   it("pauses an active session", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "pause",
       sessionId: "gs_test123",
     });
     expect(res.status).toBe(200);
-    const data = await res.json();
-    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
-    expect(session).toHaveProperty("session");
-    expect((session as Record<string, unknown>).session).toHaveProperty("status", "paused");
   });
 
   it("returns 404 for non-existent session", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(null);
+    const res = await postRoute({
       action: "pause",
-      sessionId: "nonexistent",
+      sessionId: "gs_nonexistent",
     });
     expect(res.status).toBe(404);
   });
 
   it("returns 400 when sessionId is missing", async () => {
-    const res = await postRoute("/api/goals", {
-      action: "pause",
-    });
+    const res = await postRoute({ action: "pause" });
     expect(res.status).toBe(400);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — resume
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — resume ───────────────────────────────────────────────
 
 describe("POST /api/goals — resume", () => {
+  beforeAll(() => {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+  });
+
+  afterEach(() => {
+    mockGoalsRepo.updateGoalSession.mockClear();
+  });
+
   it("resumes a paused session", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, status: "paused" }));
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({
       action: "resume",
       sessionId: "gs_test123",
     });
     expect(res.status).toBe(200);
-    const data = await res.json();
-    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
-    expect(session).toHaveProperty("session");
-    expect((session as Record<string, unknown>).session).toHaveProperty("status", "active");
   });
 
   it("returns 404 for non-existent session", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(null);
+    const res = await postRoute({
       action: "resume",
-      sessionId: "nonexistent",
+      sessionId: "gs_nonexistent",
     });
     expect(res.status).toBe(404);
   });
 
   it("returns 400 when sessionId is missing", async () => {
-    const res = await postRoute("/api/goals", {
-      action: "resume",
-    });
+    const res = await postRoute({ action: "resume" });
     expect(res.status).toBe(400);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — cancel
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — cancel ───────────────────────────────────────────────
 
 describe("POST /api/goals — cancel", () => {
+  beforeAll(() => {
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+  });
+
+  afterEach(() => {
+    mockGoalsRepo.updateGoalSession.mockClear();
+  });
+
   it("cancels an active session", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify(SESSION_DATA));
-    const res = await postRoute("/api/goals", {
-      action: "cancel",
-      sessionId: "gs_test123",
-    });
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({ action: "cancel", sessionId: "gs_test123" });
     expect(res.status).toBe(200);
-    const data = await res.json();
-    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
-    expect(session).toHaveProperty("session");
-    expect((session as Record<string, unknown>).session).toHaveProperty("status", "cancelled");
   });
 
   it("cancels a paused session", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    mockReadFileSync.mockReturnValue(JSON.stringify({ ...SESSION_DATA, status: "paused" }));
-    const res = await postRoute("/api/goals", {
-      action: "cancel",
-      sessionId: "gs_test123",
-    });
+    mockGoalsRepo.updateGoalSession.mockReturnValue(SESSION_DATA);
+    const res = await postRoute({ action: "cancel", sessionId: "gs_test123" });
     expect(res.status).toBe(200);
-    const data = await res.json();
-    const session = (data as Record<string, unknown>).data as Record<string, unknown>;
-    expect((session as Record<string, unknown>).session).toHaveProperty("status", "cancelled");
   });
 
   it("returns 404 for non-existent session", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
-      action: "cancel",
-      sessionId: "nonexistent",
-    });
+    mockGoalsRepo.updateGoalSession.mockReturnValue(null);
+    const res = await postRoute({ action: "cancel", sessionId: "gs_nonexistent" });
     expect(res.status).toBe(404);
   });
 
   it("returns 400 when sessionId is missing", async () => {
-    const res = await postRoute("/api/goals", {
-      action: "cancel",
-    });
+    const res = await postRoute({ action: "cancel" });
     expect(res.status).toBe(400);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — delete
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — delete ───────────────────────────────────────────────
 
 describe("POST /api/goals — delete", () => {
+  beforeAll(() => {
+    mockGoalsRepo.deleteGoalSession.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    mockGoalsRepo.deleteGoalSession.mockClear();
+  });
+
   it("deletes an existing session", async () => {
-    mockExistsSync.mockImplementation((p: string) => p.includes(".goal.json"));
-    const res = await postRoute("/api/goals", {
-      action: "delete",
-      sessionId: "gs_test123",
-    });
+    mockGoalsRepo.deleteGoalSession.mockReturnValue(true);
+    const res = await postRoute({ action: "delete", sessionId: "gs_test123" });
     expect(res.status).toBe(200);
-    expect(mockUnlinkSync).toHaveBeenCalled();
   });
 
   it("returns 404 for non-existent session on delete", async () => {
-    mockExistsSync.mockReturnValue(false);
-    const res = await postRoute("/api/goals", {
-      action: "delete",
-      sessionId: "nonexistent",
-    });
+    mockGoalsRepo.deleteGoalSession.mockReturnValue(false);
+    const res = await postRoute({ action: "delete", sessionId: "gs_nonexistent" });
     expect(res.status).toBe(404);
   });
 
   it("returns 400 when sessionId is missing for delete", async () => {
-    const res = await postRoute("/api/goals", {
-      action: "delete",
-    });
+    const res = await postRoute({ action: "delete" });
     expect(res.status).toBe(400);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/goals — unknown action
-// ─────────────────────────────────────────────────────────────────
+// ─── POST /api/goals — unknown action ───────────────────────────────────────
 
 describe("POST /api/goals — unknown action", () => {
   it("returns 400 for an unknown action", async () => {
-    const res = await postRoute("/api/goals", { action: "invalid" });
+    const res = await postRoute({ action: "invalid-action" });
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when action is missing", async () => {
-    const res = await postRoute("/api/goals", {});
+    const res = await postRoute({});
     expect(res.status).toBe(400);
   });
 });

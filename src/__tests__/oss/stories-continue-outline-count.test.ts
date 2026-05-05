@@ -3,49 +3,32 @@
 // Regression test: /api/stories continue action must truncate outlines to requested count
 // Bug: if LLM generated MORE outlines than requested, all were appended instead of just addCount
 
-jest.mock("fs", () => {
-  const mockStory = {
-    id: "story_test123",
-    title: "Test Story",
-    status: "complete",
-    chapters: [
-      { number: 1, title: "Chapter 1", status: "complete", wordCount: 1000, generatedAt: "2025-01-01" },
-    ],
-    chapterContents: { "1": "Chapter 1 content" },
-    storyArc: {
-      storyArc: "A test story",
-      chapterOutlines: [
-        { number: 1, title: "Chapter 1", purpose: "Introduction", keyBeats: ["Start"], emotionalTone: "Engaging" },
-      ],
-      fixedPlotPoints: [],
-      characterArcs: [],
-      worldRules: [],
-      themes: [],
+jest.mock("next/server", () => ({
+  NextRequest: class NextRequest {
+    url: string;
+    method: string;
+    headers: Headers;
+    bodyUsed: boolean = false;
+    private _body: string;
+    constructor(url: string, init?: RequestInit) {
+      this.url = url;
+      this.method = init?.method ?? "GET";
+      this.headers = new Headers(init?.headers as HeadersInit);
+      this._body = typeof init?.body === "string" ? init.body : JSON.stringify(init?.body ?? {});
+    }
+    async json() { return JSON.parse(this._body); }
+  },
+  NextResponse: {
+    json: (data: unknown, init?: ResponseInit) => {
+      const status = init?.status ?? 200;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: "OK",
+        headers: new Headers(),
+        json: () => Promise.resolve(data),
+      };
     },
-    rollingSummary: "Chapter 1 summary",
-    masterPrompt: "Write a story",
-    config: { length: "medium", premise: "A test" },
-    createdAt: "2025-01-01",
-    updatedAt: "2025-01-01",
-  };
-
-  return {
-    existsSync: jest.fn((path: string) => {
-      if (path.includes("story_test123")) return true;
-      return false;
-    }),
-    readFileSync: jest.fn(() => JSON.stringify(mockStory)),
-    writeFileSync: jest.fn(),
-    mkdirSync: jest.fn(),
-    readdirSync: jest.fn(() => []),
-    unlinkSync: jest.fn(),
-  };
-});
-
-jest.mock("@/lib/hermes", () => ({
-  HERMES_HOME: "/tmp/test-hermes",
-  PATHS: {
-    stories: "/tmp/test-hermes/stories",
   },
 }));
 
@@ -53,7 +36,46 @@ jest.mock("@/lib/api-logger", () => ({
   logApiError: jest.fn(),
 }));
 
-// Mock callLLM to return MORE outlines than requested (5 instead of 3)
+jest.mock("@/lib/story-weaver/prompts", () => ({
+  getStoryPrompt: jest.fn(() => "system prompt"),
+}));
+
+jest.mock("@/lib/api-auth", () => ({
+  requireMcApiKey: jest.fn(() => null),
+  requireNotReadOnly: jest.fn(() => null),
+}));
+
+// Mock story-repository (NOT stories-repository - the file is story-repository.ts)
+jest.mock("@/lib/story-repository", () => {
+  const listStories = jest.fn();
+  const getStory = jest.fn();
+  const saveStory = jest.fn();
+  const createStory = jest.fn();
+  const updateStory = jest.fn();
+  const deleteStory = jest.fn();
+
+  return {
+    listStories,
+    getStory,
+    saveStory,
+    createStory,
+    updateStory,
+    deleteStory,
+    __listStories: listStories,
+    __getStory: getStory,
+    __saveStory: saveStory,
+    __updateStory: updateStory,
+    STORY_DATA_DIR: "/tmp/test-hermes/stories",
+  };
+});
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const storyRepo = require("@/lib/story-repository") as Record<string, unknown>;
+const mockGetStory = storyRepo.__getStory as jest.Mock;
+const mockSaveStory = storyRepo.__saveStory as jest.Mock;
+const mockUpdateStory = storyRepo.__updateStory as jest.Mock;
+const mockListStories = storyRepo.__listStories as jest.Mock;
+
 const mockOutlines = [
   { number: 2, title: "Chapter 2", purpose: "Development A", keyBeats: ["Event A"], emotionalTone: "Tense" },
   { number: 3, title: "Chapter 3", purpose: "Development B", keyBeats: ["Event B"], emotionalTone: "Dramatic" },
@@ -62,22 +84,30 @@ const mockOutlines = [
   { number: 6, title: "Chapter 6", purpose: "Resolution", keyBeats: ["Event E"], emotionalTone: "Satisfying" },
 ];
 
-jest.mock("@/lib/story-weaver/prompts", () => ({
-  getStoryPrompt: jest.fn(() => "system prompt"),
-}));
-
-// We need to mock the fetch call inside callLLM
-global.fetch = jest.fn(() =>
-  Promise.resolve({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve({
-      choices: [{ message: { content: JSON.stringify(mockOutlines) } }],
-    }),
-  })
-) as jest.Mock;
-
-import { NextRequest } from "next/server";
+const mockStory = {
+  id: "story_test123",
+  title: "Test Story",
+  status: "complete",
+  chapters: [
+    { number: 1, title: "Chapter 1", status: "complete", wordCount: 1000, generatedAt: "2025-01-01" },
+  ],
+  chapterContents: { "1": "Chapter 1 content" },
+  storyArc: {
+    storyArc: "A test story",
+    chapterOutlines: [
+      { number: 1, title: "Chapter 1", purpose: "Introduction", keyBeats: ["Start"], emotionalTone: "Engaging" },
+    ],
+    fixedPlotPoints: [],
+    characterArcs: [],
+    worldRules: [],
+    themes: [],
+  },
+  rollingSummary: "Chapter 1 summary",
+  masterPrompt: "Write a story",
+  config: { length: "medium", premise: "A test" },
+  createdAt: "2025-01-01",
+  updatedAt: "2025-01-01",
+};
 
 describe("/api/stories continue outline count validation", () => {
   beforeEach(() => {
@@ -86,31 +116,77 @@ describe("/api/stories continue outline count validation", () => {
   });
 
   it("truncates outlines when LLM returns more than requested count", async () => {
+    mockGetStory.mockReturnValue({ ...mockStory });
+    mockSaveStory.mockReturnValue(undefined);
+    // updateStory is called by handleContinue — return a properly updated story
+    mockUpdateStory.mockImplementation((_id: string, updates: Record<string, unknown>) => ({
+      ...mockStory,
+      ...updates,
+      chapters: updates.chapters as typeof mockStory.chapters,
+    }));
+
+    // Mock global fetch to return MORE outlines than requested (5 instead of 3)
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          choices: [{ message: { content: JSON.stringify(mockOutlines) } }],
+        }),
+      })
+    ) as jest.Mock;
+
+    try {
+      const { POST } = await import("@/app/api/stories/route");
+      const { NextRequest } = await import("next/server");
+
+      const request = new NextRequest("http://localhost/api/stories", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "continue",
+          storyId: "story_test123",
+          direction: "Continue the adventure",
+          count: 3, // Request 3 chapters
+        }),
+      });
+
+      const res = await POST(request);
+      const data = await res.json();
+
+      // Should succeed
+      expect(res.status).toBe(200);
+      expect(data.data).toBeDefined();
+
+      // Verify saveStory was called
+      expect(mockSaveStory).toHaveBeenCalled();
+
+      // The saved story should have 4 chapters total (1 original + 3 new, not 1 + 5 = 6)
+      const savedStory = mockSaveStory.mock.calls[0][0];
+      expect(savedStory.chapters.length).toBe(4);
+      expect(savedStory.storyArc.chapterOutlines.length).toBe(4);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("returns 404 when story is not found", async () => {
+    mockGetStory.mockReturnValue(null);
+
     const { POST } = await import("@/app/api/stories/route");
+    const { NextRequest } = await import("next/server");
+
     const request = new NextRequest("http://localhost/api/stories", {
       method: "POST",
       body: JSON.stringify({
         action: "continue",
-        storyId: "story_test123",
-        direction: "Continue the adventure",
-        count: 3, // Request 3 chapters
+        storyId: "nonexistent",
+        direction: "Continue",
+        count: 3,
       }),
     });
 
     const res = await POST(request);
-    const data = await res.json();
-
-    // Should succeed
-    expect(res.status).toBe(200);
-    expect(data.data).toBeDefined();
-
-    // Verify only 3 new chapters were added (not 5)
-    const fs = jest.requireMock("fs") as { writeFileSync: jest.Mock };
-    expect(fs.writeFileSync).toHaveBeenCalled();
-
-    const writtenData = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
-    // Original had 1 chapter, should now have 1 + 3 = 4 (not 1 + 5 = 6)
-    expect(writtenData.chapters.length).toBe(4);
-    expect(writtenData.storyArc.chapterOutlines.length).toBe(4);
+    expect(res.status).toBe(404);
   });
 });

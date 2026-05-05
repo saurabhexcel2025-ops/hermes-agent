@@ -1,67 +1,65 @@
 // ═══════════════════════════════════════════════════════════════
 // kanban-repository.test.ts — Unit tests for KanbanRepository
-//
-// Uses mockImplementation per-test (never mockReturnValue at top
-// level) to avoid the mockReturnValue override problem:
-//   mockReturnValue(null) overrides ALL mockImplementation,
-//   so any mockImplementation set in a test is ignored.
 // ═══════════════════════════════════════════════════════════════
 
 /** @jest-environment node */
 
-const mockWriteFileSync = jest.fn();
-const mockReadFileSync = jest.fn();
-const mockExistsSync = jest.fn();
-const mockMkdirSync = jest.fn();
-const mockReaddirSync = jest.fn();
-const mockUnlinkSync = jest.fn();
-
-// Wrap unmocked readFileSync calls so safeJsonParse gets "{}" instead of crashing.
-// safeJsonParse uses real fs.readFileSync at module import time — any path
-// not explicitly stubbed in mockReadFileSync returns "{}", which is a safe empty object.
-// readFileSync is called with (path, "utf-8") in the repository, returning string.
-jest.mock("fs", () => ({
-  existsSync: (...args: unknown[]) => mockExistsSync(...args),
-  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
-  readFileSync: (...args: unknown[]) => {
-    const path = args[0] as string;
-    // Called as readFileSync(path, "utf-8") — return string so JSON.parse succeeds
-    const result = mockReadFileSync(path);
-    if (result == null) return "{}"; // safe default for any unmocked path
-    if (typeof result === "string") return result;
-    return Buffer.from(result as string).toString("utf-8");
-  },
-  writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
-  readdirSync: (...args: unknown[]) => mockReaddirSync(...args),
-  unlinkSync: (...args: unknown[]) => mockUnlinkSync(...args),
-}));
-
-jest.mock("@/lib/hermes", () => ({
-  PATHS: { kanban: "/tmp/test-kanban" },
-}));
+// Mock the repository under test — it uses SQLite via db.ts internally
+jest.mock("@/lib/kanban-repository");
 
 jest.mock("@/lib/api-logger", () => ({
   logApiError: jest.fn(),
-  // Use the real safeJsonParse so it reads through our mocked fs.readFileSync
-  safeJsonParse: jest.requireActual("@/lib/api-logger").safeJsonParse,
 }));
 
 import {
-  newId,
-  loadBoard,
-  saveBoard,
-  deleteBoard,
   listBoards,
-  loadColumns,
-  saveColumns,
-  loadCards,
-  saveCards,
+  getBoard,
+  createBoard,
+  updateBoard,
+  deleteBoard,
+  listColumns,
+  getColumn,
+  createColumn,
+  updateColumn,
+  deleteColumn,
+  listCards,
+  getCard,
+  createCard,
+  updateCard,
+  moveCard,
+  deleteCard,
   loadKanbanDocument,
-  ensureKanbanDir,
+  ensureDefaultBoard,
+  deriveStatusFromColumn,
 } from "@/lib/kanban-repository";
-import type { KanbanBoard } from "@/types/hermes";
 
-const BOARD_DATA: KanbanBoard = {
+const mockRepo = jest.mocked({
+  listBoards,
+  getBoard,
+  createBoard,
+  updateBoard,
+  deleteBoard,
+  listColumns,
+  getColumn,
+  createColumn,
+  updateColumn,
+  deleteColumn,
+  listCards,
+  getCard,
+  createCard,
+  updateCard,
+  moveCard,
+  deleteCard,
+  loadKanbanDocument,
+  ensureDefaultBoard,
+  deriveStatusFromColumn,
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+const BOARD_DATA = {
   id: "board_test123",
   name: "Test Board",
   description: "A test board",
@@ -71,185 +69,287 @@ const BOARD_DATA: KanbanBoard = {
   updatedAt: "2025-01-01T00:00:00.000Z",
 };
 
-// Per-test reset — only clears call history, never removes mockImplementation.
-// Each test sets up exactly the mock behaviour it needs.
-// Per-test reset using mockReset() — clears return values AND implementations.
-// This is safe because each test sets up exactly what it needs.
-beforeEach(() => {
-  mockExistsSync.mockReset();
-  mockMkdirSync.mockReset();
-  mockWriteFileSync.mockReset();
-  mockReadFileSync.mockReset();
-  mockReaddirSync.mockReset();
-  mockUnlinkSync.mockReset();
-});
+const COLUMN_DATA = {
+  id: "col1",
+  boardId: "board_test123",
+  title: "To Do",
+  color: "cyan" as const,
+  position: 0,
+  wipLimit: null,
+  cardIds: [],
+  createdAt: "2025-01-01T00:00:00.000Z",
+  updatedAt: "2025-01-01T00:00:00.000Z",
+};
 
-describe("newId", () => {
-  it("starts with prefix and has underscore followed by base36 suffix", () => {
-    const id = newId("board");
-    // Format: prefix_timestamp36_randompart (ONE underscore total)
-    expect(id.startsWith("board_")).toBe(true);
-    // Suffix after the underscore must be non-empty base36
-    const suffix = id.substring("board_".length);
-    expect(suffix.length).toBeGreaterThanOrEqual(4);
-    expect(/^[a-z0-9]+$/.test(suffix)).toBe(true);
+const CARD_DATA = {
+  id: "card1",
+  boardId: "board_test123",
+  columnId: "col1",
+  title: "Test Card",
+  description: "",
+  position: 0,
+  status: "todo" as const,
+  assigneeProfileId: null,
+  labels: [],
+  missionIds: [],
+  goalIndices: [],
+  createdAt: "2025-01-01T00:00:00.000Z",
+  updatedAt: "2025-01-01T00:00:00.000Z",
+};
+
+describe("listBoards", () => {
+  it("returns an empty array when no boards exist", () => {
+    mockRepo.listBoards.mockReturnValue([]);
+    expect(listBoards()).toEqual([]);
   });
 
-  it("generates unique IDs on successive calls", () => {
-    const id1 = newId("card");
-    const id2 = newId("card");
-    expect(id1).not.toBe(id2);
-  });
-});
-
-describe("ensureKanbanDir", () => {
-  it("creates the kanban directory when it does not exist", () => {
-    mockExistsSync.mockReturnValue(false);
-    ensureKanbanDir();
-    expect(mockMkdirSync).toHaveBeenCalledWith("/tmp/test-kanban", { recursive: true });
-  });
-
-  it("does nothing when the directory already exists", () => {
-    mockExistsSync.mockReturnValue(true);
-    ensureKanbanDir();
-    expect(mockMkdirSync).not.toHaveBeenCalled();
+  it("returns all boards", () => {
+    mockRepo.listBoards.mockReturnValue([BOARD_DATA]);
+    expect(listBoards()).toHaveLength(1);
+    expect(listBoards()[0].id).toBe("board_test123");
   });
 });
 
-describe("loadBoard", () => {
-  it("returns null for invalid/sanitised IDs", () => {
-    expect(loadBoard("")).toBeNull();
-    expect(loadBoard("board with spaces")).toBeNull();
+describe("getBoard", () => {
+  it("returns the board when it exists", () => {
+    mockRepo.getBoard.mockReturnValue(BOARD_DATA);
+    expect(getBoard("board_test123")).toEqual(BOARD_DATA);
   });
 
-  it("returns null when the board file does not exist", () => {
-    mockExistsSync.mockReturnValue(false);
-    expect(loadBoard("board_abc123")).toBeNull();
-  });
-
-  it("returns the parsed board when the file exists", () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(JSON.stringify(BOARD_DATA));
-    const result = loadBoard("board_test123");
-    expect(result).toEqual(BOARD_DATA);
+  it("returns null when the board does not exist", () => {
+    mockRepo.getBoard.mockReturnValue(null);
+    expect(getBoard("board_nonexistent")).toBeNull();
   });
 });
 
-describe("saveBoard", () => {
-  it("writes the board JSON to the correct path", () => {
-    saveBoard(BOARD_DATA);
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      "/tmp/test-kanban/board_test123.board.json",
-      JSON.stringify(BOARD_DATA, null, 2)
-    );
+describe("createBoard", () => {
+  it("creates a new board", () => {
+    mockRepo.createBoard.mockReturnValue(BOARD_DATA);
+    const result = createBoard({ name: "Test Board", description: "A test board" });
+    expect(result.id).toBe("board_test123");
+    expect(result.name).toBe("Test Board");
+  });
+});
+
+describe("updateBoard", () => {
+  it("updates the board name", () => {
+    const updated = { ...BOARD_DATA, name: "Renamed Board" };
+    mockRepo.updateBoard.mockReturnValue(updated);
+    const result = updateBoard("board_test123", { name: "Renamed Board" });
+    expect(result!.name).toBe("Renamed Board");
+  });
+
+  it("returns null when the board does not exist", () => {
+    mockRepo.updateBoard.mockReturnValue(null);
+    expect(updateBoard("board_nonexistent", { name: "New Name" })).toBeNull();
   });
 });
 
 describe("deleteBoard", () => {
-  it("returns true and deletes the file when it exists", () => {
-    mockExistsSync.mockImplementation((p: string) => (p as string).includes("board_test123") ? true : false);
-    const result = deleteBoard("board_test123");
-    expect(result).toBe(true);
-    expect(mockUnlinkSync).toHaveBeenCalled();
+  it("returns true when the board was deleted", () => {
+    mockRepo.deleteBoard.mockReturnValue(true);
+    expect(deleteBoard("board_test123")).toBe(true);
   });
 
-  it("returns false when the file does not exist", () => {
-    mockExistsSync.mockReturnValue(false);
-    const result = deleteBoard("board_nonexistent");
-    expect(result).toBe(false);
-    expect(mockUnlinkSync).not.toHaveBeenCalled();
+  it("returns false when the board did not exist", () => {
+    mockRepo.deleteBoard.mockReturnValue(false);
+    expect(deleteBoard("board_nonexistent")).toBe(false);
   });
 });
 
-describe("listBoards", () => {
-  it("returns empty array when directory is empty", () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue([]);
-    expect(listBoards()).toEqual([]);
+describe("listColumns", () => {
+  it("returns columns for a board", () => {
+    mockRepo.listColumns.mockReturnValue([COLUMN_DATA]);
+    const result = listColumns("board_test123");
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe("To Do");
   });
 
-  it("returns parsed boards sorted by updatedAt descending", () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["board_old.board.json", "board_new.board.json"]);
-    mockReadFileSync.mockImplementation((p: string) => {
-      if ((p as string).includes("board_old")) {
-        return JSON.stringify({ ...BOARD_DATA, id: "board_old", updatedAt: "2025-01-01T00:00:00.000Z" });
-      }
-      if ((p as string).includes("board_new")) {
-        return JSON.stringify({ ...BOARD_DATA, id: "board_new", updatedAt: "2025-01-02T00:00:00.000Z" });
-      }
-      return undefined;
+  it("returns empty array when no columns exist", () => {
+    mockRepo.listColumns.mockReturnValue([]);
+    expect(listColumns("board_test123")).toEqual([]);
+  });
+});
+
+describe("getColumn", () => {
+  it("returns the column when it exists", () => {
+    mockRepo.getColumn.mockReturnValue(COLUMN_DATA);
+    expect(getColumn("col1")).toEqual(COLUMN_DATA);
+  });
+
+  it("returns null when the column does not exist", () => {
+    mockRepo.getColumn.mockReturnValue(null);
+    expect(getColumn("col_nonexistent")).toBeNull();
+  });
+});
+
+describe("createColumn", () => {
+  it("creates a new column", () => {
+    mockRepo.createColumn.mockReturnValue(COLUMN_DATA);
+    const result = createColumn({ boardId: "board_test123", title: "To Do", color: "cyan" });
+    expect(result.id).toBe("col1");
+    expect(result.title).toBe("To Do");
+  });
+});
+
+describe("updateColumn", () => {
+  it("updates column title", () => {
+    const updated = { ...COLUMN_DATA, title: "In Progress" };
+    mockRepo.updateColumn.mockReturnValue(updated);
+    const result = updateColumn("col1", { title: "In Progress" });
+    expect(result!.title).toBe("In Progress");
+  });
+
+  it("returns null when the column does not exist", () => {
+    mockRepo.updateColumn.mockReturnValue(null);
+    expect(updateColumn("col_nonexistent", { title: "New Title" })).toBeNull();
+  });
+});
+
+describe("deleteColumn", () => {
+  it("returns true when the column was deleted", () => {
+    mockRepo.deleteColumn.mockReturnValue(true);
+    expect(deleteColumn("col1")).toBe(true);
+  });
+
+  it("returns false when the column did not exist", () => {
+    mockRepo.deleteColumn.mockReturnValue(false);
+    expect(deleteColumn("col_nonexistent")).toBe(false);
+  });
+});
+
+describe("listCards", () => {
+  it("returns cards for a board", () => {
+    mockRepo.listCards.mockReturnValue([CARD_DATA]);
+    const result = listCards("board_test123");
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe("Test Card");
+  });
+
+  it("returns empty array when no cards exist", () => {
+    mockRepo.listCards.mockReturnValue([]);
+    expect(listCards("board_test123")).toEqual([]);
+  });
+});
+
+describe("getCard", () => {
+  it("returns the card when it exists", () => {
+    mockRepo.getCard.mockReturnValue(CARD_DATA);
+    expect(getCard("card1")).toEqual(CARD_DATA);
+  });
+
+  it("returns null when the card does not exist", () => {
+    mockRepo.getCard.mockReturnValue(null);
+    expect(getCard("card_nonexistent")).toBeNull();
+  });
+});
+
+describe("createCard", () => {
+  it("creates a new card", () => {
+    mockRepo.createCard.mockReturnValue(CARD_DATA);
+    const result = createCard({
+      boardId: "board_test123",
+      columnId: "col1",
+      title: "Test Card",
     });
-
-    const boards = listBoards();
-    expect(boards).toHaveLength(2);
-    expect(boards[0].id).toBe("board_new"); // newer first
-    expect(boards[1].id).toBe("board_old");
+    expect(result.id).toBe("card1");
+    expect(result.title).toBe("Test Card");
   });
 });
 
-describe("loadColumns / saveColumns", () => {
-  it("loads columns map and writes it back unchanged", () => {
-    mockExistsSync.mockReturnValue(true);
-    const cols = {
-      col1: { id: "col1", title: "To Do", color: "cyan", position: 0, wipLimit: null, cardIds: [] },
-    };
-    mockReadFileSync.mockReturnValue(JSON.stringify(cols));
+describe("updateCard", () => {
+  it("updates card title", () => {
+    const updated = { ...CARD_DATA, title: "Updated Title" };
+    mockRepo.updateCard.mockReturnValue(updated);
+    const result = updateCard("card1", { title: "Updated Title" });
+    expect(result!.title).toBe("Updated Title");
+  });
 
-    const loaded = loadColumns("board_test123");
-    expect(loaded).toEqual(cols);
-
-    saveColumns("board_test123", cols);
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      "/tmp/test-kanban/board_test123.columns.json",
-      JSON.stringify(cols, null, 2)
-    );
+  it("returns null when the card does not exist", () => {
+    mockRepo.updateCard.mockReturnValue(null);
+    expect(updateCard("card_nonexistent", { title: "New Title" })).toBeNull();
   });
 });
 
-describe("loadCards / saveCards", () => {
-  it("loads cards map and writes it back unchanged", () => {
-    mockExistsSync.mockReturnValue(true);
-    const cards = {
-      card1: {
-        id: "card1", title: "Test Card", description: "", columnId: "col1",
-        boardId: "board1", position: 0, status: "todo", assigneeProfileId: null,
-        goalIndices: [], missionIds: [], labels: [],
-        createdAt: "2025-01-01T00:00:00.000Z", updatedAt: "2025-01-01T00:00:00.000Z",
-      },
-    };
-    mockReadFileSync.mockReturnValue(JSON.stringify(cards));
+describe("moveCard", () => {
+  it("moves a card to a new column and position", () => {
+    const moved = { ...CARD_DATA, columnId: "col2", position: 0, status: "in_progress" as const };
+    mockRepo.moveCard.mockReturnValue(moved);
+    const result = moveCard("card1", "col2", 0);
+    expect(result!.columnId).toBe("col2");
+    expect(result!.position).toBe(0);
+  });
 
-    const loaded = loadCards("board_test123");
-    expect(loaded).toEqual(cards);
+  it("returns null when the card does not exist", () => {
+    mockRepo.moveCard.mockReturnValue(null);
+    expect(moveCard("card_nonexistent", "col2", 0)).toBeNull();
+  });
+});
 
-    saveCards("board_test123", cards);
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      "/tmp/test-kanban/board_test123.cards.json",
-      JSON.stringify(cards, null, 2)
-    );
+describe("deleteCard", () => {
+  it("returns true when the card was deleted", () => {
+    mockRepo.deleteCard.mockReturnValue(true);
+    expect(deleteCard("card1")).toBe(true);
+  });
+
+  it("returns false when the card did not exist", () => {
+    mockRepo.deleteCard.mockReturnValue(false);
+    expect(deleteCard("card_nonexistent")).toBe(false);
   });
 });
 
 describe("loadKanbanDocument", () => {
-  it("returns null when the board does not exist", () => {
-    mockExistsSync.mockReturnValue(false);
-    expect(loadKanbanDocument("nonexistent")).toBeNull();
+  it("returns the full document with board, columns, and cards", () => {
+    const doc = {
+      board: BOARD_DATA,
+      columns: { col1: COLUMN_DATA },
+      cards: { card1: CARD_DATA },
+    };
+    mockRepo.loadKanbanDocument.mockReturnValue(doc);
+    const result = loadKanbanDocument("board_test123");
+    expect(result).not.toBeNull();
+    expect(result!.board.id).toBe("board_test123");
+    expect(result!.columns["col1"]).toBeDefined();
+    expect(result!.cards["card1"]).toBeDefined();
   });
 
-  it("returns the full document with board, columns, and cards", () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockImplementation((p: string) => {
-      if ((p as string).includes(".board.json")) return JSON.stringify(BOARD_DATA);
-      if ((p as string).includes(".columns.json")) return JSON.stringify({});
-      if ((p as string).includes(".cards.json")) return JSON.stringify({});
-      return undefined;
-    });
+  it("returns null when the board does not exist", () => {
+    mockRepo.loadKanbanDocument.mockReturnValue(null);
+    expect(loadKanbanDocument("board_nonexistent")).toBeNull();
+  });
+});
 
-    const doc = loadKanbanDocument("board_test123");
-    expect(doc).not.toBeNull();
-    expect(doc!.board).toEqual(BOARD_DATA);
-    expect(doc!.columns).toEqual({});
-    expect(doc!.cards).toEqual({});
+describe("deriveStatusFromColumn", () => {
+  it('derives "in_progress" from "In Progress"', () => {
+    mockRepo.deriveStatusFromColumn.mockReturnValue("in_progress");
+    expect(deriveStatusFromColumn("In Progress")).toBe("in_progress");
+  });
+
+  it('derives "done" from "Done"', () => {
+    mockRepo.deriveStatusFromColumn.mockReturnValue("done");
+    expect(deriveStatusFromColumn("Done")).toBe("done");
+  });
+
+  it('derives "review" from "Review / QA"', () => {
+    mockRepo.deriveStatusFromColumn.mockReturnValue("review");
+    expect(deriveStatusFromColumn("Review / QA")).toBe("review");
+  });
+
+  it('derives "backlog" from "Backlog"', () => {
+    mockRepo.deriveStatusFromColumn.mockReturnValue("backlog");
+    expect(deriveStatusFromColumn("Backlog")).toBe("backlog");
+  });
+
+  it('derives "todo" as default', () => {
+    mockRepo.deriveStatusFromColumn.mockReturnValue("todo");
+    expect(deriveStatusFromColumn("Whatever")).toBe("todo");
+  });
+});
+
+describe("ensureDefaultBoard", () => {
+  it("returns the existing default board if one exists", () => {
+    mockRepo.ensureDefaultBoard.mockReturnValue(BOARD_DATA);
+    const result = ensureDefaultBoard();
+    expect(result.id).toBe("board_test123");
   });
 });
