@@ -205,10 +205,6 @@ export function createCard(data: {
   const position = data.position ?? 0;
   // If no explicit status given, derive it from the destination column title
   // so a card created in "In Progress" column is immediately in_progress, not todo.
-  const colTitle = data.columnId ? (getColumn(data.columnId)?.title ?? "(null)") : "(no-col)";
-  const explicitStatus = data.status ?? "(none)";
-  const derived = deriveStatusFromColumn(colTitle);
-  require("fs").writeFileSync("/tmp/kanban-debug.log", `[createCard] title=${data.title} colId=${data.columnId} colTitle=${colTitle} explicitStatus=${explicitStatus} derived=${derived}\n`, { flag: "a" });
   const status = data.status
     ?? (data.columnId ? deriveStatusFromColumn(getColumn(data.columnId)?.title ?? "") : "todo");
 

@@ -3,9 +3,9 @@
 // Database: ~/control-hub/data/control-hub.db
 // ═══════════════════════════════════════════════════════════════
 
-import Database from "better-sqlite3";
+import Database, { type Database as DatabaseType } from "better-sqlite3";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
 
 // ── Ensure data directory exists ───────────────────────────────
@@ -87,9 +87,8 @@ function runMigrations(database: Database.Database): void {
   const migrationsDir = join(__dirname, "db", "migrations");
 
   // Collect migration files
-  let migrations: Array<{ num: number; sql: string }> = [];
+  const migrations: Array<{ num: number; sql: string }> = [];
   try {
-    const { readdirSync } = require("fs");
     const files = readdirSync(migrationsDir)
       .filter((f: string) => f.endsWith(".sql"))
       .sort();
