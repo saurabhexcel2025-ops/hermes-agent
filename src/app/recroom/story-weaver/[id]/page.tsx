@@ -217,7 +217,7 @@ export default function StoryReaderPage() {
     const nextComplete = chapters.find((c: Chapter) => c.number > currentChapter && c.status === "complete");
     if (nextComplete) {
       setCurrentChapter(nextComplete.number);
-      setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView(), 50);
+      setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
       setStory((prev: StoryState | null) => {
         if (!prev) return prev;
         return {
@@ -232,7 +232,7 @@ export default function StoryReaderPage() {
 
   const handleChapterSelect = async (num: number) => {
     setCurrentChapter(num);
-    setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView(), 50);
+    setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 
     const updatedChapters = (story?.chapters || []).map((c: Chapter) =>
       c.number === num && c.status === "complete" ? { ...c, readStatus: "read" as const } : c
@@ -297,6 +297,15 @@ export default function StoryReaderPage() {
 
   return (
     <div className="min-h-screen bg-dark-950 grid-bg relative scanlines flex flex-col">
+      {/* Error banner — rendered above the overlay so it is always visible */}
+      {error && (
+        <div className="fixed top-0 left-0 right-0 z-[70] bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          <span className="text-xs text-red-300 flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400/50 hover:text-red-400"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Progress overlay for continue and edit */}
       <GenerateOverlay
         title={story?.title || "Story"}
@@ -411,18 +420,9 @@ export default function StoryReaderPage() {
         </div>
       )}
 
-      {/* Error banner */}
-      {error && (
-        <div className="sticky top-0 z-50 bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <span className="text-xs text-red-300 flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400/50 hover:text-red-400"><X className="w-4 h-4" /></button>
-        </div>
-      )}
-
       {/* Story generation error banner */}
       {story.status === "failed" && story.generationError && (
-        <div className="sticky top-0 z-50 bg-red-500/10 border-b border-red-500/20 px-4 py-3 flex items-center gap-3">
+        <div className="fixed top-0 left-0 right-0 z-[65] bg-red-500/10 border-b border-red-500/20 px-4 py-3 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <div className="flex-1">
             <p className="text-xs text-red-300 font-semibold">Story generation failed</p>
@@ -507,7 +507,7 @@ export default function StoryReaderPage() {
           <div ref={contentRef} className="flex-1 w-full overflow-y-auto" style={{ background: theme.bg, filter: `brightness(${settings.brightness})` }}>
             {chapterContent ? (
               <div className="max-w-3xl mx-auto px-6 md:px-16 py-8 md:py-10">
-                <div id="chapter-top" className="flex items-center justify-between mb-8 pb-4 border-b" style={{
+                <div id="chapter-top" className="flex items-center justify-between mb-8 pb-4 border-b scroll-mt-16" style={{
                   borderColor: settings.pageTheme === "light" ? "#d4ccc0" : "#2a2520",
                 }}>
                   <h2 style={{

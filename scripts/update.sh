@@ -125,6 +125,24 @@ if [ "$RESTART_ONLY" = false ]; then
     log "Agent profiles updated"
 fi
 
+# ── Ensure Hermes Gateway API Server is enabled ─────────────────
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+if command -v hermes &>/dev/null && [ -f "$HERMES_HOME/.env" ]; then
+    if ! grep -q "API_SERVER_ENABLED=true" "$HERMES_HOME/.env" 2>/dev/null; then
+        log "Enabling API_SERVER_ENABLED=true in ~/.hermes/.env for Story Weaver..."
+        echo "" >> "$HERMES_HOME/.env"
+        echo "# Enable API server for Control Hub Rec Room (added by update.sh)" >> "$HERMES_HOME/.env"
+        echo "API_SERVER_ENABLED=true" >> "$HERMES_HOME/.env"
+    fi
+    # Restart gateway so the setting takes effect
+    log "Restarting Hermes gateway..."
+    if hermes gateway stop 2>/dev/null; then
+        hermes gateway start 2>/dev/null || log "WARNING: Gateway start failed — restart manually"
+    else
+        log "WARNING: Could not stop gateway — restart manually if needed"
+    fi
+fi
+
 # ── Restart Server ────────────────────────────────────────────
 log "Restarting server..."
 bash "$SCRIPT_DIR/restart.sh"

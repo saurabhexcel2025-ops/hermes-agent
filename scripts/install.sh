@@ -190,7 +190,18 @@ if hermes_cli_ok && [ -f "$HERMES_HOME/config.yaml" ]; then
         echo "" >> "$HERMES_HOME/.env"
         echo "# Enable API server for Control Hub Rec Room" >> "$HERMES_HOME/.env"
         echo "API_SERVER_ENABLED=true" >> "$HERMES_HOME/.env"
-        ok "API server enabled"
+        ok "API server enabled in ~/.hermes/.env"
+    else
+        info "API_SERVER_ENABLED already set in ~/.hermes/.env"
+    fi
+
+    # Restart the gateway so the change takes effect immediately
+    info "Restarting Hermes gateway..."
+    if hermes gateway stop 2>/dev/null; then
+        hermes gateway start 2>/dev/null || warn "Gateway start failed — restart manually with: hermes gateway stop && hermes gateway start"
+        ok "Gateway restarted"
+    else
+        warn "Could not stop gateway — restart manually with: hermes gateway stop && hermes gateway start"
     fi
 else
     info "Skipping Hermes gateway .env tweak (Hermes not fully configured)."
