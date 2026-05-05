@@ -154,11 +154,10 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
     if (restarting) return;
 
     setRestarting(true);
-
     setMessage("Restarting...");
 
     try {
-      await fetch("/api/update", {
+      const res = await fetch("/api/update", {
         method: "POST",
 
         headers: { "Content-Type": "application/json" },
@@ -166,10 +165,19 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         body: JSON.stringify({ action: "restart" }),
       });
 
-      pollForReturn();
-    } catch {
-      setMessage("Restart failed");
+      if (!res.ok) {
+        let msg = "Restart failed";
+        try {
+          const body = await res.json();
+          if (body?.error) msg = body.error;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
 
+      pollForReturn();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Restart failed";
+      setMessage(msg);
       setRestarting(false);
     }
   };
@@ -187,13 +195,21 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         body: JSON.stringify({ action: "rebuild" }),
       });
 
-      if (!res.ok) throw new Error("Rebuild failed");
+      if (!res.ok) {
+        let msg = "Rebuild failed";
+        try {
+          const body = await res.json();
+          if (body?.error) msg = body.error;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
 
       setMessage("Build complete — restarting...");
 
       pollForReturn();
-    } catch {
-      setMessage("Rebuild failed");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Rebuild failed";
+      setMessage(msg);
       setRebuilding(false);
     }
   };
@@ -284,7 +300,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           onClick={handleRebuild}
           disabled={rebuilding}
           className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
-          title="Rebuild App"
+          title={message || "Rebuild App"}
         >
           <Hammer
             className={`w-3.5 h-3.5 ${rebuilding ? "animate-spin" : ""}`}
@@ -295,7 +311,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           onClick={handleRestart}
           disabled={restarting}
           className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          title="Restart App"
+          title={message || "Restart App"}
         >
           <Power
             className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`}
