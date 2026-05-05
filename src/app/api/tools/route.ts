@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // /api/tools — Tool Registry CRUD (SQLite)
 // ═══════════════════════════════════════════════════════════════
-// Seeds default Hermes tools on first run. Users can enable/disable
+// Seeds default Hermes tools on first GET. Users can enable/disable
 // tools via this API. MCP tools are registered with category="mcp".
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,14 +16,14 @@ import {
   createTool,
 } from "@/lib/tool-registry";
 
-// Seed default tools on first access
-seedTools();
-
 // ── GET ───────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
+
+  // Seed on first real request (not during build page data collection)
+  seedTools();
 
   try {
     if (id) {

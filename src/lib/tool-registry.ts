@@ -135,29 +135,33 @@ export function seedTools(): void {
   if (_seeded) return;
   _seeded = true;
 
-  const existing = listTools();
-  if (existing.length > 0) return; // already seeded
+  try {
+    const existing = listTools();
+    if (existing.length > 0) return; // already seeded
 
-  inTransaction(() => {
-    for (const tool of HERMES_DEFAULT_TOOLS) {
-      db()
-        .prepare(
-          `INSERT INTO tool_plugins (id, name, label, description, category, enabled, config, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          uuid(),
-          tool.name,
-          tool.label,
-          tool.description,
-          tool.category,
-          tool.enabled ? 1 : 0,
-          JSON.stringify(tool.config),
-          now(),
-          now()
-        );
-    }
-  });
+    inTransaction(() => {
+      for (const tool of HERMES_DEFAULT_TOOLS) {
+        db()
+          .prepare(
+            `INSERT INTO tool_plugins (id, name, label, description, category, enabled, config, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            uuid(),
+            tool.name,
+            tool.label,
+            tool.description,
+            tool.category,
+            tool.enabled ? 1 : 0,
+            JSON.stringify(tool.config),
+            now(),
+            now()
+          );
+      }
+    });
+  } catch {
+    // Table may not exist during build page data collection — skip seeding
+  }
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
