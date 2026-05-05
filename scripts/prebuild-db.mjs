@@ -1,5 +1,5 @@
 // scripts/prebuild-db.mjs
-// Forces SQLite migrations before `next build`.
+// Forces SQLite migrations and seeds before `next build`.
 // Run automatically via `prebuild` npm script.
 
 import Database from "better-sqlite3";
@@ -12,6 +12,7 @@ const ROOT = join(__dirname, "..");
 const DB_DIR = join(ROOT, "data");
 const DB_PATH = join(DB_DIR, "control-hub.db");
 const MIGRATIONS_DIR = join(ROOT, "src/lib/db/migrations");
+const SEEDS_DIR = join(ROOT, "src/lib/db/seeds");
 
 // Ensure data dir
 if (!existsSync(DB_DIR)) {
@@ -29,37 +30,72 @@ db.exec(`
   );
 `);
 
+function getMeta(database, key) {
+  const row = database.prepare("SELECT value FROM meta WHERE key = ?").get(key);
+  return row ? row.value : null;
+}
+
+function setMeta(database, key, value) {
+  database.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(key, value);
+}
+
 function getSchemaVersion(database) {
-  const row = database.prepare("SELECT value FROM meta WHERE key = ?").get("schema_version");
-  return row ? parseInt(row.value, 10) : 0;
+  const v = getMeta(database, "schema_version");
+  return v ? parseInt(v, 10) : 0;
 }
 
 function setSchemaVersion(database, version) {
-  database.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("schema_version", String(version));
+  setMeta(database, "schema_version", String(version));
 }
 
-// Run pending migrations
+// ── Run pending migrations ───────────────────────────────────
 const currentVersion = getSchemaVersion(db);
-const files = readdirSync(MIGRATIONS_DIR)
+const migrationFiles = readdirSync(MIGRATIONS_DIR)
   .filter((f) => f.endsWith(".sql"))
   .sort();
 
-let applied = 0;
-for (const file of files) {
+let migrationsApplied = 0;
+for (const file of migrationFiles) {
   const num = parseInt(file.split("_")[0], 10);
   if (!isNaN(num) && num > currentVersion) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
     db.exec(sql);
     setSchemaVersion(db, num);
     console.log(`✓ Migration ${num} (${file}) applied`);
-    applied++;
+    migrationsApplied++;
   }
 }
 
-if (applied === 0) {
+if (migrationsApplied === 0) {
   console.log("✓ Database schema up to date");
 } else {
-  console.log(`✓ ${applied} migration(s) applied`);
+  console.log(`✓ ${migrationsApplied} migration(s) applied`);
+}
+
+// ── Run pending seeds ────────────────────────────────────────
+const seedFiles = readdirSync(SEEDS_DIR)
+  .filter((f) => f.endsWith(".sql"))
+  .sort();
+
+const seedsRun = getMeta(db, "seeds_run") || "";
+const seedsRunSet = new Set(seedsRun ? seedsRun.split(",") : []);
+
+let seedsApplied = 0;
+for (const file of seedFiles) {
+  if (!seedsRunSet.has(file)) {
+    const sql = readFileSync(join(SEEDS_DIR, file), "utf-8");
+    db.exec(sql);
+    seedsRunSet.add(file);
+    setMeta(db, "seeds_run", [...seedsRunSet].join(","));
+    console.log(`✓ Seed ${file} applied`);
+    seedsApplied++;
+  }
+}
+
+if (seedsApplied === 0) {
+  console.log("✓ Seeds up to date");
+} else {
+  console.log(`✓ ${seedsApplied} seed(s) applied`);
 }
 
 db.close();

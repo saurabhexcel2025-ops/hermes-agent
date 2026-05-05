@@ -152,13 +152,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "teamId and boardId are required" }, { status: 400 });
       }
 
-      // Update team's boardIds and board's teamId
+      // Verify team exists
       const team = getTeam(teamId);
       if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
 
-      // TODO: link board to team via updateTeam boardIds
+      // Update board's team_id and return updated team
+      const { updateBoard } = await import("@/lib/kanban-repository");
+      const board = updateBoard(boardId, { teamId });
+      if (!board) return NextResponse.json({ error: "Board not found" }, { status: 404 });
+
       appendAuditLine({ action: "team.board.link", resource: teamId, ok: true });
-      return NextResponse.json({ data: { team } });
+      return NextResponse.json({ data: { team, board } });
     }
 
     // ── Delete Team ────────────────────────────────────────────

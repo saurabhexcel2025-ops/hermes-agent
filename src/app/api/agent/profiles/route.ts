@@ -92,17 +92,11 @@ const PROFILE_DESCRIPTIONS: Record<string, string> = {
   "qa-engineer": "Quality assurance and testing",
   "devops-engineer": "Infrastructure, CI/CD, and operations",
   "swe-engineer": "Software engineering and development",
-  "data-engineer": "Data pipeline and infrastructure engineering",
-  "data-scientist": "Machine learning and data science research",
-  "ops-director": "Operations management and coordination",
-  "creative-lead": "Creative content and design direction",
-  "support-agent": "User support and troubleshooting",
 };
 
 const BUNDLED_PROFILES = new Set([
-  "qa-engineer",
-  "devops-engineer",
-  "swe-engineer",
+  "qa",
+  "devops",
 ]);
 
 

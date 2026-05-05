@@ -110,10 +110,10 @@ describe("GET /api/agent/profiles", () => {
     mockExistsSync.mockImplementation((p: string) => {
       if (p.includes("config.yaml")) return false;
       if (p === "/tmp/test-hermes/profiles") return true;
-      if (p.includes("qa-engineer") || p.includes("devops-engineer")) return true;
+      if (p.includes("qa") || p.includes("devops")) return true;
       return false;
     });
-    mockReaddirSync.mockReturnValue(["qa-engineer", "devops-engineer", "custom-agent"]);
+    mockReaddirSync.mockReturnValue(["qa", "devops", "custom-agent"]);
     mockStatSync.mockReturnValue({ isDirectory: () => true });
     mockReadFileSync.mockReturnValue("");
 
@@ -121,8 +121,8 @@ describe("GET /api/agent/profiles", () => {
     const res = await GET();
     const data = await res.json();
 
-    const qa = data.data.profiles.find((p: { id: string }) => p.id === "qa-engineer");
-    const devops = data.data.profiles.find((p: { id: string }) => p.id === "devops-engineer");
+    const qa = data.data.profiles.find((p: { id: string }) => p.id === "qa");
+    const devops = data.data.profiles.find((p: { id: string }) => p.id === "devops");
     const custom = data.data.profiles.find((p: { id: string }) => p.id === "custom-agent");
 
     expect(qa.isBundled).toBe(true);

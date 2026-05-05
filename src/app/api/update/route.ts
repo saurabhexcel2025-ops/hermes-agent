@@ -177,14 +177,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "rebuild") {
+      // Run build as a detached background process so the server's memory
+      // context is not consumed by npm/build child processes (avoids OOM
+      // kills on memory-constrained systems). Uses systemd-run like restart.
+      const BUILD_SCRIPT = APP_DIR + "/scripts/build.sh";
       try {
-        execSync("npm run build", {
-          cwd: APP_DIR,
-          timeout: 180000,
-          stdio: "pipe",
-        });
+        spawnScript(BUILD_SCRIPT, "ch-rebuild");
       } catch (error) {
-        logApiError("POST /api/update", "build", error);
+        logApiError("POST /api/update", "spawn build", error);
         appendAuditLine({
           action: "deploy.rebuild",
           resource: "build",
@@ -192,15 +192,14 @@ export async function POST(request: NextRequest) {
           correlationId,
         });
         return NextResponse.json(
-          { error: "Build failed — server still running" },
+          { error: "Failed to start build" },
           { status: 500 }
         );
       }
 
-      spawnScript(RESTART_SCRIPT);
       appendAuditLine({
         action: "deploy.rebuild",
-        resource: "restart",
+        resource: "build",
         ok: true,
         correlationId,
       });
@@ -306,7 +305,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function spawnScript(scriptPath: string): void {
+function spawnScript(scriptPath: string, unitName = "ch-action"): void {
   const command = `sleep 3; bash "${scriptPath}"`;
 
   try {
@@ -314,7 +313,7 @@ function spawnScript(scriptPath: string): void {
       "systemd-run",
       [
         "--user",
-        "--unit=ch-action",
+        `--unit=${unitName}`,
         "--property=Type=oneshot",
         "bash",
         "-c",
