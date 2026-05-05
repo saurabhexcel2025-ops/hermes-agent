@@ -333,7 +333,7 @@ export default function Dashboard() {
           <StatPill
             icon={Layers}
             label={`Memory · ${monitor?.memory.provider || "Not Installed"}`}
-            value={monitor ? (monitor.memory.factCount > 0 ? `${monitor.memory.factCount} facts` : monitor.memory.provider === "Not Installed" ? "Not Installed" : "0 facts") : "..."}
+            value={monitor ? (monitor.memory.factCount >= 0 ? `${monitor.memory.factCount} facts` : "0 facts") : "..."}
             color="pink"
           />
         </div>
@@ -569,13 +569,15 @@ export default function Dashboard() {
                   <div className="min-w-0 flex-1">
                     <div className="text-xs text-white/80 truncate">{job.name}</div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <IntervalSelector
-                        value={job.schedule}
-                        onChange={(v) => handleCronScheduleChange(job.id, v)}
-                        compact
-                      />
+                      <div className="flex-shrink-0">
+                        <IntervalSelector
+                          value={job.schedule}
+                          onChange={(v) => handleCronScheduleChange(job.id, v)}
+                          compact
+                        />
+                      </div>
                       {job.enabled && (
-                        <span className={`ml-2 ${
+                        <span className={`text-xs truncate ml-2 ${
                           job.state === "running"
                             ? "text-neon-green"
                             : job.lastStatus === "ok"
@@ -758,9 +760,6 @@ export default function Dashboard() {
               <Gamepad2 className="w-3.5 h-3.5 text-neon-purple" />
               <span className="text-xs font-mono text-white/60">Rec Room</span>
             </div>
-            <Link href="/recroom" className="text-[10px] font-mono text-neon-purple hover:underline flex items-center gap-1">
-              explore <ChevronRight className="w-3 h-3" />
-            </Link>
           </div>
           <Link href="/recroom/story-weaver" className="flex items-center justify-center gap-3 py-4 hover:bg-white/[0.02] transition-colors">
             <BookOpen className="w-5 h-5 text-neon-purple" />

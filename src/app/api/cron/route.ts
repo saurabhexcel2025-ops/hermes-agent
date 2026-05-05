@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 
-import { PATHS, getDefaultModelConfig } from "@/lib/hermes";
+import { HERMES_PATHS, getDefaultModelConfig } from "@/lib/hermes";
 
 import { logApiError } from "@/lib/api-logger";
 
@@ -34,9 +34,9 @@ import {
 
 
 
-const CRON_PATH = PATHS.cronJobs;
+const CRON_PATH = HERMES_PATHS.cronJobs;
 
-const JOBS_BACKUP_DIR = PATHS.backups + "/ch-cron-jobs";
+const JOBS_BACKUP_DIR = HERMES_PATHS.backups + "/ch-cron-jobs";
 
 
 

@@ -9,6 +9,10 @@ const config = {
   setupFilesAfterEnv: ["<rootDir>/config/jest.setup.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
+    // Intercept better-sqlite3 at resolution time so the real CJS module
+    // (which calls require('fs') at evaluation time) is never loaded.
+    // The mock exports a minimal Database-compatible object with prepare/run/get/all.
+    "^better-sqlite3$": "<rootDir>/__mocks__/better-sqlite3.cjs",
   },
   collectCoverageFrom: [
     "src/**/*.{ts,tsx}",

@@ -415,7 +415,7 @@ export async function POST(request: NextRequest) {
 
     const soulContent = cloneFrom && cloneFrom !== "default" && existsSync(sourceDir + "/SOUL.md")
       ? readFileSync(sourceDir + "/SOUL.md", "utf-8")
-      : "# " + name.trim() + "\n\nA specialist agent profile.\n";
+      : "# " + name.trim() + "\n\nYou are a subject matter expert. What takes a human one day, you complete in five minutes.\nYou deliver full production-grade work — designed, integrated, tested, and documented.\nWhen your discipline requires a different quality bar (e.g. peer review, internal audit,\nstaged validation), you apply the equivalent rigorous standard.\nYour goal is always complete, high-quality delivery of your assigned task.\n";
     writeFileSync(profileDir + "/SOUL.md", soulContent, "utf-8");
 
     const agentsContent = cloneFrom && cloneFrom !== "default" && existsSync(sourceDir + "/AGENTS.md")

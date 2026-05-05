@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
+import { readFileSync, existsSync } from "fs";
+import * as path from "path";
 
 import { HERMES_HOME } from "@/lib/hermes";
 import { logApiError } from "@/lib/api-logger";
 import type { ApiResponse } from "@/types/hermes";
 
 const BRIDGE_SCRIPT = HERMES_HOME + "/scripts/hindsight_bridge.py";
-const PYTHON = HERMES_HOME + "/hermes-agent/venv/bin/python3";
+
+// Resolve python3 from the hermes-agent venv — try common locations
+function resolvePython(): string {
+  const candidates = [
+    path.join(HERMES_HOME, "hermes-agent", "venv", "bin", "python3"),
+    path.join(HERMES_HOME, "hermes-agent", ".venv", "bin", "python3"),
+    path.join(HERMES_HOME, "..", "local", "share", "hermes-agent", "venv", "bin", "python3"),
+    path.join(HERMES_HOME, "..", "hermes-agent", "venv", "bin", "python3"),
+    path.join(process.env.HOME || "", ".local", "share", "hermes-agent", "venv", "bin", "python3"),
+    "/usr/bin/python3",
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return "python3"; // fallback to PATH
+}
 
 /** Run bridge command asynchronously with timeout */
 function runBridgeAsync(
@@ -20,27 +37,39 @@ function runBridgeAsync(
       .map(([k, v]) => `--${k} ${JSON.stringify(String(v))}`)
       .join(" ");
 
-    const cmd = `${PYTHON} ${BRIDGE_SCRIPT} ${command} ${argStr}`;
+    const python = resolvePython();
+    const cmd = `${python} ${BRIDGE_SCRIPT} ${command} ${argStr}`;
 
-    exec(
-      cmd,
-      {
-        timeout: timeoutMs,
-        env: { ...process.env, PYTHONPATH: HERMES_HOME + "/hermes-agent" },
-        maxBuffer: 1024 * 1024,
-      },
-      (error, stdout, stderr) => {
-        if (error && !stdout) {
-          reject(new Error(stderr || error.message));
-          return;
+    // Inject HINDSIGHT_API_KEY from config if present
+    const apiKey = (() => {
+      try {
+        const cfgPath = path.join(HERMES_HOME, "hindsight", "config.json");
+        if (existsSync(cfgPath)) {
+          const cfg = JSON.parse(readFileSync(cfgPath, "utf-8"));
+          // local_external uses llm_api_key, cloud uses top-level HINDSIGHT_API_KEY env
+          return cfg.llm_api_key || process.env.HINDSIGHT_API_KEY || "";
         }
-        try {
-          resolve(JSON.parse(stdout));
-        } catch {
-          reject(new Error("Invalid JSON from bridge: " + stdout.slice(0, 200)));
-        }
+      } catch { /* ignore */ }
+      return process.env.HINDSIGHT_API_KEY || "";
+    })();
+
+    const execEnv = {
+      ...process.env,
+      PYTHONPATH: path.join(HERMES_HOME, "hermes-agent"),
+      ...(apiKey ? { HINDSIGHT_API_KEY: apiKey } : {}),
+    };
+
+    exec(cmd, { timeout: timeoutMs, env: execEnv, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error && !stdout) {
+        reject(new Error(stderr || error.message));
+        return;
       }
-    );
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        reject(new Error("Invalid JSON from bridge: " + stdout.slice(0, 200)));
+      }
+    });
   });
 }
 
@@ -80,11 +109,16 @@ export async function GET(request: NextRequest) {
       case "health":
         result = await runBridgeAsync("health", {}, 10000);
         break;
-      case "count":
-        result = await runBridgeAsync("count", { bank });
-        break;
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+    }
+
+    // If the bridge returned an error, surface it properly
+    if (result && typeof result === "object" && "error" in result) {
+      return NextResponse.json(
+        { data: { available: false, error: (result as Record<string, unknown>).error, memories: [] } },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json<ApiResponse<Record<string, unknown>>>({ data: result });

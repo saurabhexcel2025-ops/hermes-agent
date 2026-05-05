@@ -20,6 +20,7 @@ jest.mock("fs", () => ({
 jest.mock("@/lib/hermes", () => ({
   HERMES_HOME: "/tmp/test-hermes",
   PATHS: { config: "/tmp/test-hermes/config.yaml", backups: "/tmp/test-hermes/backups" },
+  HERMES_PATHS: { config: "/tmp/test-hermes/config.yaml", backups: "/tmp/test-hermes/backups" },
 }));
 
 jest.mock("@/lib/api-logger", () => ({

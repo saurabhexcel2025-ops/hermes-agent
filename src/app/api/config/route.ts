@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import yaml from "js-yaml";
 
-import { PATHS } from "@/lib/hermes";
+import { HERMES_PATHS } from "@/lib/hermes";
 import { logApiError } from "@/lib/api-logger";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
-const CONFIG_PATH = PATHS.config;
+const CONFIG_PATH = HERMES_PATHS.config;
 
 function parseConfig(): Record<string, unknown> {
   if (!existsSync(CONFIG_PATH)) {
@@ -85,7 +85,7 @@ export async function PUT(request: NextRequest) {
 
     // Create backup
     if (existsSync(CONFIG_PATH)) {
-      const backupDir = PATHS.backups;
+      const backupDir = HERMES_PATHS.backups;
       mkdirSync(backupDir, { recursive: true });
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const backupPath = `${backupDir}/config.yaml.${timestamp}.bak`;

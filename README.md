@@ -81,6 +81,10 @@ A command centre dashboard for [Hermes Agent](https://github.com/NousResearch/he
 
 | **Story Weaver** | Collaborative AI fiction — create worlds, write chapters, build stories |
 
+| **Kanban Board** | Multi-agent coordination board with drag-and-drop cards, WIP limits, per-card goal loops, and mission linkage |
+
+| **Team Management** | Define agent teams with leader/specialist/reviewer roles, assign cards to team members, track board membership |
+
 
 
 
@@ -835,7 +839,10 @@ control-hub/
 │   │   ├── config/             # Config editor (27+ sections)
 
 
-│   │   ├── missions/           # Mission dispatch + tracking
+│   │   ├── kanban/              # Multi-agent Kanban + Teams
+│   │   ├── page.tsx        # Board, columns, cards, goal loops
+│   │   └── teams/page.tsx  # Team CRUD, member management
+│   ├── missions/           # Mission dispatch + tracking
 
 
 │   │   ├── cron/               # Cron job manager

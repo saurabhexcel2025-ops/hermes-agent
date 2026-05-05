@@ -11,7 +11,7 @@ test.describe("Agents page", () => {
   test("shows profile cards", async ({ page }) => {
     await page.goto("/agent/agents");
     // Should show at least the default profile "Bob"
-    await expect(page.getByText("Bob")).toBeVisible();
+    await expect(page.getByText("Bob").first()).toBeVisible();
   });
 
   test("New Agent button is visible", async ({ page }) => {

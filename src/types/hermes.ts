@@ -818,8 +818,134 @@ export interface PackageBundle {
 
 
 
-// ── UI Component Props ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// Kanban — Multi-Agent Coordination Kanban Layer
+// ═══════════════════════════════════════════════════════════════
 
+// ── Team ───────────────────────────────────────────────────────
+export interface TeamMember {
+  profileId: string;
+  role: "leader" | "specialist" | "reviewer" | "observer";
+  joinedAt: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  leaderProfileId: string;
+  members: TeamMember[];
+  boardIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Kanban Card Status ─────────────────────────────────────────
+export type KanbanCardStatus =
+  | "backlog"
+  | "todo"
+  | "in_progress"
+  | "review"
+  | "done"
+  | "blocked";
+
+// ── Kanban Column ──────────────────────────────────────────────
+export interface KanbanColumn {
+  id: string;
+  boardId?: string;
+  title: string;
+  color: AccentColor;
+  position: number;
+  wipLimit: number | null;
+  cardIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ── Kanban Card ────────────────────────────────────────────────
+export interface KanbanCard {
+  id: string;
+  title: string;
+  description: string;
+  columnId: string;
+  boardId: string;
+  position: number;
+  status: KanbanCardStatus;
+  assigneeProfileId: string | null;
+  goalIndices: number[];
+  missionIds: string[];
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Kanban Board ───────────────────────────────────────────────
+export interface KanbanBoard {
+  id: string;
+  name: string;
+  description: string;
+  columnIds: string[];
+  teamId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Goal Session ─────────────────────────────────────────────
+export type GoalLoopMode = "sequential" | "parallel";
+export type GoalSessionStatus =
+  | "active"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface GoalStep {
+  index: number;
+  goal: string;
+  status: "pending" | "active" | "done" | "failed" | "skipped";
+  missionId: string | null;
+  assignedProfileId: string | null;
+  completedAt: string | null;
+  error: string | null;
+}
+
+export interface GoalSession {
+  id: string;
+  boardId: string;
+  cardId: string;
+  goalLoopMode: GoalLoopMode;
+  goals: string[];
+  currentGoalIndex: number;
+  steps: GoalStep[];
+  status: GoalSessionStatus;
+  coordinatorMissionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Kanban Full Document ───────────────────────────────────────
+export interface KanbanDocument {
+  board: KanbanBoard;
+  columns: Record<string, KanbanColumn>;
+  cards: Record<string, KanbanCard>;
+}
+
+// ── API Response shapes ────────────────────────────────────────
+export interface KanbanBoardsResponse {
+  boards: KanbanBoard[];
+}
+
+export interface KanbanBoardResponse {
+  board: KanbanBoard;
+  columns: Record<string, KanbanColumn>;
+  cards: Record<string, KanbanCard>;
+}
+
+export interface TeamsResponse {
+  teams: Team[];
+}
+
+// ── UI Component Props ─────────────────────────────────────────
 export type StatusLevel = "online" | "warning" | "error" | "idle";
 
 

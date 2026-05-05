@@ -16,12 +16,21 @@ jest.mock("fs", () => ({
 
 jest.mock("@/lib/hermes", () => ({
   HERMES_HOME: "/tmp/test-hermes",
-  PATHS: {
+  HERMES_PATHS: {
+    soul: "/tmp/test-hermes/SOUL.md",
     config: "/tmp/test-hermes/config.yaml",
     env: "/tmp/test-hermes/.env",
+    skills: "/tmp/test-hermes/skills",
     sessions: "/tmp/test-hermes/sessions",
     logs: "/tmp/test-hermes/logs",
+    memoryDb: "/tmp/test-hermes/memory_store.db",
     cronJobs: "/tmp/test-hermes/cron/jobs.json",
+    backups: "/tmp/test-hermes/backups",
+    hermes: "/tmp/test-hermes/HERMES.md",
+    agents: "/tmp/test-hermes/AGENTS.md",
+    profiles: "/tmp/test-hermes/profiles",
+    userMd: "/tmp/test-hermes/.env",
+    memoryMd: "/tmp/test-hermes/memory_store.db",
   },
 }));
 
@@ -60,6 +69,7 @@ describe("GET /api/gateway", () => {
     mockExistsSync.mockImplementation((p: string) => {
       if (p.endsWith("config.yaml")) return true;
       if (p.endsWith(".env")) return true;
+      if (p.endsWith("gateway.log")) return false;
       return false;
     });
     mockReadFileSync.mockReturnValue("platform_toolsets:\n  cli:\n    - terminal\n");

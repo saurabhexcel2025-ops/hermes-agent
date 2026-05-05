@@ -33,6 +33,9 @@ cd "$APP_DIR"
 PORT="${PORT:-3000}"
 HOST="${HOST:-0.0.0.0}"
 
+# Always enable the Deploy API for local self-hosted use
+export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
+
 # ── Stop Existing Server ─────────────────────────────────────
 log "Stopping server on port $PORT..."
 stop_port() {
@@ -56,7 +59,8 @@ rm -f "$PID_FILE"
 # ── Start Server ─────────────────────────────────────────────
 log "Starting server on $HOST:$PORT..."
 # Use plain & — NOT nohup (causes agent terminal freeze)
-node node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
+CH_ENABLE_DEPLOY_API=true \
+  node node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
     >>"$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$PID_FILE"

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import * as yaml from "js-yaml";
 
-import { PATHS } from "@/lib/hermes";
+import { HERMES_PATHS } from "@/lib/hermes";
 import { logApiError } from "@/lib/api-logger";
-const CONFIG_PATH = PATHS.config;
+const CONFIG_PATH = HERMES_PATHS.config;
 
 interface PersonalityData {
   name: string;

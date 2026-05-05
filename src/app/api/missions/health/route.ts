@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { execSync } from "child_process";
-import { PATHS } from "@/lib/hermes";
+import { HERMES_PATHS, PATHS } from "@/lib/hermes";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { logApiError } from "@/lib/api-logger";
 
 const DATA_DIR = PATHS.missions;
-const CRON_PATH = PATHS.cronJobs;
+const CRON_PATH = HERMES_PATHS.cronJobs;
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 interface HealthReport {

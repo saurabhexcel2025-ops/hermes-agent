@@ -9,8 +9,8 @@ const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 const jetbrainsMono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Control Hub | Hermes Agent",
-  description: "Monitor, update, and control the essence of your AI agent",
+  title: "Control Hub | Agent Dashboard",
+  description: "Monitor, update, and control your AI agent",
 };
 
 export default function RootLayout({
