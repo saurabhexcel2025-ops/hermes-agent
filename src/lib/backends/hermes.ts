@@ -6,7 +6,7 @@
 // is agnostic to whether this or any other backend is running.
 // ═══════════════════════════════════════════════════════════════
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { spawn } from "child_process";
 import * as yaml from "js-yaml";
@@ -139,7 +139,7 @@ export class HermesAgentBackend implements AgentBackend {
   async listProfiles(): Promise<AgentProfile[]> {
     try {
       if (!existsSync(PATHS.agentProfiles)) return [];
-      const entries = require("fs").readdirSync(PATHS.agentProfiles);
+      const entries = readdirSync(PATHS.agentProfiles);
       const profiles: AgentProfile[] = [];
       for (const id of entries) {
         const cfg = join(PATHS.agentProfiles, id, "config.yaml");

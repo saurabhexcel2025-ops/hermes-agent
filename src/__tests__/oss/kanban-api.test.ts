@@ -35,6 +35,7 @@ jest.mock("@/lib/api-logger", () => ({
     try { return JSON.parse(text); } catch { return null; }
   }),
   safeReadJsonFile: jest.fn((path: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     try { return JSON.parse(require("fs").readFileSync(path, "utf-8")); } catch { return null; }
   }),
 }));

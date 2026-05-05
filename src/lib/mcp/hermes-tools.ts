@@ -5,6 +5,7 @@
 // Registered in the tool registry so the UI can show Hermes tools
 // alongside Control Hub's own MCP tools.
 
+import { execSync } from "child_process";
 import type { ToolDefinition } from "../agent-backend/types";
 
 /**
@@ -37,7 +38,6 @@ export function hermesToolsToMcpTools(
 export function getHermesMcpCommand(): { command: string; args: string[] } | null {
   try {
     // Check if hermes-mcp is available
-    const { execSync } = require("child_process");
     try {
       execSync("which hermes-mcp", { stdio: "ignore" });
       return { command: "hermes-mcp", args: [] };

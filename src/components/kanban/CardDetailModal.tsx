@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useLayoutEffect } from "react";
 import {
   X,
   Plus,
@@ -72,15 +72,16 @@ export default function CardDetailModal({
   const [saving, setSaving] = useState(false);
   const [goalsExpanded, setGoalsExpanded] = useState(true);
 
-  useEffect(() => {
-    if (card) {
-      setTitle(card.title);
-      setDescription(card.description);
-      setStatus(card.status);
-      setAssigneeProfileId(card.assigneeProfileId ?? "");
-      setLabels(card.labels);
-      setGoals([]);
-    }
+  // Derive form state from card — when card changes (new card selected), useLayoutEffect
+  // forces a synchronous re-sync so the form reflects the new card's data.
+  useLayoutEffect(() => {
+    if (!card) return;
+    setTitle(card.title);
+    setDescription(card.description);
+    setStatus(card.status);
+    setAssigneeProfileId(card.assigneeProfileId ?? "");
+    setLabels(card.labels);
+    setGoals([]);
   }, [card]);
 
   if (!open || !card) return null;
