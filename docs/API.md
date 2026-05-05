@@ -20,14 +20,18 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/config` | `GET`, `PUT` | Read/update parsed config content. |
 | `/api/config/model` | `GET`, `PUT` | Read/update model settings. |
 | `/api/cron` | `GET`, `POST`, `PUT`, `DELETE` | Manage cron jobs. |
+| `/api/goals` | `GET`, `POST` | Manage goal sessions. |
 | `/api/gateway` | `GET` | Read gateway/platform status. |
+| `/api/kanban` | `GET`, `POST`, `PUT`, `DELETE` | Manage boards, columns, and cards. |
 | `/api/logs` | `GET` | Read recent Hermes logs. |
 | `/api/memory` | `GET`, `POST`, `PUT`, `DELETE` | Manage holographic memory facts. |
 | `/api/memory/hindsight` | `GET`, `POST` | Query/retain hindsight memory records. |
 | `/api/missions` | `GET`, `POST` | List and dispatch missions. |
 | `/api/missions/health` | `GET` | Mission subsystem health view. |
 | `/api/monitor` | `GET` | Aggregated system monitoring snapshot. |
+| `/api/organisations` | `GET`, `POST`, `PATCH`, `DELETE` | Manage organisations. |
 | `/api/personalities` | `GET`, `POST`, `PUT`, `DELETE` | Manage personality records. |
+| `/api/profiles` | `GET`, `POST` | List and create Control Hub profiles. |
 | `/api/sessions` | `GET` | List sessions with filters. |
 | `/api/sessions/[id]` | `GET` | Read one session transcript. |
 | `/api/skills` | `GET` | List skills inventory. |
@@ -36,6 +40,7 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/skills/[...path]` | `GET` | Read files under a skill tree. |
 | `/api/status` | `GET` | Basic readiness endpoint. |
 | `/api/stories` | `POST` | Create/update Story Weaver data. |
+| `/api/teams` | `GET`, `POST`, `PUT`, `DELETE` | Manage teams. |
 | `/api/templates` | `GET`, `POST` | List and create mission templates. |
 | `/api/tools` | `GET`, `PUT` | Read/update toolset configuration. |
 | `/api/update` | `GET`, `POST` | Check release status; run restart/release actions. |

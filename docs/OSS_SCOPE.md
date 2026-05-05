@@ -10,7 +10,7 @@ This repository ships **Control Hub OSS**: a Next.js control plane for [Hermes A
 
 
 
-- Dashboard, missions (CRUD, dispatch), cron against Hermes `jobs.json`, sessions, memory (Hindsight / Holographic / None where supported), gateway, logs, config, skills, agent behaviour, personalities, Rec Room / Story Weaver (where present in this repo).
+- Dashboard, missions (CRUD, dispatch), cron against Hermes `jobs.json`, sessions, memory (Hindsight / Holographic / None where supported), gateway, logs, config, skills, agent behaviour, personalities, Rec Room / Story Weaver (where present in this repo), **Organisations**, **Teams**, and **Kanban** (SQLite-backed multi-board with `KanbanAdapter` interface).
 
 - Shared packages: `@agent-control-hub/schema`, `@agent-control-hub/config` (vendored under `packages/`).
 

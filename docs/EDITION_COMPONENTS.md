@@ -14,6 +14,8 @@ This repository documents and tests only the OSS product surface.
 - Logs
 - Agent behavior and tools management
 - Rec Room activities
+- **Orchestration**: Organisations and Teams management
+- **Kanban Board**: Multi-board kanban with custom columns, WIP limits, and card management
 
 ## API Areas
 

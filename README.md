@@ -46,7 +46,7 @@ A command centre dashboard for [Hermes Agent](https://github.com/NousResearch/he
 | **Missions** | Built-in templates and custom templates within the OSS scope ([docs/OSS_SCOPE.md](docs/OSS_SCOPE.md)) |
 
 
-| **Agent Profiles** | QA, DevOps, SWE, Data, Data Science, Ops, Creative, Support specialists |
+| **Agent Profiles** | QA, DevOps, and SWE specialist profiles |
 
 
 | **Cron Manager** | Schedule, edit, and monitor recurring tasks (1m to 7d intervals) |
@@ -125,13 +125,13 @@ bash scripts/install.sh
 The installer will:
 
 
-1. Check prerequisites (Node.js 20+, Hermes agent)
+1. Check prerequisites (Node.js 18+, Hermes agent)
 
 
 2. Install dependencies and build
 
 
-3. Create 8 specialist agent profiles
+3. Create 3 specialist agent profiles (QA Engineer, DevOps Engineer, SWE Engineer)
 
 
 4. Optionally set up Hindsight memory (PostgreSQL + semantic search)
@@ -224,7 +224,7 @@ If `npm run start` fails because port 3000 is taken, stop the old server first (
 | `CH_ENABLE_DEPLOY_API` | Set to `false` to block `POST /api/update` even in development. In **production**, deploy is off unless you set this to `true`. |
 
 
-| `CH_UPDATE_GIT_BRANCH` | Branch for git pull/reset (default `main`; use `dev` if that matches your workflow). |
+| `CH_UPDATE_GIT_BRANCH` | Branch for git pull/reset (default `dev`) |
 
 
 | `CH_ALLOWED_DEV_ORIGINS` | Comma-separated origins allowed with Next dev (see `next.config.ts`). |
@@ -386,7 +386,7 @@ The dashboard automatically detects your configured provider and adapts the Memo
 
 
 
-8 specialist profiles are created during install:
+3 specialist profiles are created during install:
 
 
 
@@ -398,33 +398,12 @@ The dashboard automatically detects your configured provider and adapts the Memo
 |---------|-------|--------|
 
 
-| QA Engineer | Testing, bug reproduction | 75 enabled |
+ | QA Engineer | Testing, bug reproduction | 75 enabled |
+ | DevOps Engineer | Infrastructure, CI/CD | 72 enabled |
+ | SWE Engineer | Software development | 74 enabled |
 
 
-| DevOps Engineer | Infrastructure, CI/CD | 72 enabled |
-
-
-| SWE Engineer | Software development | 74 enabled |
-
-
-| Data Engineer | Pipelines, ETL | 74 enabled |
-
-
-| Data Scientist | ML/AI research | 75 enabled |
-
-
-| Ops Director | Operations, coordination | 85 enabled |
-
-
-| Creative Lead | Content, design | 88 enabled |
-
-
-| Support Agent | User support, triage | 74 enabled |
-
-
-
-
-
+Each profile has its own SOUL.md, AGENTS.md, USER.md, MEMORY.md, and skill/tool configuration. All profiles share the main agent's API keys.
 Each profile has its own SOUL.md, AGENTS.md, USER.md, MEMORY.md, and skill/tool configuration. All profiles share the main agent's API keys.
 
 
@@ -839,10 +818,11 @@ control-hub/
 │   │   ├── config/             # Config editor (27+ sections)
 
 
-│   │   ├── kanban/              # Multi-agent Kanban + Teams
-│   │   ├── page.tsx        # Board, columns, cards, goal loops
-│   │   └── teams/page.tsx  # Team CRUD, member management
-│   ├── missions/           # Mission dispatch + tracking
+│   │   ├── kanban/            # Kanban board (columns, cards, WIP limits)
+│   │   ├── orchestration/     # Teams + Organisations
+│   │   │   ├── teams/page.tsx # Team CRUD, member management
+│   │   │   └── organisations/page.tsx # Organisation CRUD
+│   ├── missions/             # Mission dispatch + tracking
 
 
 │   │   ├── cron/               # Cron job manager

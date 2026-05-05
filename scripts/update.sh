@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 LOCK_FILE="${TMPDIR:-/tmp}/ch-deploy.lock"
 LOG_FILE="$HOME/.hermes/logs/ch-update.log"
-CH_BRANCH="${CH_UPDATE_GIT_BRANCH:-main}"
+CH_BRANCH="${CH_UPDATE_GIT_BRANCH:-dev}"
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"

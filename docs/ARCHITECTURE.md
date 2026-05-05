@@ -17,7 +17,10 @@ hermes-control-hub/
 ├── src/
 │   ├── app/              # Pages and API routes
 │   ├── components/       # UI components
-│   ├── lib/              # Utilities, auth, filesystem helpers
+│   ├── lib/              # Utilities, auth, filesystem helpers, repositories
+│   ├── lib/backends/     # Agent backend adapters (Hermes, future agents)
+│   ├── lib/kanban-adapter/ # Kanban adapter interface + DefaultKanbanAdapter
+│   ├── lib/db/           # SQLite connection, migrations, seeds
 │   ├── types/            # Shared TypeScript contracts
 │   └── __tests__/oss/    # OSS contract and behavior tests
 ├── docs/                 # Operator and contributor documentation
