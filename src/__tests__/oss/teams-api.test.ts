@@ -52,6 +52,11 @@ jest.mock("@/lib/audit-log", () => ({
   appendAuditLine: jest.fn(),
 }));
 
+jest.mock("@/lib/kanban-repository", () => {
+  const updateBoard = jest.fn();
+  return { updateBoard, __updateBoard: updateBoard };
+});
+
 // Mock teams-repository with require() factory
 jest.mock("@/lib/teams-repository", () => {
   const listTeams = jest.fn();
@@ -82,6 +87,11 @@ jest.mock("@/lib/teams-repository", () => {
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const repo = require("@/lib/teams-repository") as Record<string, unknown>;
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const kanbanRepo = require("@/lib/kanban-repository") as Record<string, unknown>;
+const mockUpdateBoard = kanbanRepo.__updateBoard as jest.Mock;
+
 const mockListTeams = repo.__listTeams as jest.Mock;
 const mockGetTeam = repo.__getTeam as jest.Mock;
 const mockCreateTeam = repo.__createTeam as jest.Mock;
@@ -100,6 +110,7 @@ beforeAll(() => {
   mockDeleteTeam.mockReturnValue(null);
   mockAddTeamMember.mockReturnValue(null);
   mockRemoveTeamMember.mockReturnValue(null);
+  mockUpdateBoard.mockReturnValue(null);
 });
 
 beforeEach(() => {
@@ -409,7 +420,7 @@ describe("GET /api/teams — filter by boardId", () => {
 describe("POST /api/teams — link-board", () => {
   it("links a board to a team", async () => {
     mockGetTeam.mockReturnValue(TEAM_DATA);
-    mockUpdateTeam.mockReturnValue({ ...TEAM_DATA, boardIds: [...TEAM_DATA.boardIds, "board_new"] });
+    mockUpdateBoard.mockReturnValue({ id: "board_new", name: "Test Board" });
     const res = await postRoute("/api/teams", {
       action: "link-board",
       teamId: "team_test123",

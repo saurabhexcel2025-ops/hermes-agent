@@ -8,7 +8,7 @@ import {
   ScrollText, Sparkles, Rocket, Volume2, Mic, GitBranch,
   RotateCcw, ShieldCheck, MessageSquare, Lock, Code,
   BookOpen, Workflow, CheckSquare,
-  FolderOpen, Users, Layout, Kanban,
+  FolderOpen, Users, Layout, Kanban, Building2,
 } from "lucide-react";
 
 import type { AccentColor } from "@/types/hermes";
@@ -42,8 +42,6 @@ export const mainSections: SidebarSection[] = [
     links: [
       { icon: Zap, label: "Dashboard", href: "/", color: "cyan" },
       { icon: Rocket, label: "Missions", href: "/missions", color: "cyan" },
-      { icon: Layout, label: "Kanban", href: "/kanban", color: "purple" },
-      { icon: Users, label: "Teams", href: "/kanban/teams", color: "purple" },
       { icon: Workflow, label: "Operations", href: "/operations", color: "purple" },
       { icon: CheckSquare, label: "Task Lists", href: "/task-lists", color: "orange" },
       { icon: ListTodo, label: "Cron", href: "/cron", color: "orange" },
@@ -53,6 +51,14 @@ export const mainSections: SidebarSection[] = [
       { icon: Globe, label: "Gateway", href: "/gateway", color: "cyan" },
       { icon: ScrollText, label: "Logs", href: "/logs", color: "cyan" },
       { icon: MessageSquare, label: "Command Room", href: "/command-room", color: "purple" },
+    ],
+  },
+  {
+    label: "Orchestration",
+    links: [
+      { icon: Building2, label: "Organisation", href: "/orchestration/organisations", color: "purple" },
+      { icon: Users, label: "Teams", href: "/orchestration/teams", color: "purple" },
+      { icon: Layout, label: "Kanban", href: "/kanban", color: "purple" },
     ],
   },
   {

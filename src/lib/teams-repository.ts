@@ -111,6 +111,7 @@ export function updateTeam(
     name?: string;
     description?: string;
     leaderProfileId?: string;
+    boardIds?: string[];
   }
 ): Team | null {
   const existing = getTeam(id);
@@ -130,6 +131,9 @@ export function updateTeam(
           "UPDATE team_members SET role = 'specialist' WHERE team_id = ? AND role = 'leader'"
         )
         .run(id);
+    }
+    if (updates.boardIds !== undefined) {
+      sets.push("board_ids = ?"); vals.push(JSON.stringify(updates.boardIds));
     }
     vals.push(id);
     db()
