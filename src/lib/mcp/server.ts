@@ -6,7 +6,6 @@
 // profiles) as MCP tools so any MCP-capable agent can use them.
 
 import { stdin, stdout } from "process";
-import { readFileSync } from "fs";
 
 interface MCPRequest {
   jsonrpc: "2.0";

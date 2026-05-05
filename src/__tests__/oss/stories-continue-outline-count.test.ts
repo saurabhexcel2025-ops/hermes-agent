@@ -158,11 +158,11 @@ describe("/api/stories continue outline count validation", () => {
       expect(res.status).toBe(200);
       expect(data.data).toBeDefined();
 
-      // Verify saveStory was called
-      expect(mockSaveStory).toHaveBeenCalled();
+      // Verify updateStory was called (saveStory is not used in continue action)
+      expect(mockUpdateStory).toHaveBeenCalled();
 
-      // The saved story should have 4 chapters total (1 original + 3 new, not 1 + 5 = 6)
-      const savedStory = mockSaveStory.mock.calls[0][0];
+      // The updated story should have 4 chapters total (1 original + 3 new, not 1 + 5 = 6)
+      const savedStory = mockUpdateStory.mock.calls[0][1] as { chapters: Array<unknown>; storyArc: { chapterOutlines: Array<unknown> } };
       expect(savedStory.chapters.length).toBe(4);
       expect(savedStory.storyArc.chapterOutlines.length).toBe(4);
     } finally {

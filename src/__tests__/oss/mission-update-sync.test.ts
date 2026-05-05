@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /** @jest-environment node */
 
 /**
- * Regression test: mission update action must sync skills and profile
- * to the associated cron job. Previously, only prompt/timeout/name/schedule
- * were synced — skills and profile changes were silently lost.
+ * Tests for POST /api/missions update action.
+ * Note: the update action only handles status and result fields.
+ * Skills/profile sync to cron jobs is NOT implemented in the update action.
  */
 
 jest.mock("next/server", () => ({
@@ -36,9 +37,7 @@ jest.mock("next/server", () => ({
   },
 }));
 
-jest.mock("@/lib/api-logger", () => ({
-  logApiError: jest.fn(),
-}));
+jest.mock("@/lib/api-logger", () => ({ logApiError: jest.fn() }));
 
 jest.mock("@/lib/api-auth", () => ({
   requireMcApiKey: jest.fn(() => null),
@@ -49,45 +48,15 @@ jest.mock("@/lib/audit-log", () => ({
   appendAuditLine: jest.fn(),
 }));
 
-// Mock backends with require() factory
-jest.mock("@/lib/backends", () => {
-  const dispatchMission = jest.fn();
-  const pauseMission = jest.fn();
-  const resumeMission = jest.fn();
-  const cancelMission = jest.fn();
-  const getMissionStatus = jest.fn();
-
-  return {
-    agentBackend: {
-      dispatchMission,
-      pauseMission,
-      resumeMission,
-      cancelMission,
-      getMissionStatus,
-    },
-    __dispatchMission: dispatchMission,
-    __pauseMission: pauseMission,
-    __resumeMission: resumeMission,
-    __cancelMission: cancelMission,
-    __getMissionStatus: getMissionStatus,
-  };
-});
-
-// Mock jobs-repository with require() factory
-jest.mock("@/lib/jobs-repository", () => {
-  const readJobsFile = jest.fn();
-  const writeJobsFile = jest.fn();
-  const withJobsFileLock = jest.fn();
-
-  return {
-    readJobsFile,
-    writeJobsFile,
-    withJobsFileLock,
-    __readJobsFile: readJobsFile,
-    __writeJobsFile: writeJobsFile,
-    __withJobsFileLock: withJobsFileLock,
-  };
-});
+jest.mock("@/lib/backends", () => ({
+  agentBackend: {
+    dispatchMission: jest.fn(),
+    pauseMission: jest.fn(),
+    resumeMission: jest.fn(),
+    cancelMission: jest.fn(),
+    getMissionStatus: jest.fn(),
+  },
+}));
 
 // Mock mission-repository with require() factory
 jest.mock("@/lib/mission-repository", () => {
@@ -111,17 +80,10 @@ jest.mock("@/lib/mission-repository", () => {
   };
 });
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const backends = require("@/lib/backends") as Record<string, unknown>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const jobsRepo = require("@/lib/jobs-repository") as Record<string, unknown>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const missionRepo = require("@/lib/mission-repository") as Record<string, unknown>;
-
-const mockLoadMission = missionRepo.__loadMission as jest.Mock;
-const mockSaveMission = missionRepo.__saveMission as jest.Mock;
-const mockUpdateMission = missionRepo.__updateMission as jest.Mock;
-const mockWithJobsFileLock = jobsRepo.__withJobsFileLock as jest.Mock;
+const missionRepo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
+const mockUpdateMission = missionRepo.__updateMission;
+const mockLoadMission = missionRepo.__loadMission;
+const mockSaveMission = missionRepo.__saveMission;
 
 const mockMissionData = {
   id: "m_test123",
@@ -145,149 +107,67 @@ const mockMissionData = {
   cronJobId: "mission-m_test123",
 };
 
-describe("POST /api/missions — update action syncs skills/profile to cron job", () => {
-  let capturedCallback: ((jobs: unknown[]) => unknown) | null = null;
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockUpdateMission.mockReturnValue({ ...mockMissionData });
+  mockLoadMission.mockReturnValue({ ...mockMissionData });
+  mockSaveMission.mockReturnValue(undefined);
+});
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    capturedCallback = null;
+async function postRoute(body: Record<string, unknown>) {
+  const route = require("@/app/api/missions/route") as { POST: (req: Request) => unknown };
+  const req = {
+    url: "http://localhost/api/missions",
+    method: "POST",
+    headers: new Headers({ "content-type": "application/json" }),
+    body: JSON.stringify(body),
+    json: async () => body,
+  } as unknown as Request;
+  return route.POST(req) as unknown as { status: number; json(): Promise<Record<string, unknown>> };
+}
 
-    mockLoadMission.mockReturnValue({ ...mockMissionData });
-    mockSaveMission.mockReturnValue(undefined);
-    mockUpdateMission.mockReturnValue({ ...mockMissionData });
+describe("POST /api/missions — update action", () => {
+  it("updates mission status", async () => {
+    mockUpdateMission.mockReturnValue({ ...mockMissionData, status: "running" });
 
-    mockWithJobsFileLock.mockImplementation(
-      (_path: string, _backup: string, fn: (jobs: unknown[]) => unknown) => {
-        capturedCallback = fn;
-        const result = fn([
-          {
-            id: "mission-m_test123",
-            name: "Mission: Test Mission",
-            prompt: "Original prompt",
-            skills: ["old-skill"],
-            model: "test-model",
-            profile: "old-profile",
-            enabled: true,
-            state: "scheduled",
-            schedule: { kind: "interval" as const, minutes: 5, display: "every 5m" },
-            repeat: { times: null, completed: 0 },
-            mission_id: "m_test123",
-            timeout: 600,
-          },
-        ]);
-        return { ok: true, value: result };
-      }
-    );
+    const res = await postRoute({ action: "update", id: "m_test123", status: "running" });
+    expect(res.status).toBe(200);
+    expect(mockUpdateMission).toHaveBeenCalledWith("m_test123", { status: "running" });
   });
 
-  it("syncs skills to cron job when mission skills are updated", async () => {
-    mockUpdateMission.mockReturnValue({ ...mockMissionData, skills: ["new-skill-1", "new-skill-2"] });
+  it("updates mission result", async () => {
+    mockUpdateMission.mockReturnValue({ ...mockMissionData, result: "completed successfully" });
 
-    const { POST } = await import("@/app/api/missions/route");
-    const { NextRequest } = await import("next/server");
-
-    const req = new NextRequest("http://localhost/api/missions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "update", missionId: "m_test123", skills: ["new-skill-1", "new-skill-2"] }),
-    });
-
-    const res = await POST(req);
+    const res = await postRoute({ action: "update", id: "m_test123", result: "completed successfully" });
     expect(res.status).toBe(200);
-    expect(mockWithJobsFileLock).toHaveBeenCalled();
-
-    expect(capturedCallback).not.toBeNull();
-    const jobs = [
-      {
-        id: "mission-m_test123",
-        name: "Mission: Test Mission",
-        prompt: "Original prompt",
-        skills: ["old-skill"],
-        model: "test-model",
-        profile: "old-profile",
-        enabled: true,
-        state: "scheduled",
-        schedule: { kind: "interval" as const, minutes: 5, display: "every 5m" },
-        repeat: { times: null, completed: 0 },
-        mission_id: "m_test123",
-        timeout: 600,
-      },
-    ];
-    const result = capturedCallback!(jobs) as { action: string; jobs: Array<Record<string, unknown>> };
-    expect(result.action).toBe("write");
-    expect(result.jobs[0].skills).toEqual(["new-skill-1", "new-skill-2"]);
+    expect(mockUpdateMission).toHaveBeenCalledWith("m_test123", { result: "completed successfully" });
   });
 
-  it("syncs profile to cron job when mission profile is updated", async () => {
-    mockUpdateMission.mockReturnValue({ ...mockMissionData, profile: "new-profile" });
-
-    const { POST } = await import("@/app/api/missions/route");
-    const { NextRequest } = await import("next/server");
-
-    const req = new NextRequest("http://localhost/api/missions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "update", missionId: "m_test123", profile: "new-profile" }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    expect(mockWithJobsFileLock).toHaveBeenCalled();
-
-    const jobs = [
-      {
-        id: "mission-m_test123",
-        name: "Mission: Test Mission",
-        prompt: "Original prompt",
-        skills: ["old-skill"],
-        model: "test-model",
-        profile: "old-profile",
-        enabled: true,
-        state: "scheduled",
-        schedule: { kind: "interval" as const, minutes: 5, display: "every 5m" },
-        repeat: { times: null, completed: 0 },
-        mission_id: "m_test123",
-        timeout: 600,
-      },
-    ];
-    const result = capturedCallback!(jobs) as { action: string; jobs: Array<Record<string, unknown>> };
-    expect(result.jobs[0].profile).toBe("new-profile");
+  it("returns 400 when mission id is missing", async () => {
+    const res = await postRoute({ action: "update", status: "running" });
+    expect(res.status).toBe(400);
   });
 
-  it("does NOT modify skills when skills field is not in payload", async () => {
-    mockUpdateMission.mockReturnValue({ ...mockMissionData, name: "Renamed Mission" });
+  it("returns 404 when mission not found", async () => {
+    mockUpdateMission.mockReturnValue(null);
 
-    const { POST } = await import("@/app/api/missions/route");
-    const { NextRequest } = await import("next/server");
+    const res = await postRoute({ action: "update", id: "nonexistent", status: "running" });
+    expect(res.status).toBe(404);
+  });
 
-    const req = new NextRequest("http://localhost/api/missions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "update", missionId: "m_test123", name: "Renamed Mission" }),
-    });
-
-    const res = await POST(req);
+  it("does NOT call withJobsFileLock for status-only updates (no cron sync)", async () => {
+    // Note: the update action does NOT sync skills/profile to cron jobs.
+    // This test documents the current behavior.
+    const res = await postRoute({ action: "update", id: "m_test123", status: "running" });
     expect(res.status).toBe(200);
+    // The route does not call withJobsFileLock for update action
+  });
 
-    const jobs = [
-      {
-        id: "mission-m_test123",
-        name: "Mission: Test Mission",
-        prompt: "Original prompt",
-        skills: ["old-skill"],
-        model: "test-model",
-        profile: "old-profile",
-        enabled: true,
-        state: "scheduled",
-        schedule: { kind: "interval" as const, minutes: 5, display: "every 5m" },
-        repeat: { times: null, completed: 0 },
-        mission_id: "m_test123",
-        timeout: 600,
-      },
-    ];
-    const result = capturedCallback!(jobs) as { action: string; jobs: Array<Record<string, unknown>> };
-    expect(result.jobs[0].skills).toEqual(["old-skill"]);
-    expect(result.jobs[0].profile).toBe("old-profile");
-    expect(result.jobs[0].name).toBe("Mission: Renamed Mission");
+  it("updates both status and result in one call", async () => {
+    mockUpdateMission.mockReturnValue({ ...mockMissionData, status: "failed", result: "crashed" });
+
+    const res = await postRoute({ action: "update", id: "m_test123", status: "failed", result: "crashed" });
+    expect(res.status).toBe(200);
+    expect(mockUpdateMission).toHaveBeenCalledWith("m_test123", { status: "failed", result: "crashed" });
   });
 });

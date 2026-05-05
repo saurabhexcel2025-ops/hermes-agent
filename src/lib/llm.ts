@@ -94,9 +94,11 @@ export async function callLLM(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (lastError.name === "AbortError") {
-        throw new Error(
-          "LLM request timed out (5 min). Please try again."
-        );
+        // Retry on timeout — treat it like any other retryable error
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 3_000 * attempt));
+          continue;
+        }
       }
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, 3_000 * attempt));

@@ -118,10 +118,11 @@ const SESSION_DATA = {
 describe("GET /api/goals", () => {
   beforeAll(() => {
     mockGoalsRepo.listGoalSessions.mockReturnValue([]);
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([]);
     mockGoalsRepo.getGoalSession.mockReturnValue(null);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
     mockGoalsRepo.listGoalSessions.mockClear();
     mockGoalsRepo.listGoalSessionsByCard.mockClear();
     mockGoalsRepo.getGoalSession.mockClear();
@@ -169,8 +170,17 @@ describe("GET /api/goals", () => {
 // ─── POST /api/goals — start ─────────────────────────────────────────────────
 
 describe("POST /api/goals — start", () => {
+  beforeAll(() => {
+    // Default: no existing sessions for any card
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([]);
+  });
+
+  beforeEach(() => {
+    mockGoalsRepo.listGoalSessionsByCard.mockClear();
+  });
+
   it("creates a new goal session", async () => {
-    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(null);
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([]);
     mockGoalsRepo.createGoalSession.mockReturnValue(SESSION_DATA);
     const res = await postRoute({
       action: "start",
@@ -221,7 +231,7 @@ describe("POST /api/goals — start", () => {
   });
 
   it("rejects start when an active session already exists for the same card", async () => {
-    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(SESSION_DATA);
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([SESSION_DATA]);
     const res = await postRoute({
       action: "start",
       boardId: "board_abc",
@@ -233,7 +243,7 @@ describe("POST /api/goals — start", () => {
   });
 
   it("allows start when only cancelled sessions exist for the same card", async () => {
-    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(null);
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([]);
     mockGoalsRepo.createGoalSession.mockReturnValue(SESSION_DATA);
     const res = await postRoute({
       action: "start",
@@ -246,7 +256,7 @@ describe("POST /api/goals — start", () => {
   });
 
   it("creates session in parallel mode", async () => {
-    mockGoalsRepo.getActiveGoalSessionForCard.mockReturnValue(null);
+    mockGoalsRepo.listGoalSessionsByCard.mockReturnValue([]);
     mockGoalsRepo.createGoalSession.mockReturnValue(SESSION_DATA);
     const res = await postRoute({
       action: "start",
