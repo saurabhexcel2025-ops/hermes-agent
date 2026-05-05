@@ -268,6 +268,11 @@ async function handleGenerateChapter(body: Record<string, unknown>): Promise<Nex
     return NextResponse.json({ data: { message: "All chapters complete", story: updated } });
   }
 
+  // Optimistically set "writing" status so the UI shows a blue pulse immediately
+  const optimisticChapters = [...story.chapters];
+  optimisticChapters[nextIdx] = { ...optimisticChapters[nextIdx], status: "writing", error: undefined };
+  updateStory(storyId as string, { chapters: optimisticChapters as typeof story.chapters });
+
   const nextNum = nextIdx + 1;
   const chapterOutline = ((story.storyArc ?? {}) as { chapterOutlines?: ChapterOutline[] }).chapterOutlines?.[nextIdx] ?? {
     number: nextNum, title: `Chapter ${nextNum}`, purpose: "Continue the story",
