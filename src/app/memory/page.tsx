@@ -49,18 +49,80 @@ function HolographicBrowser() {
         {data.total} facts stored — {data.dbSize > 0 ? (data.dbSize / 1024).toFixed(1) + " KB" : "Unknown size"}
       </div>
       <div className="space-y-3">
-        {data.facts.map((fact) => (
-          <div key={fact.id} className="rounded-xl border border-white/10 bg-dark-900/50 p-4">
-            <p className="text-sm text-white/70">{fact.content}</p>
-            <div className="flex items-center gap-2 mt-2 text-xs text-white/30">
-              <span className="bg-pink-500/10 text-pink-300 px-2 py-0.5 rounded">{fact.category}</span>
-              {fact.tags && <span>{fact.tags}</span>}
+        {data.facts.map((fact) => {
+          // Parse the raw Python dict string into clean fields
+          const parsed = parseHolographicFact(fact.content);
+          return (
+            <div key={fact.id} className="rounded-xl border border-white/10 bg-dark-900/50 p-4">
+              <p className="text-sm text-white/80 leading-relaxed">{parsed.text}</p>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${
+                  parsed.type === "observation" ? "bg-neon-cyan/15 text-neon-cyan" :
+                  parsed.type === "world" ? "bg-neon-purple/15 text-neon-purple" :
+                  parsed.type === "directive" ? "bg-neon-orange/15 text-neon-orange" :
+                  "bg-white/10 text-white/50"
+                }`}>
+                  {parsed.type}
+                </span>
+                {parsed.entities.length > 0 && (
+                  <span className="text-[10px] text-white/40">
+                    {parsed.entities}
+                  </span>
+                )}
+                {parsed.occurred && (
+                  <span className="text-[10px] text-white/30 ml-auto">
+                    {parsed.occurred}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
+}
+
+/** Parse a holographic fact dict string into clean display fields */
+function parseHolographicFact(raw: string): {
+  text: string;
+  type: string;
+  entities: string;
+  occurred: string;
+} {
+  try {
+    // Format: {'id': '...', 'text': '...', 'fact_type': '...', 'entities': '...', 'occurred_start': '...'}
+    const textMatch = raw.match(/'text':\s*'((?:[^'\\]|\\.)*)'/);
+    const typeMatch = raw.match(/'fact_type':\s*'([^']*)'/);
+    const entitiesMatch = raw.match(/'entities':\s*'([^']*)'/);
+    const occurredMatch = raw.match(/'occurred_start':\s*'([^']*)'/);
+
+    const text = textMatch ? textMatch[1].replace(/\\'/g, "'") : raw;
+    const type = typeMatch ? typeMatch[1] : "observation";
+    const entities = entitiesMatch ? entitiesMatch[1] : "";
+    const occurred = occurredMatch ? formatDate(occurredMatch[1]) : "";
+
+    return { text, type, entities, occurred };
+  } catch {
+    return { text: raw, type: "observation", entities: "", occurred: "" };
+  }
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
 }
 
 export default function MemoryPage() {

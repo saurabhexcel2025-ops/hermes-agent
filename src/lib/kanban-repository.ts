@@ -203,7 +203,14 @@ export function createCard(data: {
   const id = uuid();
   const ts = now();
   const position = data.position ?? 0;
-  const status = data.status ?? "todo";
+  // If no explicit status given, derive it from the destination column title
+  // so a card created in "In Progress" column is immediately in_progress, not todo.
+  const colTitle = data.columnId ? (getColumn(data.columnId)?.title ?? "(null)") : "(no-col)";
+  const explicitStatus = data.status ?? "(none)";
+  const derived = deriveStatusFromColumn(colTitle);
+  require("fs").writeFileSync("/tmp/kanban-debug.log", `[createCard] title=${data.title} colId=${data.columnId} colTitle=${colTitle} explicitStatus=${explicitStatus} derived=${derived}\n`, { flag: "a" });
+  const status = data.status
+    ?? (data.columnId ? deriveStatusFromColumn(getColumn(data.columnId)?.title ?? "") : "todo");
 
   inTransaction(() => {
     db()
@@ -275,10 +282,34 @@ export function moveCard(
 ): KanbanCard | null {
   const card = getCard(cardId);
   if (!card) return null;
+
+  // Derive status from destination column title so the UI gets the correct
+  // status after a drag-drop. Column titles are user-configurable but we
+  // recognise common naming conventions.
+  const destColumn = getColumn(toColumnId);
+  const status = destColumn ? deriveStatusFromColumn(destColumn.title) : undefined;
+
   return updateCard(cardId, {
     columnId: toColumnId,
     position: toPosition,
+    ...(status ? { status } : {}),
   });
+}
+
+// ── Status derivation ──────────────────────────────────────────────
+
+/** Maps a column title to a KanbanCardStatus. User-configurable via the UI. */
+export function deriveStatusFromColumn(title: string): KanbanCard["status"] {
+  const t = title.toLowerCase();
+  const result = /\bin\s*progress\b/i.test(t) ? "in_progress"
+    : /\breview\b|\bq[_\s]?a\b|\btesting\b/i.test(t) ? "review"
+    : /\bdone\b|\bcompleted\b|\bclosed\b/i.test(t) ? "done"
+    : /\bbacklog\b/i.test(t) ? "backlog"
+    : /\btodo\b|\bto[_\s]?do\b|\bto\s*do\b/i.test(t) ? "todo"
+    : /\bblocked\b/i.test(t) ? "blocked"
+    : "todo";
+  console.error(`[deriveStatusFromColumn] title=${JSON.stringify(title)} t=${JSON.stringify(t)} result=${result}`);
+  return result;
 }
 
 export function deleteCard(id: string): boolean {

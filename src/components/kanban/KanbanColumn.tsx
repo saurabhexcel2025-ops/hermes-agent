@@ -88,11 +88,11 @@ export default function KanbanColumn({
 
   return (
     <div
-      className={`flex flex-col rounded-xl border w-72 flex-shrink-0 max-h-full
+      className={`flex flex-col rounded-xl border max-h-[calc(100vh-220px)]
         ${ACCENT_GLOW[column.color] ?? "border-white/10 bg-white/5"}`}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div
             className={`w-2 h-2 rounded-full flex-shrink-0 ${COLOR_DOT[column.color] ?? "bg-white/40"}`}
@@ -120,10 +120,10 @@ export default function KanbanColumn({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+        <div className="flex items-center gap-1 flex-shrink-0 ml-2">
           {/* WIP indicator */}
           <div
-            className={`text-[11px] font-mono px-1.5 py-0.5 rounded
+            className={`text-[11px] font-mono px-1.5 py-0.5 rounded cursor-pointer
               ${wipExceeded ? "bg-red-500/20 text-red-400" : "text-white/40 bg-white/5"}`}
             onClick={() => setEditingWip(!editingWip)}
             title="WIP Limit"
@@ -166,7 +166,7 @@ export default function KanbanColumn({
         </div>
       </div>
 
-      {/* Cards list */}
+      {/* Cards list — scrollable body */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[80px]">
         {cards.length === 0 && !addingCard && (
           <p className="text-xs text-white/20 text-center py-6">No cards</p>
@@ -223,18 +223,6 @@ export default function KanbanColumn({
           </div>
         )}
       </div>
-
-      {/* Add card footer */}
-      {!addingCard && (
-        <button
-          className="flex items-center gap-1.5 px-3 py-2 text-xs text-white/30 hover:text-white/60
-            hover:bg-white/5 border-t border-white/5 transition-colors rounded-b-xl"
-          onClick={() => setAddingCard(true)}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add card
-        </button>
-      )}
     </div>
   );
 }

@@ -162,20 +162,18 @@ function JobCard({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-4 text-xs text-white/40 font-mono flex-wrap">
-              <span className="flex items-center gap-1">
+            <div className="flex items-center gap-3 text-xs text-white/40 font-mono">
+              <span className="flex items-center gap-1 shrink-0">
                 <Calendar className="w-3 h-3" />
                 {formatSchedule(job.schedule)}
               </span>
-              {job.model && (
-                <span className="flex items-center gap-1">
-                  <Cpu className="w-3 h-3" />
-                  {job.model}
-                </span>
-              )}
               {job.deliver && job.deliver !== "none" && (
-                <span className="flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3" />→ {job.deliver}
+                <span
+                  className="flex items-center gap-1 text-white/60 truncate max-w-[200px]"
+                  title={job.deliver}
+                >
+                  <MessageSquare className="w-3 h-3 shrink-0" />
+                  → {job.deliver.split(":").pop()}
                 </span>
               )}
             </div>

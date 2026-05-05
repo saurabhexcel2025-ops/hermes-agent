@@ -252,45 +252,45 @@ export default function KanbanBoard({
         </button>
       </div>
 
-      {/* Columns scroll area */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <div className="flex gap-3 h-full pb-2" style={{ minHeight: 400 }}>
-          {sortedColumns.map((col) => {
-            const colCards = col.cardIds
-              .map((id) => cards[id])
-              .filter(Boolean)
-              .sort((a, b) => a.position - b.position);
-
-            return (
-              <KanbanColumn
-                key={col.id}
-                column={col}
-                cards={colCards}
-                onCardClick={onStartGoalLoop}
-                onCardDelete={handleDeleteCard}
-                onAddCard={(title) => handleAddCard(col.id, title)}
-                onDeleteColumn={() => handleDeleteColumn(col.id)}
-                onUpdateColumn={(updates) => handleUpdateColumn(col.id, updates)}
-                goalSessions={goalSessions}
-              />
-            );
-          })}
-
-          {sortedColumns.length === 0 && (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-white/40 mb-3">No columns yet</p>
-                <button
-                  className="text-sm px-4 py-2 rounded-lg bg-neon-purple/10 text-neon-purple
-                    hover:bg-neon-purple/20 border border-neon-purple/20 transition-colors"
-                  onClick={handleAddColumn}
-                >
-                  Create first column
-                </button>
-              </div>
+      {/* 3-column responsive grid — no horizontal scroll */}
+      <div className="flex-1 overflow-y-auto">
+        {sortedColumns.length === 0 ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-white/40 mb-3">No columns yet</p>
+              <button
+                className="text-sm px-4 py-2 rounded-lg bg-neon-purple/10 text-neon-purple
+                  hover:bg-neon-purple/20 border border-neon-purple/20 transition-colors"
+                onClick={handleAddColumn}
+              >
+                Create first column
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
+            {sortedColumns.map((col) => {
+              const colCards = col.cardIds
+                .map((id) => cards[id])
+                .filter(Boolean)
+                .sort((a, b) => a.position - b.position);
+
+              return (
+                <KanbanColumn
+                  key={col.id}
+                  column={col}
+                  cards={colCards}
+                  onCardClick={onStartGoalLoop}
+                  onCardDelete={handleDeleteCard}
+                  onAddCard={(title) => handleAddCard(col.id, title)}
+                  onDeleteColumn={() => handleDeleteColumn(col.id)}
+                  onUpdateColumn={(updates) => handleUpdateColumn(col.id, updates)}
+                  goalSessions={goalSessions}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

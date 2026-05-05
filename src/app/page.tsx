@@ -569,13 +569,15 @@ export default function Dashboard() {
                   <div className="min-w-0 flex-1">
                     <div className="text-xs text-white/80 truncate">{job.name}</div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <IntervalSelector
-                        value={job.schedule}
-                        onChange={(v) => handleCronScheduleChange(job.id, v)}
-                        compact
-                      />
+                      <div className="flex-shrink-0">
+                        <IntervalSelector
+                          value={job.schedule}
+                          onChange={(v) => handleCronScheduleChange(job.id, v)}
+                          compact
+                        />
+                      </div>
                       {job.enabled && (
-                        <span className={`ml-2 ${
+                        <span className={`text-xs truncate ml-2 ${
                           job.state === "running"
                             ? "text-neon-green"
                             : job.lastStatus === "ok"
