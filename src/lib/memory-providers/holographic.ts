@@ -17,7 +17,7 @@ import type {
   MemoryDeleteResult,
   FactInput,
   FactUpdateInput,
-} from "./types";
+} from "./index";
 
 // Dynamic import for better-sqlite3 (native module)
 async function getDb(readonly = true) {
