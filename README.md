@@ -819,9 +819,8 @@ control-hub/
 
 
 │   │   ├── kanban/            # Kanban board (columns, cards, WIP limits)
-│   │   ├── orchestration/     # Teams + Organisations
-│   │   │   ├── teams/page.tsx # Team CRUD, member management
-│   │   │   └── organisations/page.tsx # Organisation CRUD
+│   │   ├── orchestration/     # Teams
+│   │   │   └── teams/page.tsx # Team CRUD, member management
 │   ├── missions/             # Mission dispatch + tracking
 
 
