@@ -1,8 +1,8 @@
-// ═══════════════════════════════════════════════════════════════
-// Behaviour Page — Profile-centric agent configuration
-// ═══════════════════════════════════════════════════════════════
-
 "use client";
+
+// Force client-side rendering so hooks (useState, useEffect, useCallback)
+// resolve correctly on first render without SSR hydration timing issues.
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback } from "react";
 import {

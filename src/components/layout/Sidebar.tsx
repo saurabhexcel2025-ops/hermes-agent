@@ -31,8 +31,6 @@ import { iconColorMap } from "@/lib/theme";
 import {
   mainSections,
   configGroups,
-  isRestrictedNavHref,
-  showRestrictedNav,
 } from "./sidebar-config";
 
 import type { SidebarLink, ConfigGroup } from "./sidebar-config";
@@ -504,11 +502,6 @@ export default function Sidebar() {
             )}
 
             {section.links
-
-              .filter(
-                (link) => showRestrictedNav || !isRestrictedNavHref(link.href),
-              )
-
               .map(renderLink)}
           </div>
         ))}

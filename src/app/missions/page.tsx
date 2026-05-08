@@ -1,8 +1,8 @@
-// ═══════════════════════════════════════════════════════════════
-// Missions - Dispatch Center with Real Monitoring
-// ═══════════════════════════════════════════════════════════════
-
 "use client";
+
+// Force client-side rendering so hooks (useState, useEffect, useCallback)
+// resolve correctly on first render without SSR hydration timing issues.
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";

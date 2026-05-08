@@ -56,6 +56,17 @@ function BoardSelector({
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      <button
+        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors
+          ${selectedId === null
+            ? "border-neon-purple/50 bg-neon-purple/10 text-neon-purple"
+            : "border-white/10 text-white/50 hover:text-white/80 hover:border-white/20"
+          }`}
+        onClick={() => onSelect("__all__")}
+      >
+        <Layout className="w-3.5 h-3.5" />
+        All Boards
+      </button>
       {boards.map((b) => (
         <button
           key={b.id}

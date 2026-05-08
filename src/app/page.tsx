@@ -34,6 +34,7 @@ import { StatusDot } from "@/components/ui/Card";
 import IntervalSelector from "@/components/ui/IntervalSelector";
 import CategoryAccordion from "@/components/ui/CategoryAccordion";
 import TemplateCard from "@/components/ui/TemplateCard";
+import { useToast } from "@/components/ui/Toast";
 import type { SystemStatus, AccentColor } from "@/types/hermes";
 import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
 
@@ -204,6 +205,7 @@ export default function Dashboard() {
   const [config, setConfig] = useState<Record<string, unknown> | null>(null);
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; icon: string; color: string; category: string; profile: string; description: string; isCustom?: boolean }>>([]);
   const [dispatchExpanded, setDispatchExpanded] = useState(false);
+  const { showToast, toastElement } = useToast();
 
   // Cancel a mission from the dashboard
   const handleCancelMission = useCallback(async (missionId: string, missionName: string) => {
@@ -216,15 +218,15 @@ export default function Dashboard() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        console.error("Failed to cancel mission:", body?.error || res.statusText);
+        showToast(body?.error || "Failed to cancel mission", "error");
         return;
       }
       // Refresh missions
       const data = await fetch("/api/missions");
       const d = await data.json();
       if (d.data) setMissions(d.data.missions || []);
-    } catch (e) { console.error("Failed to cancel mission:", e); }
-  }, []);
+    } catch (e) { showToast("Failed to cancel mission", "error"); }
+  }, [showToast]);
 
   // Update cron job schedule inline
   const handleCronScheduleChange = useCallback(async (jobId: string, newSchedule: string) => {
@@ -239,9 +241,9 @@ export default function Dashboard() {
       const d = await res.json();
       if (d.data) setMonitor(d.data);
     } catch (error) {
-      console.error("Failed to update cron schedule:", error);
+      showToast("Failed to update cron schedule", "error");
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -308,6 +310,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      {toastElement}
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* ═══ Compact Stat Row ═══ */}

@@ -514,7 +514,15 @@ export default function HindsightBrowser() {
       {/* Health Status */}
       {health && !health.available && (
         <div className="mb-4">
-          <ErrorBanner message={`Hindsight ${health.mode}: ${health.message || health.error || "not responding"}`} />
+          <ErrorBanner
+            message={
+              health.error?.includes("Redis")
+                ? "Redis is not running. Start Redis to enable memory features: redis-server"
+                : health.message
+                  ? `Hindsight ${health.mode}: ${health.message}`
+                  : `Hindsight ${health.mode}: ${health.error || "not responding"}`
+            }
+          />
         </div>
       )}
 

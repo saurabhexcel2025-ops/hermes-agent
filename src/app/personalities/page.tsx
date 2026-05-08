@@ -132,6 +132,7 @@ function PersonalityCard({
                 onClick={() => onActivate(personality.name)}
                 className="p-1.5 rounded-lg text-neon-cyan hover:bg-neon-cyan/10 transition-colors"
                 title="Set as active"
+                aria-label={`Activate ${personality.name}`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
               </button>

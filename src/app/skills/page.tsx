@@ -154,6 +154,7 @@ export default function SkillsPage() {
             <select
               value={selectedProfile}
               onChange={(e) => setSelectedProfile(e.target.value)}
+              aria-label="Agent profile"
               className="bg-dark-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-green-500/50 focus:outline-none"
             >
               {profiles.map((p) => (
