@@ -11,7 +11,6 @@ import {
   Plus,
   Bot,
   Loader2,
-  ArrowLeft,
   Trash2,
   Crown,
   Users,
@@ -296,19 +295,14 @@ export default function TeamsPage() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/orchestration/organisations" className="text-white/30 hover:text-white/60 transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Users className="w-6 h-6 text-neon-purple" />
-              Teams
-            </h1>
-            <p className="text-xs text-white/40 mt-0.5">
-              Agent teams — assign a leader and specialists to a board
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Users className="w-6 h-6 text-neon-purple" />
+            Teams
+          </h1>
+          <p className="text-xs text-white/40 mt-0.5">
+            Agent teams — assign a leader and specialists to a board
+          </p>
         </div>
         <button
           className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-neon-purple/30

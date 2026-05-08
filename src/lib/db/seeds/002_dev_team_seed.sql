@@ -10,7 +10,7 @@ VALUES
   (
     'bob',
     'Bob',
-    'CEO of PatterTech. Orchestrates the full organisation, sets priorities, and reviews all significant outputs.',
+    'CEO of PatterTech. Orchestrates the full operation, sets priorities, and reviews all significant outputs.',
     'leader',
     'active',
     '{}',

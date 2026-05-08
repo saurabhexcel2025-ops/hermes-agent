@@ -29,7 +29,6 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/missions` | `GET`, `POST` | List and dispatch missions. |
 | `/api/missions/health` | `GET` | Mission subsystem health view. |
 | `/api/monitor` | `GET` | Aggregated system monitoring snapshot. |
-| `/api/organisations` | `GET`, `POST`, `PATCH`, `DELETE` | Manage organisations. |
 | `/api/personalities` | `GET`, `POST`, `PUT`, `DELETE` | Manage personality records. |
 | `/api/profiles` | `GET`, `POST` | List and create Control Hub profiles. |
 | `/api/sessions` | `GET` | List sessions with filters. |

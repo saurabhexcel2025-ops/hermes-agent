@@ -8,7 +8,7 @@ import {
   ScrollText, Sparkles, Rocket, Volume2, Mic, GitBranch,
   RotateCcw, ShieldCheck, MessageSquare, Lock, Code,
   BookOpen, Workflow, CheckSquare,
-  FolderOpen, Users, Layout, Kanban, Building2,
+  FolderOpen, Users, Layout, Kanban,
 } from "lucide-react";
 
 import type { AccentColor } from "@/types/hermes";
@@ -56,7 +56,6 @@ export const mainSections: SidebarSection[] = [
   {
     label: "Orchestration",
     links: [
-      { icon: Building2, label: "Organisation", href: "/orchestration/organisations", color: "purple" },
       { icon: Users, label: "Teams", href: "/orchestration/teams", color: "purple" },
       { icon: Layout, label: "Kanban", href: "/kanban", color: "purple" },
     ],
