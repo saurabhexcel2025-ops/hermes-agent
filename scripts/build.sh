@@ -30,8 +30,13 @@ log() {
 
 cd "$APP_DIR"
 
+# Resolve full paths (needed because spawned processes lose PATH)
+NODE_BIN="$(command -v node 2>/dev/null || echo "$HOME/.local/bin/node")"
+NPM_BIN="$(command -v npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
+
 log "Build started..."
-npm run build >> "$BUILD_LOG" 2>&1
+"$NPM_BIN" run build >> "$BUILD_LOG" 2>&1
 log "Build complete."
 log "Restarting server..."
 bash "$SCRIPT_DIR/restart.sh"

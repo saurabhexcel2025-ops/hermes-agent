@@ -36,6 +36,11 @@ HOST="${HOST:-0.0.0.0}"
 # Always enable the Deploy API for local self-hosted use
 export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
+# Resolve full paths (needed because spawned processes lose PATH)
+NODE_BIN="$(command -v node 2>/dev/null || echo "$HOME/.local/bin/node")"
+NPM_BIN="$(command -v npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
+
 # ── Stop Existing Server ─────────────────────────────────────
 log "Stopping server on port $PORT..."
 stop_port() {

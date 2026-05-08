@@ -10,7 +10,9 @@ test.describe("OSS smoke", () => {
 
   test("cron page loads", async ({ page }) => {
     await page.goto("/cron");
-    await expect(page.getByRole("heading", { name: /Cron Jobs/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Cron Jobs", exact: true })
+    ).toBeVisible();
   });
 
   test("missions page loads", async ({ page }) => {
