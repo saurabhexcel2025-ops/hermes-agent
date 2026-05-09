@@ -11,8 +11,15 @@ on:
     branches: [main, dev]
   workflow_dispatch:
 
-# Parallel jobs: unit+build per OS, and E2E on Ubuntu only — avoids duplicate Jest runs and long serial time.
+# Parallel jobs: unit+build per OS, shell helpers test (bash only), and E2E on Ubuntu only.
 jobs:
+  shell-custom-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hermes profile helpers + dotenv (isolated /tmp HERMES_HOME)
+        run: bash tests/scripts/run-shell-custom-tests.sh
+
   build-test-ubuntu:
     runs-on: ubuntu-latest
     steps:

@@ -8,6 +8,15 @@
 | `tests/e2e/` | Playwright | Browser flows against a real `next start` server (see `playwright.config.ts`). |
 | `tests/jest.setup.ts` | Jest | Global setup and shared mocks (`jest.config.js` → `setupFilesAfterEnv`). |
 | `tests/__mocks__/better-sqlite3.cjs` | Jest | CJS shim so the native `better-sqlite3` addon is never loaded in unit tests. |
+| [`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) | Bash | Validates [`scripts/lib/ch-dotenv-local.sh`](../scripts/lib/ch-dotenv-local.sh), [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh), and the update-profile sync gate (mirror of `update.sh`). Uses a fake `HERMES_HOME` under `/tmp` only. CI: **`shell-custom-scripts`** job. |
+
+## Shell helper tests (bash)
+
+```bash
+bash tests/scripts/run-shell-custom-tests.sh
+```
+
+Docker (optional): `docker run --rm -v "$(pwd)":/work -w /work bash:5 bash tests/scripts/run-shell-custom-tests.sh`
 
 ## Unit tests (Jest)
 
@@ -38,7 +47,7 @@ npm run test:e2e
 
 ## Continuous integration
 
-Primary pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Ubuntu (install, `prebuild`, lint, Hermes-path grep gate, `tsc`, Jest coverage, build, Playwright smoke with `PLAYWRIGHT_SMOKE=1`) plus macOS build/test, and a separate Ubuntu job for E2E smoke.
+Primary pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Ubuntu (`shell-custom-scripts` bash harness, install, `prebuild`, lint, Hermes-path grep gate, `tsc`, Jest coverage, build, Playwright smoke with `PLAYWRIGHT_SMOKE=1`) plus macOS build/test, and a separate Ubuntu job for E2E smoke.
 
 Other workflows: **gitleaks** (secret scan).
 
