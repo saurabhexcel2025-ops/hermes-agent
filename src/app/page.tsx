@@ -256,48 +256,37 @@ export default function Dashboard() {
   }, [showToast]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    const signal = controller.signal;
 
-    async function loadData() {
-      try {
-        const [statusRes, monitorRes, agentsRes, missionsRes, templatesRes, configRes] = await Promise.all([
-          fetch("/api/status"),
-          fetch("/api/monitor"),
-          fetch("/api/agents"),
-          fetch("/api/missions"),
-          fetch("/api/templates"),
-          fetch("/api/config"),
-        ]);
-        if (cancelled) return;
+    // One-shot fetches (fire-and-forget with abort support)
+    fetch("/api/status", { signal }).then((r) => r.json()).then((d) => setStatus(d.data)).catch(() => {});
+    fetch("/api/config", { signal }).then((r) => r.json()).then((d) => setConfig(d.data)).catch(() => {});
+    fetch("/api/templates", { signal }).then((r) => r.json()).then((d) => setTemplates(d.data?.templates || [])).catch(() => {});
 
-        const [statusData, monitorData, agentsData, missionsData, templatesData, configData] = await Promise.all([
-          statusRes.json(),
-          monitorRes.json(),
-          agentsRes.json(),
-          missionsRes.json(),
-          templatesRes.json(),
-          configRes.json(),
-        ]);
-        if (cancelled) return;
+    // Staggered polling — avoid burst load from simultaneous API calls
+    fetch("/api/monitor", { signal }).then((r) => r.json()).then((d) => setMonitor(d.data)).catch(() => {});
+    const monitorInterval = setInterval(() => {
+      if (!signal.aborted) fetch("/api/monitor", { signal }).then((r) => r.json()).then((d) => setMonitor(d.data)).catch(() => {});
+    }, 10000);
 
-        setStatus(statusData.data ?? null);
-        setMonitor(monitorData.data ?? null);
-        setAgents(agentsData.data?.agents ?? agentsData.agents ?? []);
-        setMissions(missionsData.data?.missions ?? []);
-        setTemplates(templatesData.data?.templates ?? []);
-        setConfig(configData.data ?? null);
-      } catch (err) {
-        if (!cancelled) console.error("[Dashboard] Failed to load data:", err);
-      }
-    }
+    // Agents + missions poll at offset intervals to spread network load
+    const fetchAgents = () => {
+      if (!signal.aborted) fetch("/api/agents", { signal }).then((r) => r.json()).then((d) => setAgents(d.data?.agents || d.agents || [])).catch(() => {});
+    };
+    const fetchMissions = () => {
+      if (!signal.aborted) fetch("/api/missions", { signal }).then((r) => r.json()).then((d) => setMissions(d.data?.missions || [])).catch(() => {});
+    };
+    fetchAgents();
+    fetchMissions();
+    const agentsInterval = setInterval(fetchAgents, 15000);
+    const missionsInterval = setInterval(fetchMissions, 15000);
 
-    loadData();
-
-    // Poll for updates every 15s
-    const id = setInterval(loadData, 15000);
     return () => {
-      cancelled = true;
-      clearInterval(id);
+      controller.abort();
+      clearInterval(monitorInterval);
+      clearInterval(agentsInterval);
+      clearInterval(missionsInterval);
     };
   }, []);
 
@@ -339,25 +328,25 @@ export default function Dashboard() {
           <StatPill
             icon={Bot}
             label="Agents"
-            value={activeAgents.length > 0 ? `${activeAgents.length} Active` : status === null ? "Loading..." : status?.soulFile ? "Idle" : "Offline"}
-            color={activeAgents.length > 0 ? "green" : status === null ? "cyan" : status?.soulFile ? "cyan" : "pink"}
+            value={activeAgents.length > 0 ? `${activeAgents.length} Active` : status?.soulFile ? "Idle" : "Offline"}
+            color={activeAgents.length > 0 ? "green" : status?.soulFile ? "cyan" : "pink"}
           />
           <StatPill
             icon={ListTodo}
             label="Cron Jobs"
-            value={monitor ? `${monitor.cron.active} Active` : status === null ? "Loading..." : "..."}
+            value={monitor ? `${monitor.cron.active} Active` : "..."}
             color="orange"
           />
           <StatPill
             icon={Activity}
             label="Sessions"
-            value={monitor ? `${monitor.sessions.total}` : status ? `${status.sessionsCount}` : "Loading..."}
+            value={monitor ? `${monitor.sessions.total}` : status ? `${status.sessionsCount}` : "..."}
             color="purple"
           />
           <StatPill
             icon={Layers}
-            label={`Memory · ${monitor?.memory.provider || status === null ? "Loading..." : "Not Installed"}`}
-            value={monitor ? (monitor.memory.factCount >= 0 ? `${monitor.memory.factCount} facts` : "0 facts") : status === null ? "Loading..." : "..."}
+            label={`Memory · ${monitor?.memory.provider || "Not Installed"}`}
+            value={monitor ? (monitor.memory.factCount >= 0 ? `${monitor.memory.factCount} facts` : "0 facts") : "..."}
             color="pink"
           />
         </div>
@@ -369,9 +358,7 @@ export default function Dashboard() {
               Continue work
             </div>
             <div className="text-sm text-white/80 mt-1">
-              {monitor === null ? (
-                <span className="text-white/40">Loading...</span>
-              ) : monitor?.sessions?.recent?.[0] ? (
+              {monitor?.sessions?.recent?.[0] ? (
                 <>
                   Latest session {timeAgo(monitor.sessions.recent[0].modified)}{" "}
                   <Link
