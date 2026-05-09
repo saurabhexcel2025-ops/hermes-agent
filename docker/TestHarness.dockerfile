@@ -16,6 +16,7 @@ RUN apt-get update \
         python3-venv \
         libffi-dev \
         bsdextrautils \
+        expect \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
 ENV DEBIAN_FRONTEND=noninteractive

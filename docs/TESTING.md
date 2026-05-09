@@ -61,9 +61,11 @@ python scripts/test_full_install_update_process.py --profile release --skip-http
 
 npm: `npm run test:full-install` (smoke + `--skip-http`), `npm run test:full-install-release` (release profile).
 
-**Flags:** `--with-real-hermes-install` appends **`hermes-upstream`** (network). `--keep-artifacts` retains containers/temp dirs for debugging. `--continue-on-failure` runs all scenarios then prints a **HARNESS SUMMARY**. `HERMES_INSTALL_URL` overrides the upstream Hermes installer URL.
+**Flags:** `--with-real-hermes-install` appends **`hermes-upstream`** (network). **`--with-interactive`** appends a slow **TTY / expect** pack after **`--scenarios all`** (same ordering as non-interactive scenarios, then interactive ones). Rebuild the harness image after pulling changes so **`expect`** is present (`docker/TestHarness.dockerfile`). Use `--continue-on-failure` for a full matrix run; interactive scenarios complement non-interactive env-driven paths—they do not replace them.
 
-There is no controlling TTY in `docker exec`; installers rely on non-interactive env vars (`INSTALL_HINDSIGHT=no`, etc.). Base image: [`docker/TestHarness.dockerfile`](../docker/TestHarness.dockerfile). CRLF in `*.sh` is normalized on the copied workspace for Linux bash.
+**Interactive pack:** Runs only inside the container (`expect -f` via `docker exec -t`); the host stays cross-platform (no Windows `pty`). Longer wall time (`npm install` / `npm run build`). You can also run a single id explicitly, e.g. `--scenarios setup_interactive`.
+
+**Non-interactive default:** Plain `docker exec` still uses env vars (`INSTALL_HINDSIGHT=no`, `CH_INSTALL_NONINTERACTIVE=1`, etc.). Base image: [`docker/TestHarness.dockerfile`](../docker/TestHarness.dockerfile). CRLF in `*.sh` is normalized on the copied workspace for Linux bash.
 
 ## Continuous integration
 

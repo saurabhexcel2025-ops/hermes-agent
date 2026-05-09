@@ -10,6 +10,7 @@ node_modules/
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+__pycache__/
 
 # Testing
 coverage/
