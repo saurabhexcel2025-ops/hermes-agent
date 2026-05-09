@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as fs from "fs";
+import { execSync, ExecSyncOptions } from "child_process";
 
 /**
  * Hardware Cron API — System crontab management
@@ -34,7 +36,7 @@ function expandEnv(value: string): string {
 /** Load the set of disabled hardware cron job IDs */
 function loadDisabledIds(): Set<string> {
   try {
-    const raw = require("fs").readFileSync(DISABLED_STATE_FILE, "utf-8");
+    const raw = fs.readFileSync(DISABLED_STATE_FILE, "utf-8");
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
   } catch {
@@ -45,7 +47,7 @@ function loadDisabledIds(): Set<string> {
 /** Persist the set of disabled hardware cron job IDs */
 function saveDisabledIds(ids: Set<string>): void {
   try {
-    require("fs").writeFileSync(DISABLED_STATE_FILE, JSON.stringify(Array.from(ids), null, 2), { mode: 0o600 });
+    fs.writeFileSync(DISABLED_STATE_FILE, JSON.stringify(Array.from(ids), null, 2), { mode: 0o600 });
   } catch {}
 }
 
@@ -131,10 +133,9 @@ function serialiseLine(
 // ── Read / write crontab ───────────────────────────────────────
 
 function readCrontab(): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const { execSync } = require("child_process");
+  return new Promise<string>((resolve) => {
     try {
-      const out = execSync("crontab -l 2>/dev/null", { encoding: "utf-8" } as Parameters<typeof execSync>[2]);
+      const out = execSync("crontab -l 2>/dev/null", { encoding: "utf-8" } as ExecSyncOptions);
       resolve(out as string);
     } catch {
       resolve("");
@@ -143,17 +144,16 @@ function readCrontab(): Promise<string> {
 }
 
 function writeCrontab(content: string): { ok: boolean; error?: string } {
-  const { execSync } = require("child_process");
   const tmpFile = `/tmp/ch-crontab-${Date.now()}.txt`;
   try {
     // Write to a temp file first, then pipe to crontab.
     // This avoids shell interpretation of >> 2>&1 and other special chars.
-    require("fs").writeFileSync(tmpFile, content + "\n", { mode: 0o600 });
+    fs.writeFileSync(tmpFile, content + "\n", { mode: 0o600 });
     execSync(`crontab ${tmpFile}`, { encoding: "utf-8" });
-    require("fs").unlinkSync(tmpFile);
+    fs.unlinkSync(tmpFile);
     return { ok: true };
   } catch (e: unknown) {
-    try { require("fs").unlinkSync(tmpFile); } catch {}
+    try { fs.unlinkSync(tmpFile); } catch {}
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
   }
