@@ -18,19 +18,42 @@ import {
 import type { StoryArc as StoryArcType, ChapterOutline } from "@/types/recroom";
 
 function safeArc(arc: unknown): StoryArcType | undefined {
+  // Handle JSON string stored in DB (common for SQLite JSON columns)
+  if (typeof arc === "string") {
+    try { arc = JSON.parse(arc); } catch { return undefined; }
+  }
   if (!arc || typeof arc !== "object") return undefined;
   const a = arc as Record<string, unknown>;
+
+  // CASE 1: Nested wrapper — outer object has a storyArc property that is the real StoryArc.
+  // storyArc.storyArc is a string, storyArc.fixedPlotPoints is an array.
+  // The top-level has the same array properties but as empty arrays (from spread merge).
   if (
-    typeof a.storyArc !== "string" ||
-    !Array.isArray(a.fixedPlotPoints) ||
-    !Array.isArray(a.characterArcs) ||
-    !Array.isArray(a.worldRules) ||
-    !Array.isArray(a.themes) ||
-    !Array.isArray(a.chapterOutlines)
-  )
-    return undefined;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return a as any;
+    typeof a.storyArc === "object" && a.storyArc !== null &&
+    !Array.isArray(a.fixedPlotPoints) && !Array.isArray(a.chapterOutlines)
+  ) {
+    const inner = a.storyArc as Record<string, unknown>;
+    if (
+      typeof inner.storyArc === "string" &&
+      Array.isArray(inner.fixedPlotPoints) &&
+      Array.isArray(inner.chapterOutlines)
+    ) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return inner as any;
+    }
+  }
+
+  // CASE 2: Normal (flat) StoryArc — storyArc is a string at top level
+  if (
+    typeof a.storyArc === "string" &&
+    Array.isArray(a.fixedPlotPoints) &&
+    Array.isArray(a.chapterOutlines)
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return a as any;
+  }
+
+  return undefined;
 }
 
 // ── Response Validation ────────────────────────────────────────

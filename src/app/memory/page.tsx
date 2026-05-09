@@ -131,15 +131,16 @@ export default function MemoryPage() {
 
   useEffect(() => {
     let cancelled = false;
-    // Detect provider from config — use a simple config read, not the memory API
+    // Detect provider from config — wait up to 8s for the memory API,
+    // then fall back to "none" rather than showing an endless spinner
     const timer = setTimeout(() => {
       if (!cancelled) {
         setProvider("none");
         setLoading(false);
       }
-    }, 5000); // 5s fallback
+    }, 8000);
 
-    fetch("/api/memory", { signal: AbortSignal.timeout(4000) })
+    fetch("/api/memory")
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
