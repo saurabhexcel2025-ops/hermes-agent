@@ -682,7 +682,7 @@ export default function Sidebar() {
 
       {/* Footer */}
 
-      <div className="px-3 py-3 border-t border-white/10 space-y-2 flex-shrink-0 overflow-hidden">
+      <div className="px-3 py-3 border-t border-white/10 space-y-2 flex-shrink-0">
         <VersionFooter collapsed={collapsed} />
 
         <button
