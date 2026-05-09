@@ -13,7 +13,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   icon?: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const colorMap: Record<AccentColor, { bg: string; border: string; text: string; hover: string }> = {

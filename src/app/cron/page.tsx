@@ -930,14 +930,13 @@ export default function CronPage() {
                   {hwPauseAllBusy ? "Pausing…" : "Pause all"}
                 </Button>
                 <Button
-                  variant="primary"
+                  variant="ghost"
                   color="cyan"
                   size="sm"
                   icon={Plus}
                   onClick={() => setShowHardwareCreate(true)}
-                >
-                  New Job
-                </Button>
+                  title="New Hardware Job"
+                />
               </>
             )}
           </div>
