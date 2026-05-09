@@ -70,15 +70,36 @@ export default function StoryReaderPage() {
 
   const [settings, setSettings] = useState<ReadingSettings>(DEFAULT_SETTINGS);
   useEffect(() => { setSettings(loadSettings()); }, []);
-
   const loadStory = useCallback(async () => {
     try {
       const res = await fetch("/api/stories", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "load", storyId }),
       });
       const d = await res.json();
-      if (d.data) setStory(d.data as StoryState);
+      if (!d.data) return;
+      const loaded = d.data as StoryState;
+      setStory(loaded);
+
+      // Backfill chapter titles for stories generated before safeArc was fixed.
+      // Chapters with placeholder "Chapter N" titles need re-extracting from content.
+      const hasPlaceholders = loaded.chapters?.some(
+        (c: Chapter) => c.status === "complete" && c.title === `Chapter ${c.number}`
+      );
+      if (hasPlaceholders) {
+        try {
+          const syncRes = await fetch("/api/stories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "sync-titles", storyId }),
+          });
+          const syncData = await syncRes.json();
+          if (syncData.data?.story) {
+            setStory(syncData.data.story as StoryState);
+          }
+        } catch { /* non-fatal */ }
+      }
     } catch {} finally { setLoading(false); }
   }, [storyId]);
 
