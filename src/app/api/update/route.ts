@@ -49,12 +49,14 @@ function listRemoteBranches(): string[] {
       encoding: "utf-8",
       timeout: 10000,
     });
+    // Only show main + dev by default; stale remote branches are not useful
+    const allowed = new Set(["main", "dev"]);
     const branches = raw
       .split("\n")
       .map((b) => b.trim())
       .filter((b) => b && b !== "origin/HEAD" && b.startsWith("origin/"))
       .map((b) => b.replace(/^origin\//, ""))
-      .filter((b) => b);
+      .filter((b) => b && allowed.has(b));
     return Array.from(new Set(branches)).sort();
   } catch {
     return [];

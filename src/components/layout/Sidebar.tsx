@@ -42,82 +42,83 @@ function isActive(pathname: string, href: string): boolean {
   return pathname.startsWith(href);
 }
 
-// ── Branch Modal ───────────────────────────────────────────────
+// ── Branch Dropdown ─────────────────────────────────────────────
+// Inline dropdown anchored above the footer buttons, not a modal overlay.
 
-interface BranchModalProps {
-  open: boolean;
-  branches: string[];
-  defaultBranch: string;
-  onConfirm: (branch: string) => void;
-  onCancel: () => void;
-  loading?: boolean;
-}
-
-function BranchModal({
-  open,
+function BranchDropdown({
   branches,
   defaultBranch,
   onConfirm,
   onCancel,
   loading,
-}: BranchModalProps) {
+}: {
+  branches: string[];
+  defaultBranch: string;
+  onConfirm: (branch: string) => void;
+  onCancel: () => void;
+  loading?: boolean;
+}) {
   const [selected, setSelected] = useState(defaultBranch);
 
+  // Close on outside click
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (open) setSelected(defaultBranch);
-  }, [open, defaultBranch]);
-
-  if (!open) return null;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onCancel();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-sm mx-4 rounded-xl border border-white/10 bg-dark-950 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <h2 className="text-base font-bold text-white">Select Branch</h2>
-          <button
-            onClick={onCancel}
-            className="p-1 rounded-lg text-white/40 hover:bg-white/5 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <div
+      ref={ref}
+      className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-white/10 bg-dark-950 shadow-xl overflow-hidden z-50"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+        <span className="text-xs font-mono text-white/50">Branch</span>
+        <button
+          onClick={onCancel}
+          className="p-0.5 rounded text-white/30 hover:text-white/60 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
-        {/* Body */}
-        <div className="p-5">
-          <label className="block text-xs font-mono text-white/40 uppercase tracking-wider mb-2">
-            Branch
-          </label>
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-dark-900 border border-white/10 text-white text-sm focus:outline-none focus:border-neon-cyan/50 focus:ring-1 focus:ring-neon-cyan/20"
-          >
-            {branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Body */}
+      <div className="p-2">
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          className="w-full px-2 py-1.5 rounded-md bg-dark-900 border border-white/10 text-white text-xs focus:outline-none focus:border-neon-cyan/50"
+        >
+          {branches.map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-white/10">
-          <button
-            onClick={onCancel}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg text-sm text-white/60 hover:bg-white/5 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm(selected)}
-            disabled={loading || !selected}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-neon-cyan text-dark-900 hover:brightness-110 transition disabled:opacity-50"
-          >
-            {loading ? "..." : "Confirm"}
-          </button>
-        </div>
+      {/* Footer */}
+      <div className="flex items-center justify-end gap-2 px-2 pb-2">
+        <button
+          onClick={onCancel}
+          disabled={loading}
+          className="px-3 py-1 rounded text-xs text-white/40 hover:text-white/70 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onConfirm(selected)}
+          disabled={loading || !selected}
+          className="px-3 py-1 rounded text-xs font-medium bg-neon-cyan text-dark-900 hover:brightness-110 transition disabled:opacity-50"
+        >
+          {loading ? "..." : "Confirm"}
+        </button>
       </div>
     </div>
   );
@@ -145,10 +146,10 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const [rebuilding, setRebuilding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Branch modal state
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalPurpose, setModalPurpose] = useState<"check" | "rebuild">("check");
-  const [branches, setBranches] = useState<string[]>([]);
+  // Dropdown state
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownPurpose, setDropdownPurpose] = useState<"check" | "rebuild">("check");
+  const [branches, setBranches] = useState<string[]>(["main", "dev"]);
   const [selectedBranch, setSelectedBranch] = useState("main");
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -165,29 +166,28 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
     };
   }, []);
 
-  // Fetch branch list and open modal
-  const openBranchModal = async (purpose: "check" | "rebuild") => {
-    setModalPurpose(purpose);
+  // Fetch branch list and open dropdown
+  const openDropdown = async (purpose: "check" | "rebuild") => {
+    setDropdownPurpose(purpose);
+    setDropdownOpen(true);
     try {
       const res = await fetch("/api/update?branches=1");
       const d = await res.json();
-      if (d.data?.branches) {
+      if (d.data?.branches?.length) {
         setBranches(d.data.branches);
-        setSelectedBranch(d.data.default || "main");
       } else {
         setBranches(["main", "dev"]);
-        setSelectedBranch("main");
       }
+      setSelectedBranch("dev");
     } catch {
       setBranches(["main", "dev"]);
-      setSelectedBranch("main");
+      setSelectedBranch("dev");
     }
-    setModalOpen(true);
   };
 
-  const handleModalConfirm = async (branch: string) => {
-    setModalOpen(false);
-    if (modalPurpose === "check") {
+  const handleDropdownConfirm = async (branch: string) => {
+    setDropdownOpen(false);
+    if (dropdownPurpose === "check") {
       await doCheck(branch);
     } else {
       await doRebuild(branch);
@@ -340,7 +340,20 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <>
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-2 relative">
+          {/* Branch dropdown for collapsed view */}
+          {dropdownOpen && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 w-44 z-50">
+              <BranchDropdown
+                branches={branches}
+                defaultBranch={selectedBranch}
+                onConfirm={handleDropdownConfirm}
+                onCancel={() => setDropdownOpen(false)}
+                loading={checkState === "checking" || rebuilding}
+              />
+            </div>
+          )}
+
           {/* Check transforms to orange alert when update available */}
           {checkState === "update-available" ? (
             <button
@@ -353,7 +366,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             </button>
           ) : (
             <button
-              onClick={() => openBranchModal("check")}
+              onClick={() => openDropdown("check")}
               disabled={checkState === "checking" || isBusy}
               className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
               title={checkState === "checking" ? "Checking..." : "Check for Update"}
@@ -362,9 +375,9 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             </button>
           )}
 
-          {/* Rebuild — opens branch modal */}
+          {/* Rebuild */}
           <button
-            onClick={() => openBranchModal("rebuild")}
+            onClick={() => openDropdown("rebuild")}
             disabled={isBusy}
             className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
             title={message || "Rebuild App"}
@@ -382,98 +395,98 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             <Power className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
           </button>
         </div>
-
-        <BranchModal
-          open={modalOpen}
-          branches={branches}
-          defaultBranch={selectedBranch}
-          onConfirm={handleModalConfirm}
-          onCancel={() => setModalOpen(false)}
-          loading={checkState === "checking" || rebuilding}
-        />
       </>
     );
   }
 
   // ── Expanded view ────────────────────────────────────────────
-  const checkButton = () => {
+  // Row 1: Check button (full-width)
+  // Row 2: Rebuild | Restart side-by-side
+  // Dropdown appears above row 1 when open
+
+  const renderCheckButton = () => {
     if (checkState === "idle") {
       return (
         <button
-          onClick={() => openBranchModal("check")}
+          onClick={() => openDropdown("check")}
           disabled={isBusy}
-          className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-[9px] font-mono text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs font-mono text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
         >
-          <RefreshCw className="w-2.5 h-2.5 flex-shrink-0" />
-          Check
+          <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+          Check for Updates
         </button>
       );
     }
     if (checkState === "checking") {
       return (
-        <button disabled className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-[9px] font-mono text-blue-400 opacity-70">
-          <RefreshCw className="w-2.5 h-2.5 flex-shrink-0 animate-spin" />
-          ...
+        <button disabled className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs font-mono text-blue-400 opacity-70">
+          <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 animate-spin" />
+          Checking...
         </button>
       );
     }
     if (checkState === "up-to-date") {
       return (
-        <button
-          disabled
-          className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-[9px] font-mono text-green-400 cursor-default"
-        >
-          <Check className="w-2.5 h-2.5 flex-shrink-0" />
+        <button disabled className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs font-mono text-green-400 cursor-default">
+          <Check className="w-3.5 h-3.5 flex-shrink-0" />
           Up to Date
         </button>
       );
     }
-    // update-available
     return (
       <button
         onClick={handleUpdate}
         disabled={isBusy}
-        className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-orange-500/10 border border-orange-500/20 text-[9px] font-mono text-neon-orange hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs font-mono text-neon-orange hover:bg-orange-500/20 transition-colors disabled:opacity-50"
       >
-        <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
+        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
         Update Available!
       </button>
     );
   };
 
   return (
-    <>
-      <div className="flex gap-1.5">
-        {checkButton()}
+    <div className="relative">
+      {/* Branch dropdown — anchored above the button row */}
+      {dropdownOpen && (
+        <div className="absolute bottom-full left-0 right-0 mb-1.5 z-50">
+          <BranchDropdown
+            branches={branches}
+            defaultBranch={selectedBranch}
+            onConfirm={handleDropdownConfirm}
+            onCancel={() => setDropdownOpen(false)}
+            loading={checkState === "checking" || rebuilding}
+          />
+        </div>
+      )}
 
-        <button
-          onClick={() => openBranchModal("rebuild")}
-          disabled={isBusy}
-          className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-[9px] font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
-        >
-          <Hammer className={`w-2.5 h-2.5 flex-shrink-0 ${rebuilding ? "animate-spin" : ""}`} />
-          {rebuilding ? "..." : "Rebuild"}
-        </button>
+      {/* Button rows */}
+      <div className="space-y-1.5">
+        {/* Check — full width on its own row */}
+        {renderCheckButton()}
 
-        <button
-          onClick={handleRestart}
-          disabled={isBusy}
-          className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-[9px] font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-        >
-          <Power className={`w-2.5 h-2.5 flex-shrink-0 ${restarting ? "animate-spin" : ""}`} />
-          {restarting ? "..." : "Restart"}
-        </button>
+        {/* Rebuild + Restart — side by side */}
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => openDropdown("rebuild")}
+            disabled={isBusy}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+          >
+            <Hammer className={`w-3.5 h-3.5 ${rebuilding ? "animate-spin" : ""}`} />
+            {rebuilding ? "..." : "Rebuild"}
+          </button>
+
+          <button
+            onClick={handleRestart}
+            disabled={isBusy}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+          >
+            <Power className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
+            {restarting ? "..." : "Restart"}
+          </button>
+        </div>
       </div>
-
-      <BranchModal
-        open={modalOpen}
-        branches={branches}
-        defaultBranch={selectedBranch}
-        onConfirm={handleModalConfirm}
-        onCancel={() => setModalOpen(false)}
-        loading={checkState === "checking" || rebuilding}
-      />
-    </>
+    </div>
   );
 }
 
