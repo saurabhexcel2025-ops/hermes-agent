@@ -36,9 +36,18 @@ HOST="${HOST:-0.0.0.0}"
 # Always enable the Deploy API for local self-hosted use
 export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
-# Resolve full paths (needed because spawned processes lose PATH)
-NODE_BIN="$(command -v node 2>/dev/null || echo "$HOME/.local/bin/node")"
-NPM_BIN="$(command -v npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+# Resolve full paths using which (more reliable than command -v)
+# This is critical because spawned subshells can lose PATH context
+NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
+NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+
+# Verify binaries exist before proceeding
+if [ ! -x "$NODE_BIN" ]; then
+    log "ERROR: node not found at $NODE_BIN — cannot start server"
+    exit 1
+fi
+
+# Add node/npm bin directories to front of PATH
 export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
 
 # ── Stop Existing Server ─────────────────────────────────────
@@ -63,9 +72,9 @@ rm -f "$PID_FILE"
 
 # ── Start Server ─────────────────────────────────────────────
 log "Starting server on $HOST:$PORT..."
-# Use plain & — NOT nohup (causes agent terminal freeze)
+# Use explicit node binary path — do NOT rely on PATH in spawned process
 CH_ENABLE_DEPLOY_API=true \
-  node node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
+  "$NODE_BIN" node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
     >>"$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$PID_FILE"

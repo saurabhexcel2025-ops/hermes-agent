@@ -56,6 +56,19 @@ fi
 
 cd "$APP_DIR"
 
+# Resolve full paths using which (more reliable than command -v)
+NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
+NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+
+# Verify binaries exist before proceeding
+if [ ! -x "$NPM_BIN" ]; then
+    log "ERROR: npm not found at $NPM_BIN — cannot build"
+    exit 1
+fi
+
+# Add node/npm bin directories to PATH
+export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
+
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
     log "ERROR: $APP_DIR is not a git repository — cannot update"
     exit 1
@@ -77,7 +90,7 @@ if [ "$RESTART_ONLY" = false ]; then
     # ── Dependencies ───────────────────────────────────────────
     if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "package-lock.json\|package.json"; then
         log "package.json changed — running npm install..."
-        npm install --prefer-offline 2>>"$LOG_FILE"
+        "$NPM_BIN" install --prefer-offline 2>>"$LOG_FILE"
         log "Dependencies installed"
     else
         log "No dependency changes — skipping npm install"
@@ -85,7 +98,7 @@ if [ "$RESTART_ONLY" = false ]; then
 
     # ── Build ──────────────────────────────────────────────────
     log "Building production bundle..."
-    if ! npm run build >>"$LOG_FILE" 2>&1; then
+    if ! "$NPM_BIN" run build >>"$LOG_FILE" 2>&1; then
         log "ERROR: Build failed — aborting deploy"
         exit 1
     fi

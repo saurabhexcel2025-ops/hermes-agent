@@ -30,12 +30,20 @@ log() {
 
 cd "$APP_DIR"
 
-# Resolve full paths (needed because spawned processes lose PATH)
-NODE_BIN="$(command -v node 2>/dev/null || echo "$HOME/.local/bin/node")"
-NPM_BIN="$(command -v npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+# Resolve full paths using which (more reliable than command -v)
+NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
+NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+
+# Verify binaries exist before proceeding
+if [ ! -x "$NPM_BIN" ]; then
+    log "ERROR: npm not found at $NPM_BIN — cannot build"
+    exit 1
+fi
+
+# Add node/npm bin directories to PATH
 export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
 
-log "Build started..."
+log "Build started (npm=$(which npm), node=$(which node))..."
 "$NPM_BIN" run build >> "$BUILD_LOG" 2>&1
 log "Build complete."
 log "Restarting server..."

@@ -32,6 +32,7 @@ import Select from "@/components/ui/Select";
 import { baseInputStyles } from "@/lib/theme";
 import { parseSchedule } from "@/lib/utils";
 import { useApiData } from "@/hooks/useApiData";
+import CronScheduleInput from "@/components/cron/CronScheduleInput";
 
 interface CronJob {
   id: string;
@@ -55,56 +56,90 @@ interface CronData {
 }
 
 function formatSchedule(schedule: string): string {
-  // Human-readable schedule display
+  // Human-readable schedule display with friendly interval labels
   if (!schedule) return "No schedule";
   const parts = schedule.trim().split(/\s+/);
-  // Handle both 5-part (min hour dom mon dow) and 6-part (sec min hour dom mon dow) cron
-  if (parts.length === 5 || parts.length === 6) {
-    const offset = parts.length - 5; // skip seconds field in 6-part
-    const [min, hour, dom, mon, dow] = parts.slice(offset);
-    if (
-      min === "*" &&
-      hour === "*" &&
-      dom === "*" &&
-      mon === "*" &&
-      dow === "*"
-    )
-      return "Every minute";
-    if (
-      min !== "*" &&
-      hour !== "*" &&
-      dom === "*" &&
-      mon === "*" &&
-      dow === "*"
-    )
-      return `Daily at ${hour}:${min.padStart(2, "0")}`;
-    if (
-      min !== "*" &&
-      hour !== "*" &&
-      dow !== "*" &&
-      dom === "*" &&
-      mon === "*"
-    ) {
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const dayIndex = parseInt(dow);
-      const dayLabel =
-        Number.isFinite(dayIndex) && dayIndex >= 0 && dayIndex <= 6
-          ? days[dayIndex]
-          : dow;
-      return `Every ${dayLabel} at ${hour}:${min.padStart(2, "0")}`;
-    }
-    // Every N minutes pattern (e.g., */5 * * * *)
-    if (
-      min.startsWith("*/") &&
-      hour === "*" &&
-      dom === "*" &&
-      mon === "*" &&
-      dow === "*"
-    ) {
-      const n = min.slice(2);
-      return `Every ${n} minute${n === "1" ? "" : "s"}`;
+  if (parts.length < 5) return schedule;
+  const offset = parts.length - 5; // skip seconds field in 6-part
+  const [min, hour, dom, mon, dow] = parts.slice(offset);
+
+  // Every N minutes: */N * * * *
+  if (min.startsWith("*/") && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    const n = min.slice(2);
+    return `Every ${n}m`;
+  }
+
+  // Every N hours: 0 */N * * *
+  if (min === "0" && hour.startsWith("*/") && dom === "*" && mon === "*" && dow === "*") {
+    const n = hour.slice(2);
+    return `Every ${n}h`;
+  }
+
+  // Every hour at MM past: MM * * * * (e.g. 30 * * * * = every hour at :30)
+  if (min !== "*" && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    const m = parseInt(min);
+    if (Number.isFinite(m) && m >= 0 && m <= 59) {
+      return `Every hour:(${String(m).padStart(2, "0")})`;
     }
   }
+
+  // Every minute: * * * * *
+  if (min === "*" && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    return "Every minute";
+  }
+
+  // Daily at HH:MM: 0 HH * * *
+  if (min !== "*" && hour !== "*" && dom === "*" && mon === "*" && dow === "*") {
+    const h = parseInt(hour);
+    const m = parseInt(min);
+    if (Number.isFinite(h) && Number.isFinite(m)) {
+      const period = h >= 12 ? "PM" : "AM";
+      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const displayMin = String(m).padStart(2, "0");
+      return `Daily ${displayHour}:${displayMin}${period}`;
+    }
+  }
+
+  // Weekly: 0 HH * * D
+  if (min !== "*" && hour !== "*" && dom === "*" && mon === "*" && dow !== "*") {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const dayIndex = parseInt(dow);
+    const h = parseInt(hour);
+    const m = parseInt(min);
+    if (Number.isFinite(dayIndex) && dayIndex >= 0 && dayIndex <= 6 && Number.isFinite(h) && Number.isFinite(m)) {
+      const period = h >= 12 ? "PM" : "AM";
+      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const displayMin = String(m).padStart(2, "0");
+      return `${days[dayIndex]}s ${displayHour}:${displayMin}${period}`;
+    }
+  }
+
+  // Monthly: 0 HH DD * *
+  if (min !== "*" && hour !== "*" && dom !== "*" && mon === "*" && dow === "*") {
+    const h = parseInt(hour);
+    const m = parseInt(min);
+    const d = parseInt(dom);
+    if (Number.isFinite(h) && Number.isFinite(m) && Number.isFinite(d)) {
+      const period = h >= 12 ? "PM" : "AM";
+      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const displayMin = String(m).padStart(2, "0");
+      return `Day ${d} ${displayHour}:${displayMin}${period}`;
+    }
+  }
+
+  // Weekdays (1-5): 0 HH * * 1-5
+  if (min !== "*" && hour !== "*" && dom === "*" && mon === "*" && /^[1-5](,[1-5])*$/.test(dow)) {
+    const h = parseInt(hour);
+    const m = parseInt(min);
+    if (Number.isFinite(h) && Number.isFinite(m)) {
+      const period = h >= 12 ? "PM" : "AM";
+      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const displayMin = String(m).padStart(2, "0");
+      return `Weekdays ${displayHour}:${displayMin}${period}`;
+    }
+  }
+
+  // Fallback: return the raw cron expression
   return schedule;
 }
 
@@ -358,18 +393,11 @@ function EditJobModal({
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">
-            Cron Schedule
-          </label>
-          <input
-            type="text"
-            value={schedule}
-            onChange={(e) => setSchedule(e.target.value)}
-            placeholder="e.g. 0 9 * * *"
-            className={baseInputStyles}
-          />
-        </div>
+        <CronScheduleInput
+          value={schedule}
+          onChange={setSchedule}
+          error={null}
+        />
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-white/70">Prompt</label>
@@ -501,22 +529,11 @@ function CreateJobModal({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">
-            Cron Schedule
-          </label>
-          <input
-            type="text"
-            value={schedule}
-            onChange={(e) => setSchedule(e.target.value)}
-            placeholder="e.g. 0 9 * * * (daily at 9am)"
-            className={baseInputStyles}
-          />
-          <p className="text-xs text-white/30 font-mono">
-            min hour day month weekday — e.g. &quot;*/30 * * * *&quot; for every
-            30 min
-          </p>
-        </div>
+        <CronScheduleInput
+          value={schedule}
+          onChange={setSchedule}
+          error={null}
+        />
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-white/70">Prompt</label>
