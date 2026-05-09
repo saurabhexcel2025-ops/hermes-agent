@@ -81,7 +81,7 @@ export default function HardwareCronCard({
               {/* Hardware badge */}
               <span className="text-[10px] font-mono bg-neon-cyan/15 text-neon-cyan px-1.5 py-0.5 rounded flex items-center gap-1">
                 <Cpu className="w-3 h-3" />
-                HW
+                Hardware
               </span>
             </div>
 

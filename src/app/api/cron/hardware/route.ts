@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import { execSync, ExecSyncOptions } from "child_process";
 
+import { crontabLineUsesScriptsDir } from "@/lib/hardware-cron";
 import { getChScriptsDir, getChHardwareLogDir, CH_DATA_DIR } from "@/lib/paths";
 
 /**
@@ -22,18 +23,7 @@ import { getChScriptsDir, getChHardwareLogDir, CH_DATA_DIR } from "@/lib/paths";
  *   CH_SCRIPTS_DIR (default: CH_DATA_DIR/scripts)
  */
 
-const SCRIPTS_DIR = getChScriptsDir();
-const LOG_DIR = getChHardwareLogDir();
 const DISABLED_STATE_FILE = CH_DATA_DIR + "/.disabled_hardware_crons.json";
-
-/**
- * Expand ${HOME} and $HOME in a string to their actual values.
- * Cron entries often use $HOME which needs resolving.
- */
-function expandEnv(value: string): string {
-  const home = process.env.HOME || "";
-  return value.replace(/\$HOME/g, home).replace(/\$\{HOME\}/g, home);
-}
 
 /** Load the set of disabled hardware cron job IDs */
 function loadDisabledIds(): Set<string> {
@@ -80,8 +70,7 @@ function parseCrontabLine(
 
   if (!workingLine || workingLine.startsWith("#")) return null;
 
-  // Must contain SCRIPTS_DIR to be one of ours (expand $HOME first)
-  if (!expandEnv(workingLine).includes(SCRIPTS_DIR)) return null;
+  if (!crontabLineUsesScriptsDir(workingLine, getChScriptsDir())) return null;
 
   const parts = workingLine.split(/\s+/);
   if (parts.length < 6) return null;
@@ -241,6 +230,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const scriptsDir = getChScriptsDir();
+    if (!crontabLineUsesScriptsDir(command, scriptsDir)) {
+      return NextResponse.json(
+        {
+          error: `Command must run a script under ${scriptsDir} (Control Hub hardware cron scripts directory).`,
+        },
+        { status: 400 }
+      );
+    }
+
     const crontab = await readCrontab();
     const lines = crontab.split("\n");
 
@@ -249,7 +248,8 @@ export async function POST(request: NextRequest) {
     const scriptName = scriptMatch ? scriptMatch[1].split("/").pop()! : "";
     const entryId = scriptName.replace(/\.sh$/, "") || "hw";
 
-    const newLine = serialiseLine(schedule, command, logFile || `${LOG_DIR}/${entryId}.log`);
+    const logDir = getChHardwareLogDir();
+    const newLine = serialiseLine(schedule, command, logFile || `${logDir}/${entryId}.log`);
     const newLines: string[] = [];
     let replaced = false;
 
@@ -342,6 +342,19 @@ export async function PUT(request: NextRequest) {
 
     if (!found) {
       return NextResponse.json({ error: `Hardware cron job '${id}' not found` }, { status: 404 });
+    }
+
+    const scriptsDir = getChScriptsDir();
+    if (
+      command !== undefined &&
+      !crontabLineUsesScriptsDir(command, scriptsDir)
+    ) {
+      return NextResponse.json(
+        {
+          error: `Command must run a script under ${scriptsDir} (Control Hub hardware cron scripts directory).`,
+        },
+        { status: 400 }
+      );
     }
 
     // Toggle-only: update JSON state, no crontab change

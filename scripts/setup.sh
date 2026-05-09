@@ -129,6 +129,15 @@ mkdir -p "$CH_DATA_ROOT/workspaces" 2>/dev/null || true
 mkdir -p "$CH_DATA_ROOT/audit" 2>/dev/null || true
 mkdir -p "$CH_DATA_ROOT/scripts" 2>/dev/null || true
 mkdir -p "$CH_DATA_ROOT/logs" 2>/dev/null || true
+if [ -d "$REPO_ROOT/scripts/hardware" ]; then
+    for f in "$REPO_ROOT/scripts/hardware"/*.sh; do
+        [ -f "$f" ] || continue
+        base=$(basename "$f")
+        if [ ! -f "$CH_DATA_ROOT/scripts/$base" ]; then
+            cp "$f" "$CH_DATA_ROOT/scripts/$base" && chmod +x "$CH_DATA_ROOT/scripts/$base"
+        fi
+    done
+fi
 if [ "$HERMES_CONFIGURED" = true ]; then
     mkdir -p "$HERMES_HOME/logs"
 fi
@@ -142,6 +151,7 @@ fi
 # ── Scripts executable ───────────────────────────────────────
 chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
 chmod +x "$SCRIPT_DIR"/lib/*.sh 2>/dev/null || true
+chmod +x "$SCRIPT_DIR"/hardware/*.sh 2>/dev/null || true
 echo "✓ Scripts ready"
 
 # ── Dependencies ─────────────────────────────────────────────

@@ -23,6 +23,9 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/config/model` | `GET`, `PUT` | Read/update model settings. |
 | `/api/cron` | `GET`, `POST`, `PUT`, `DELETE` | Manage **agent** cron jobs (Hermes `jobs.json` for the active install). |
 | `/api/cron/hardware` | `GET`, `POST`, `PUT`, `DELETE` | **Hardware** cron (system crontab): scripts/logs under `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR`; separate from agent `jobs.json`. |
+| `/api/cron/hardware/meta` | `GET` | `{ scriptsDir, logDir }` from [`getChScriptsDir()`](../src/lib/paths.ts) / [`getChHardwareLogDir()`](../src/lib/paths.ts). The Hardware Cron UI builds script paths only from `scriptsDir`. |
+
+**Hardware cron:** Managed lines are user-crontab entries whose command runs a script **under** `scriptsDir` (default `CH_DATA_DIR/scripts`). `POST`/`PUT` reject any other command path. Preset scripts live in repo `scripts/hardware/`; `scripts/setup.sh` copies any missing `*.sh` into `CH_DATA_DIR/scripts` on setup. Older crontab lines pointing elsewhere are ignored until edited or removed.
 | `/api/goals` | `GET`, `POST` | Manage goal sessions. |
 | `/api/gateway` | `GET` | Read gateway/platform status. |
 | `/api/kanban` | `GET`, `POST`, `PUT`, `DELETE` | Manage boards, columns, and cards. |

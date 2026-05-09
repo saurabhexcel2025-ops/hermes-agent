@@ -728,12 +728,20 @@ export default function CronPage() {
     setHardwareLoading(true);
     try {
       const res = await fetch("/api/cron/hardware");
-      const d = await res.json();
+      const d = (await res.json()) as { data?: { jobs: HardwareCronJob[] }; error?: string };
+      if (!res.ok) {
+        showToast(d.error ?? "Failed to load hardware cron jobs", "error");
+        setHardwareJobs([]);
+        return;
+      }
       if (d.data?.jobs) {
         setHardwareJobs(d.data.jobs);
+      } else {
+        setHardwareJobs([]);
       }
     } catch {
       showToast("Failed to load hardware cron jobs", "error");
+      setHardwareJobs([]);
     } finally {
       setHardwareLoading(false);
     }
@@ -930,7 +938,7 @@ export default function CronPage() {
                   size="sm"
                   icon={Plus}
                   onClick={() => setShowHardwareCreate(true)}
-                  title="New Hardware Job"
+                  title="New hardware job"
                 />
               </>
             )}
@@ -1028,7 +1036,7 @@ export default function CronPage() {
                         icon={Plus}
                         onClick={() => setShowHardwareCreate(true)}
                       >
-                        Add HW Job
+                        Add hardware job
                       </Button>
                     ) : undefined
                   }

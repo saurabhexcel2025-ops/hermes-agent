@@ -1,17 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // HardwareCronModal — Create / Edit hardware cron jobs
 //
-// Wraps Modal with a form for scheduling system crontab entries.
-// Works in tandem with /api/cron/hardware (GET/POST/PUT/DELETE).
-//
-// Usage:
-//   <HardwareCronModal
-//     open={showModal}
-//     onClose={() => setShowModal(false)}
-//     onSave={async (job) => { ... }}
-//     editingJob={null}          // create mode
-//     editingJob={{ id, name, schedule, command, logFile, enabled }}  // edit mode
-//   />
+// Works with /api/cron/hardware and /api/cron/hardware/meta (scriptsDir + logDir).
 // ═══════════════════════════════════════════════════════════════
 
 "use client";
@@ -22,6 +12,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import CronScheduleInput from "@/components/cron/CronScheduleInput";
 import { baseInputStyles } from "@/lib/theme";
+import { HARDWARE_CRON_UI_PRESETS } from "@/lib/hardware-cron";
 
 export interface HardwareCronJob {
   id: string;
@@ -39,29 +30,65 @@ interface Props {
   editingJob?: HardwareCronJob | null;
 }
 
-// Available hardware cron script commands
-const AVAILABLE_SCRIPTS = [
-  { label: "Watchdog", value: "$HOME/.hermes/scripts/ch-watchdog.sh" },
-  { label: "System Monitor", value: "$HOME/.hermes/scripts/ch-sysmon.sh" },
-  { label: "Backup", value: "$HOME/.hermes/scripts/ch-backup.sh" },
-  { label: "Health Check", value: "$HOME/.hermes/scripts/ch-health.sh" },
-  { label: "Log Rotate", value: "$HOME/.hermes/scripts/ch-logrotate.sh" },
-  { label: "Network Monitor", value: "$HOME/.hermes/scripts/ch-netmon.sh" },
-];
+interface MetaResponse {
+  data?: { scriptsDir: string; logDir: string };
+  error?: string;
+}
+
+function normalizePathSlashes(p: string): string {
+  return p.replace(/\\/g, "/");
+}
 
 export default function HardwareCronModal({ open, onClose, onSave, editingJob }: Props) {
   const isEdit = !!editingJob;
 
   const [name, setName] = useState("");
   const [schedule, setSchedule] = useState("*/5 * * * *");
-  const [command, setCommand] = useState(AVAILABLE_SCRIPTS[0].value);
+  const [command, setCommand] = useState("");
   const [logFile, setLogFile] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset / populate form when opening
+  const [meta, setMeta] = useState<{ scriptsDir: string; logDir: string } | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaError, setMetaError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setMeta(null);
+    setMetaError(null);
+    setMetaLoading(true);
+    let cancelled = false;
+    void fetch("/api/cron/hardware/meta")
+      .then(async (r) => {
+        const j = (await r.json()) as MetaResponse;
+        if (cancelled) return;
+        if (!r.ok) {
+          setMetaError(typeof j.error === "string" ? j.error : `HTTP ${r.status}`);
+          return;
+        }
+        if (j.data?.scriptsDir) {
+          setMeta({
+            scriptsDir: normalizePathSlashes(j.data.scriptsDir),
+            logDir: normalizePathSlashes(j.data.logDir ?? ""),
+          });
+        } else {
+          setMetaError(typeof j.error === "string" ? j.error : "Failed to load hardware cron paths");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setMetaError("Failed to load hardware cron paths");
+      })
+      .finally(() => {
+        if (!cancelled) setMetaLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     setError(null);
@@ -70,22 +97,37 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
     if (editingJob) {
       setName(editingJob.name);
       setSchedule(editingJob.schedule);
-      setCommand(editingJob.command);
+      setCommand(normalizePathSlashes(editingJob.command));
       setLogFile(editingJob.logFile ?? "");
       setEnabled(editingJob.enabled);
     } else {
       setName("");
       setSchedule("*/5 * * * *");
-      setCommand(AVAILABLE_SCRIPTS[0].value);
+      setCommand("");
       setLogFile("");
       setEnabled(true);
     }
   }, [open, editingJob]);
 
+  useEffect(() => {
+    if (!open || editingJob || !meta) return;
+    const first = `${meta.scriptsDir}/${HARDWARE_CRON_UI_PRESETS[0].file}`;
+    setCommand(first);
+  }, [open, editingJob, meta]);
+
+  const presetPaths =
+    meta?.scriptsDir != null
+      ? HARDWARE_CRON_UI_PRESETS.map((p) => ({
+          label: p.label,
+          value: `${meta.scriptsDir}/${p.file}`,
+        }))
+      : [];
+
+  const commandInPresets = presetPaths.some((p) => p.value === command);
+
   const handleSave = async () => {
     setError(null);
 
-    // Validate schedule
     const fields = schedule.trim().split(/\s+/);
     if (fields.length !== 5) {
       setScheduleError("Schedule must have exactly 5 fields: min hour dom mon dow");
@@ -99,6 +141,11 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
 
     if (!command.trim()) {
       setError("Command (script) is required");
+      return;
+    }
+
+    if (!meta) {
+      setError("Paths not loaded yet");
       return;
     }
 
@@ -129,8 +176,9 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
         variant="primary"
         size="sm"
         color="orange"
-        onClick={handleSave}
+        onClick={() => void handleSave()}
         loading={isSaving}
+        disabled={!!metaError || metaLoading || !meta}
       >
         {isEdit ? "Update Job" : "Create Job"}
       </Button>
@@ -148,12 +196,20 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
       footer={footer}
     >
       <div className="space-y-5">
+        {metaLoading && (
+          <div className="flex items-center gap-2 text-sm text-white/50">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading script paths…
+          </div>
+        )}
+        {metaError && (
+          <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+            {metaError}
+          </div>
+        )}
 
-        {/* Name */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">
-            Job Name
-          </label>
+          <label className="text-sm font-medium text-white/70">Job Name</label>
           <input
             type="text"
             value={name}
@@ -163,7 +219,6 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
           />
         </div>
 
-        {/* Schedule */}
         <CronScheduleInput
           value={schedule}
           onChange={(val) => {
@@ -173,29 +228,31 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
           error={scheduleError}
         />
 
-        {/* Command / Script */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">
-            Script Command
-          </label>
+          <label className="text-sm font-medium text-white/70">Script Command</label>
           <select
-            value={command}
+            value={command || presetPaths[0]?.value || ""}
             onChange={(e) => setCommand(e.target.value)}
-            className={`${baseInputStyles} cursor-pointer`}
+            disabled={!meta || presetPaths.length === 0}
+            className={`${baseInputStyles} cursor-pointer disabled:opacity-50`}
           >
-            {AVAILABLE_SCRIPTS.map((script) => (
+            {!commandInPresets && command ? (
+              <option value={command}>{command} (current)</option>
+            ) : null}
+            {presetPaths.map((script) => (
               <option key={script.value} value={script.value}>
                 {script.label} — {script.value}
               </option>
             ))}
           </select>
           <p className="text-xs text-white/30">
-            System script to run. Logs are written to{" "}
-            <span className="font-mono text-white/50">$HOME/.hermes/logs/</span>
+            Scripts live under Control Hub&apos;s hardware scripts directory (
+            <span className="font-mono text-white/50">{meta?.scriptsDir ?? "…"}</span>
+            ). Default logs:{" "}
+            <span className="font-mono text-white/50">{meta?.logDir ?? "…"}</span>
           </p>
         </div>
 
-        {/* Log File (optional, edit only) */}
         {isEdit && (
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-white/70">
@@ -206,13 +263,14 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
               type="text"
               value={logFile}
               onChange={(e) => setLogFile(e.target.value)}
-              placeholder="e.g. $HOME/.hermes/logs/custom.log"
+              placeholder={
+                meta?.logDir ? `e.g. ${meta.logDir}/custom.log` : "e.g. path/to/custom.log"
+              }
               className={baseInputStyles}
             />
           </div>
         )}
 
-        {/* Enabled toggle */}
         {isEdit && (
           <div className="flex items-center gap-3">
             <button
@@ -234,7 +292,6 @@ export default function HardwareCronModal({ open, onClose, onSave, editingJob }:
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
             {error}
