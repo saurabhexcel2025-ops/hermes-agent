@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Clock,
   Plus,
@@ -21,6 +21,7 @@ import {
   Check,
   Loader2,
   Zap,
+  Server,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
@@ -33,6 +34,8 @@ import { baseInputStyles } from "@/lib/theme";
 import { parseSchedule } from "@/lib/utils";
 import { useApiData } from "@/hooks/useApiData";
 import CronScheduleInput from "@/components/cron/CronScheduleInput";
+import HardwareCronCard, { HardwareCronJob } from "@/components/cron/HardwareCronCard";
+import HardwareCronModal from "@/components/cron/HardwareCronModal";
 
 interface CronJob {
   id: string;
@@ -608,6 +611,13 @@ export default function CronPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [pauseAllBusy, setPauseAllBusy] = useState(false);
+  // Hardware cron tab state
+  const [activeTab, setActiveTab] = useState<"agent" | "hardware">("agent");
+  const [showHardwareCreate, setShowHardwareCreate] = useState(false);
+  const [editingHardwareJob, setEditingHardwareJob] = useState<HardwareCronJob | null>(null);
+  const [hardwareJobs, setHardwareJobs] = useState<HardwareCronJob[]>([]);
+  const [hardwareLoading, setHardwareLoading] = useState(false);
+  const [hardwareSearch, setHardwareSearch] = useState("");
   const { showToast, toastElement } = useToast();
 
   const { data, loading, error: _apiError, refetch: loadJobs } = useApiData<CronData>("/api/cron", {
@@ -693,6 +703,85 @@ export default function CronPage() {
     }
   };
 
+  // ── Hardware Cron handlers ────────────────────────────────────
+
+  const loadHardwareJobs = async () => {
+    setHardwareLoading(true);
+    try {
+      const res = await fetch("/api/cron/hardware");
+      const d = await res.json();
+      if (d.data?.jobs) {
+        setHardwareJobs(d.data.jobs);
+      }
+    } catch {
+      showToast("Failed to load hardware cron jobs", "error");
+    } finally {
+      setHardwareLoading(false);
+    }
+  };
+
+  const handleHardwareToggle = async (id: string) => {
+    const job = hardwareJobs.find((j) => j.id === id);
+    if (!job) return;
+    const newEnabled = !job.enabled;
+    const res = await fetch("/api/cron/hardware", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, enabled: newEnabled }),
+    });
+    if (res.ok) {
+      showToast(newEnabled ? "Hardware job enabled" : "Hardware job paused");
+      loadHardwareJobs();
+    } else {
+      const body = await res.json().catch(() => null);
+      showToast(body?.error || "Failed to update hardware job", "error");
+    }
+  };
+
+  const handleHardwareDelete = async (id: string) => {
+    const res = await fetch(`/api/cron/hardware?id=${id}`, { method: "DELETE" });
+    if (res.ok) {
+      showToast("Hardware cron job deleted");
+      loadHardwareJobs();
+    } else {
+      const body = await res.json().catch(() => null);
+      showToast(body?.error || "Failed to delete hardware job", "error");
+    }
+  };
+
+  const handleHardwareEdit = (job: HardwareCronJob) => {
+    setEditingHardwareJob(job);
+  };
+
+  const handleHardwareSave = async (job: Partial<HardwareCronJob>) => {
+    if (job.id) {
+      // Update existing
+      const res = await fetch("/api/cron/hardware", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(job),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "Failed to update hardware job");
+      }
+      showToast("Hardware cron job updated");
+    } else {
+      // Create new
+      const res = await fetch("/api/cron/hardware", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(job),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "Failed to create hardware job");
+      }
+      showToast("Hardware cron job created");
+    }
+    loadHardwareJobs();
+  };
+
   const filteredJobs =
     data?.jobs.filter(
       (job) =>
@@ -702,68 +791,78 @@ export default function CronPage() {
         job.prompt.toLowerCase().includes(search.toLowerCase()),
     ) || [];
 
+  const filteredHardwareJobs = hardwareJobs.filter(
+    (job) =>
+      !hardwareSearch ||
+      job.name.toLowerCase().includes(hardwareSearch.toLowerCase()) ||
+      job.schedule.includes(hardwareSearch),
+  );
+
   const enabledCount = data?.jobs.filter((j) => j.enabled).length || 0;
+  const enabledHwCount = hardwareJobs.filter((j) => j.enabled).length || 0;
+
+  // Load hardware jobs when switching to the hardware tab
+  const [hwLoaded, setHwLoaded] = useState(false);
+  useEffect(() => {
+    if (activeTab === "hardware" && !hwLoaded) {
+      void loadHardwareJobs();
+      setHwLoaded(true);
+    }
+    if (activeTab !== "hardware") {
+      setHwLoaded(false);
+    }
+  }, [activeTab, hwLoaded]);
+
+  const pageSubtitle = data
+    ? `Agent: ${enabledCount}/${data.total}  •  Hardware: ${enabledHwCount}/${hardwareJobs.length || 0}`
+    : "Scheduled tasks";
 
   return (
     <div className="min-h-screen bg-dark-950 grid-bg">
       <PageHeader
         icon={Clock}
         title="Cron Jobs"
-        subtitle={
-          data
-            ? `${enabledCount} Active / ${data.total} Total`
-            : "Scheduled tasks"
-        }
+        subtitle={pageSubtitle}
         color="orange"
         actions={
-          <>
-            <Button
-              variant="secondary"
-              color="orange"
-              size="sm"
-              icon={Pause}
-              disabled={pauseAllBusy || !data?.total}
-              onClick={() => void handlePauseAll()}
-            >
-              {pauseAllBusy ? "Pausing…" : "Pause all"}
-            </Button>
-            <Button
-              variant="primary"
-              color="orange"
-              size="sm"
-              icon={Plus}
-              onClick={() => setShowCreate(true)}
-            >
-              New Job
-            </Button>
-          </>
-        }
-      />
-
-      <div className="px-6 py-6">
-        <div className="mb-6">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search jobs..."
-            accentColor="orange"
-          />
-        </div>
-
-        {loading ? (
-          <LoadingSpinner text="Loading cron jobs..." />
-        ) : filteredJobs.length === 0 ? (
-          <div className="rounded-xl border border-white/10 bg-dark-900/50">
-            <EmptyState
-            icon={Clock}
-            title="No cron jobs"
-            description={
-              search
-                ? "No jobs match your search"
-                : "Create your first scheduled job"
-            }
-            action={
-              !search ? (
+          <div className="flex items-center gap-2">
+            {/* Agent / Hardware tab toggle */}
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-lg p-0.5">
+              <button
+                onClick={() => setActiveTab("agent")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activeTab === "agent"
+                    ? "bg-neon-orange/20 text-neon-orange"
+                    : "text-white/50 hover:text-white"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Agent
+              </button>
+              <button
+                onClick={() => setActiveTab("hardware")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activeTab === "hardware"
+                    ? "bg-neon-cyan/20 text-neon-cyan"
+                    : "text-white/50 hover:text-white"
+                }`}
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                Hardware
+              </button>
+            </div>
+            {activeTab === "agent" && (
+              <>
+                <Button
+                  variant="secondary"
+                  color="orange"
+                  size="sm"
+                  icon={Pause}
+                  disabled={pauseAllBusy || !data?.total}
+                  onClick={() => void handlePauseAll()}
+                >
+                  {pauseAllBusy ? "Pausing…" : "Pause all"}
+                </Button>
                 <Button
                   variant="primary"
                   color="orange"
@@ -771,35 +870,149 @@ export default function CronPage() {
                   icon={Plus}
                   onClick={() => setShowCreate(true)}
                 >
-                  Create Job
+                  New Job
                 </Button>
-              ) : undefined
-            }
-          />
+              </>
+            )}
+            {activeTab === "hardware" && (
+              <Button
+                variant="primary"
+                color="cyan"
+                size="sm"
+                icon={Plus}
+                onClick={() => setShowHardwareCreate(true)}
+              >
+                New HW Job
+              </Button>
+            )}
           </div>
-        ) : (
-          <div className="grid gap-3">
-            {filteredJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                onToggle={handleToggle}
-                onDelete={handleDelete}
-                onRun={handleRun}
-                onEdit={handleEdit}
+        }
+      />
+
+      <div className="px-6 py-6">
+        {/* ── Agent Tab ── */}
+        {activeTab === "agent" && (
+          <>
+            <div className="mb-6">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search agent jobs..."
+                accentColor="orange"
               />
-            ))}
-          </div>
+            </div>
+
+            {loading ? (
+              <LoadingSpinner text="Loading cron jobs..." />
+            ) : filteredJobs.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-dark-900/50">
+                <EmptyState
+                  icon={Clock}
+                  title="No cron jobs"
+                  description={
+                    search
+                      ? "No jobs match your search"
+                      : "Create your first scheduled job"
+                  }
+                  action={
+                    !search ? (
+                      <Button
+                        variant="primary"
+                        color="orange"
+                        size="sm"
+                        icon={Plus}
+                        onClick={() => setShowCreate(true)}
+                      >
+                        Create Job
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {filteredJobs.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    onToggle={handleToggle}
+                    onDelete={handleDelete}
+                    onRun={handleRun}
+                    onEdit={handleEdit}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Hardware Tab ── */}
+        {activeTab === "hardware" && (
+          <>
+            <div className="mb-6">
+              <SearchInput
+                value={hardwareSearch}
+                onChange={setHardwareSearch}
+                placeholder="Search hardware jobs..."
+                accentColor="cyan"
+              />
+            </div>
+
+            {hardwareLoading ? (
+              <LoadingSpinner text="Loading hardware cron jobs..." />
+            ) : filteredHardwareJobs.length === 0 ? (
+              <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50">
+                <EmptyState
+                  icon={Cpu}
+                  title="No hardware cron jobs"
+                  description={
+                    hardwareSearch
+                      ? "No jobs match your search"
+                      : "Add a real system cron job to run independently of the agent"
+                  }
+                  action={
+                    !hardwareSearch ? (
+                      <Button
+                        variant="primary"
+                        color="cyan"
+                        size="sm"
+                        icon={Plus}
+                        onClick={() => setShowHardwareCreate(true)}
+                      >
+                        Add HW Job
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {filteredHardwareJobs.map((job) => (
+                  <HardwareCronCard
+                    key={job.id}
+                    job={job}
+                    onToggle={(id) => void handleHardwareToggle(id)}
+                    onEdit={(job) => {
+                      setEditingHardwareJob(job);
+                      setShowHardwareCreate(true);
+                    }}
+                    onDelete={(id) => void handleHardwareDelete(id)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
+      {/* ── Agent Modals ── */}
       {showCreate && (
         <CreateJobModal
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
             showToast("Job created!");
-            loadJobs();
+            void loadJobs();
           }}
         />
       )}
@@ -811,10 +1024,26 @@ export default function CronPage() {
           onSaved={() => {
             setEditingJob(null);
             showToast("Job updated!");
-            loadJobs();
+            void loadJobs();
           }}
         />
       )}
+
+      {/* ── Hardware Modal (create + edit) ── */}
+      <HardwareCronModal
+        open={showHardwareCreate || !!editingHardwareJob}
+        editingJob={editingHardwareJob}
+        onClose={() => {
+          setShowHardwareCreate(false);
+          setEditingHardwareJob(null);
+        }}
+        onSave={async (job) => {
+          await handleHardwareSave(job);
+          setShowHardwareCreate(false);
+          setEditingHardwareJob(null);
+          void loadHardwareJobs();
+        }}
+      />
 
       {toastElement}
     </div>

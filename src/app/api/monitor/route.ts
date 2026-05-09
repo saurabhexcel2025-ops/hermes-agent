@@ -218,8 +218,8 @@ export async function GET() {
             enabled: j.enabled !== false,
             schedule:
               j.schedule_display ||
-              (typeof j.schedule === "object"
-                ? j.schedule.display || ""
+              (typeof j.schedule === "object" && j.schedule !== null
+                ? (j.schedule as { display?: string }).display || String((j.schedule as { minutes?: number }).minutes ? `${(j.schedule as { minutes: number }).minutes}m` : JSON.stringify(j.schedule))
                 : String(j.schedule || "")),
             lastRun: j.last_run_at || null,
             nextRun: j.next_run_at || null,

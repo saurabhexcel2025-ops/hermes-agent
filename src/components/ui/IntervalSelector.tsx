@@ -20,6 +20,7 @@ const PRESETS = [
   { value: "every 30m", label: "30 minutes"},
   { value: "every 1h",  label: "1 hour"    },
   { value: "every 2h",  label: "2 hours"   },
+  { value: "every 3h",  label: "3 hours"   },
   { value: "every 4h",  label: "4 hours"   },
   { value: "every 8h",  label: "8 hours"   },
   { value: "every 12h", label: "12 hours"  },

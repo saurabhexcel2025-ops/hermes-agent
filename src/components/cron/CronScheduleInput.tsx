@@ -31,6 +31,7 @@ export const CRON_PRESETS: PresetOption[] = [
   { label: "Every 30 minutes", shortLabel: "30m", value: "*/30 * * * *" },
   { label: "Every 1 hour",     shortLabel: "1h",  value: "0 * * * *"    },
   { label: "Every 2 hours",   shortLabel: "2h",  value: "0 */2 * * *"  },
+  { label: "Every 3 hours",   shortLabel: "3h",  value: "0 */3 * * *"  },
   { label: "Every 4 hours",   shortLabel: "4h",  value: "0 */4 * * *"  },
   { label: "Every 6 hours",   shortLabel: "6h",  value: "0 */6 * * *"  },
   { label: "Every 12 hours",  shortLabel: "12h", value: "0 */12 * * *" },
