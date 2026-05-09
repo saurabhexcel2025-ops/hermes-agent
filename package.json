@@ -27,6 +27,12 @@
     "test:coverage": "jest --coverage",
 
     "test:e2e": "cross-env PORT=3000 playwright test",
+
+    "test:full-install": "python scripts/test_full_install_update_process.py --profile smoke --skip-http",
+
+    "test:full-install-release": "python scripts/test_full_install_update_process.py --profile release --skip-http",
+
+    "test:full-install-hermes": "python scripts/test_full_install_update_process.py --profile release --skip-http --with-real-hermes-install",
     "discover-agents": "node scripts/discover-agents.mjs",
 
     "generate:schema-json": "npx tsx scripts/generate-json-schema.ts"
