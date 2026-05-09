@@ -1,17 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 
 import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { resolveSafeProfileName } from "@/lib/path-security";
+import {
+  buildEnabledYamlLines,
+  findSkillsEnabledBlockLineRange,
+  findSkillsHeaderLineIndex,
+  getResolvedEnabledSkillNames,
+} from "@/lib/skills-enabled-config";
+
+function resolveSkillsRoot(profile: string): string {
+  const home = getActiveHermesHome();
+  if (profile === "default") return home + "/skills";
+  const profileSkills = home + "/profiles/" + profile + "/skills";
+  if (existsSync(profileSkills)) return profileSkills;
+  return home + "/skills";
+}
 
 // PUT — Toggle a skill on/off for a profile
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
-  // Authentication checks
   const ro = requireNotReadOnly();
   if (ro) return ro;
   const auth = requireMcApiKey(request);
@@ -27,7 +40,6 @@ export async function PUT(
       return NextResponse.json({ error: "enabled (boolean) is required" }, { status: 400 });
     }
 
-    // Validate profile name
     const profileResult = resolveSafeProfileName(profileParam);
     if (!profileResult.ok) {
       return NextResponse.json({ error: profileResult.error }, { status: 400 });
@@ -45,83 +57,38 @@ export async function PUT(
       return NextResponse.json({ error: "Profile config not found" }, { status: 404 });
     }
 
-    // ── Read current skills.enabled from YAML ──────────────────────────────────
     const content = readFileSync(configPath, "utf-8");
-    const lines = content.split("\n");
-    let inSkills = false;
-    let inEnabled = false;
-    let enabledStart = -1;
-    let enabledEnd = -1;
+    const skillsRoot = resolveSkillsRoot(profile);
+    const currentEnabled = getResolvedEnabledSkillNames(content, skillsRoot);
 
-    for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
-
-      if (trimmed.startsWith("skills:")) {
-        inSkills = true;
-        continue;
-      }
-      if (inSkills && !lines[i].startsWith(" ") && trimmed) {
-        inSkills = false;
-      }
-      if (inSkills && trimmed.startsWith("enabled:")) {
-        inEnabled = true;
-        enabledStart = i;
-        continue;
-      }
-      if (inEnabled) {
-        if (!lines[i].startsWith("  ") || (!trimmed.startsWith("-") && trimmed)) {
-          enabledEnd = i;
-          inEnabled = false;
-        }
-      }
-    }
-    if (inEnabled && enabledEnd === -1) enabledEnd = lines.length;
-
-    // Parse current enabled list
-    const currentEnabled: string[] = [];
-    if (enabledStart >= 0 && enabledEnd > enabledStart) {
-      for (let i = enabledStart + 1; i < enabledEnd; i++) {
-        const match = lines[i].trim().match(/^-\s*(.+)$/);
-        if (match) currentEnabled.push(match[1].trim());
-      }
-    }
-
-    // ── Update the list ────────────────────────────────────────────────────────
-    // Toggle ON  → add skill to enabled list (if not already there)
-    // Toggle OFF → remove skill from enabled list
     const newEnabled = enabled
       ? currentEnabled.includes(name)
         ? currentEnabled
         : [...currentEnabled, name].sort()
       : currentEnabled.filter((s) => s !== name);
 
-    // Build YAML representation
-    const newEnabledYaml = newEnabled.length > 0
-      ? "  enabled:\n" + newEnabled.map((s) => "    - " + s).join("\n") + "\n"
-      : "";
+    const lines = content.split(/\r?\n/);
+    const trailingNl = /\r?\n$/.test(content);
+    const yamlLines = buildEnabledYamlLines(newEnabled);
 
-    if (enabledStart >= 0 && enabledEnd > enabledStart) {
-      // Replace existing enabled block
-      lines.splice(enabledStart, enabledEnd - enabledStart, ...newEnabledYaml.trimEnd().split("\n"));
+    const range = findSkillsEnabledBlockLineRange(lines);
+    if (range) {
+      lines.splice(range.start, range.endExclusive - range.start, ...yamlLines);
     } else {
-      // No enabled block — find or create skills: section and insert
-      let insertAt = lines.length;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith("skills:")) {
-          insertAt = i + 1;
-          break;
+      const hi = findSkillsHeaderLineIndex(lines);
+      if (hi >= 0) {
+        lines.splice(hi + 1, 0, ...yamlLines);
+      } else {
+        if (lines.length > 0 && lines[lines.length - 1].trim() !== "") {
+          lines.push("");
         }
-      }
-      if (insertAt === lines.length) {
         lines.push("skills:");
-      }
-      if (newEnabledYaml) {
-        lines.splice(insertAt, 0, ...newEnabledYaml.trimEnd().split("\n"));
+        lines.push(...yamlLines);
       }
     }
 
-    const { writeFileSync } = await import("fs");
-    writeFileSync(configPath, lines.join("\n"));
+    const out = lines.join("\n") + (trailingNl ? "\n" : "");
+    writeFileSync(configPath, out, "utf-8");
 
     return NextResponse.json({
       data: { success: true, skill: name, profile, enabled },

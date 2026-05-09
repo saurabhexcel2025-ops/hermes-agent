@@ -74,17 +74,28 @@ export default function SkillsPage() {
     if (Object.keys(pendingToggles).length === 0) return;
     setSaving(true);
     try {
-      for (const [skillName, enabled] of Object.entries(pendingToggles)) {
-        await fetch(`/api/skills/${encodeURIComponent(skillName)}/toggle`, {
+      const entries = Object.entries(pendingToggles);
+      for (const [skillName, enabled] of entries) {
+        const res = await fetch(`/api/skills/${encodeURIComponent(skillName)}/toggle`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ profile: selectedProfile, enabled }),
         });
+        if (!res.ok) {
+          let msg = `Failed to update ${skillName}`;
+          try {
+            const body = await res.json();
+            if (body?.error) msg = body.error as string;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(msg);
+        }
       }
-      showToast(`Updated ${Object.keys(pendingToggles).length} skills`, "success");
+      showToast(`Updated ${entries.length} skills`, "success");
       loadSkills();
-    } catch {
-      showToast("Failed to save changes", "error");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to save changes", "error");
     } finally {
       setSaving(false);
     }
@@ -100,6 +111,10 @@ export default function SkillsPage() {
     try {
       const res = await fetch(`/api/skills/${encodeURIComponent(skill.name)}?profile=${selectedProfile}`);
       const d = await res.json();
+      if (!res.ok) {
+        setSkillContent("// " + (d?.error || res.statusText || "Failed to load"));
+        return;
+      }
       setSkillContent(d.data?.content || "// No content");
     } catch {
       setSkillContent("// Failed to load content");

@@ -332,7 +332,7 @@ export async function GET() {
 
           isBundled: BUNDLED_PROFILES.has(entry),
 
-          skillsCount: countProfileSkills(getActiveHermesHome()),
+          skillsCount: countProfileSkills(profileDir),
 
           toolsCount: 0,
 

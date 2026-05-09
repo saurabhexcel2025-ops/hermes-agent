@@ -6,19 +6,17 @@ import { logApiError } from "@/lib/api-logger";
 
 /** Find the SKILL.md file for a given skill name */
 function findSkillFile(skillName: string, profile: string): string | null {
+  const home = getActiveHermesHome();
   const searchDirs: string[] = [];
 
   if (profile === "default") {
-    searchDirs.push(getActiveHermesHome() + "/skills");
+    searchDirs.push(home + "/skills");
   } else {
-    searchDirs.push(getActiveHermesHome() + "/profiles/" + profile + "/skills");
-      // For non-default profiles: try profile-specific dir first, fall back to global
-      const profileSkillsDir = getActiveHermesHome() + "/profiles/" + profile + "/skills";
-      if (existsSync(profileSkillsDir)) {
-        searchDirs.push(profileSkillsDir);
-      }
-      // Always include global skills directory as fallback
-      searchDirs.push(getActiveHermesHome() + "/skills");
+    const profileSkillsDir = home + "/profiles/" + profile + "/skills";
+    if (existsSync(profileSkillsDir)) {
+      searchDirs.push(profileSkillsDir);
+    }
+    searchDirs.push(home + "/skills");
   }
 
   for (const baseDir of searchDirs) {

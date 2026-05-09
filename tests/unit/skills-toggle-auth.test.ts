@@ -3,11 +3,13 @@
 const mockExistsSync = jest.fn();
 const mockReadFileSync = jest.fn();
 const mockWriteFileSync = jest.fn();
+const mockReaddirSync = jest.fn(() => []);
 
 jest.mock("fs", () => ({
   existsSync: mockExistsSync,
   readFileSync: mockReadFileSync,
   writeFileSync: mockWriteFileSync,
+  readdirSync: mockReaddirSync,
 }));
 
 jest.mock("@/lib/hermes-agent-runtime", () => ({
