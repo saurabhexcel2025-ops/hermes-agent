@@ -30,7 +30,7 @@ A command-centre [Next.js](https://nextjs.org/) dashboard for [Hermes Agent](htt
 ```bash
 git clone https://github.com/Daniel-Parke/hermes-control-hub.git
 cd hermes-control-hub
-bash scripts/setup.sh    # PORT + .env.local, npm install, optional Hermes; see script header
+bash scripts/bootstrap/setup.sh    # PORT + .env.local, npm install, optional Hermes; see script header
 npm run dev              # http://localhost:<PORT> from .env.local (setup picks 42069–42100)
 ```
 
@@ -41,8 +41,8 @@ Use `npm run dev:network` for LAN HMR (`CH_ALLOWED_DEV_ORIGINS` is set during se
 ## Prerequisites
 
 - **Node.js 20+** (matches [CI](.github/workflows/ci.yml))
-- **Hermes Agent** (optional for a standalone UI): the app resolves the **active** install via `agents-registry.json` under **`CH_DATA_DIR`**, seeded from **`AGENT_HOME`** / **`HERMES_HOME`** (default `~/.hermes`). Use **Agents** in the UI to switch installs. Run `npm run discover-agents` (also from `setup.sh` / `update.sh`) to refresh `agents.discovery.json`.
-- **Optional:** PostgreSQL + pgvector and Python for [Hindsight](docs/DEPLOY.md)—`bash scripts/setup-hindsight.sh` or follow prompts in `setup.sh`.
+- **Hermes Agent** (optional for a standalone UI): the app resolves the **active** install via `agents-registry.json` under **`CH_DATA_DIR`**, seeded from **`AGENT_HOME`** / **`HERMES_HOME`** (default `~/.hermes`). Use **Agents** in the UI to switch installs. Run `npm run discover-agents` (also from **`scripts/bootstrap/setup.sh`** / **`scripts/application/ch-deploy.sh update`**) to refresh `agents.discovery.json`.
+- **Optional:** PostgreSQL + pgvector and Python for [Hindsight](docs/DEPLOY.md)—`bash scripts/bootstrap/setup-hindsight.sh` or follow prompts in **`scripts/bootstrap/setup.sh`**.
 
 ---
 
@@ -74,19 +74,18 @@ Mission and template Zod schemas live in **`src/lib/schema/`**; regenerate JSON 
 
 | Script | Role |
 |--------|------|
-| `scripts/install.sh` | Clone + `setup.sh`, or `--in-repo`. Optional Hermes templates: `INSTALL_HERMES_PROFILE_TEMPLATES=yes` or interactive prompt when `HERMES_HOME/config.yaml` exists |
-| `scripts/setup.sh` | `.env.local`, PORT, optional Hermes/Hindsight, `npm install`, build |
-| `scripts/update.sh` | Pull `CH_UPDATE_GIT_BRANCH` (default `dev`), install, build, restart; bundled Hermes templates gated by `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES` or TTY prompt (see script header) |
-| `scripts/restart.sh` / `stop.sh` | Restart or stop `next start` on PORT |
-| `scripts/build.sh` / `release.sh` | Build / release helpers (see file headers) |
-| `scripts/prebuild-db.mjs` | Invoked via `npm run prebuild` |
-| `scripts/discover-agents.mjs` | `npm run discover-agents` |
-| `scripts/generate-json-schema.ts` | `npm run generate:schema-json` |
-| `scripts/backup-hermes-config.sh` | Backup `CH_DATA_DIR` (or legacy paths) |
-| `scripts/setup-hindsight.sh` | Hindsight-only install |
+| `scripts/bootstrap/install.sh` | Clone + `scripts/bootstrap/setup.sh`, or `--in-repo`. Optional Hermes templates: `INSTALL_HERMES_PROFILE_TEMPLATES=yes` or interactive prompt when `HERMES_HOME/config.yaml` exists |
+| `scripts/bootstrap/setup.sh` | `.env.local`, PORT, optional Hermes/Hindsight, `npm install`, build |
+| `scripts/application/ch-deploy.sh` | **`update`** \| **`restart`** \| **`rebuild`** — single CLI / dashboard deploy entry (`POST /api/update`; pull, conditional npm, build, profile gate, discover-agents, restart). Options: `--branch` |
+| `scripts/bootstrap/stop.sh` | Stop `next start` listeners on PORT |
+| `scripts/tooling/prebuild-db.mjs` | Invoked via `npm run prebuild` |
+| `scripts/tooling/discover-agents.mjs` | `npm run discover-agents` |
+| `scripts/tooling/generate-json-schema.ts` | `npm run generate:schema-json` |
+| `scripts/bootstrap/backup-hermes-config.sh` | Backup `CH_DATA_DIR` (or legacy paths) |
+| `scripts/bootstrap/setup-hindsight.sh` | Hindsight-only install |
 | `scripts/git-hooks/pre-push` | Optional: `git config core.hooksPath scripts/git-hooks` |
 
-Other utilities live under `scripts/` and `scripts/lib/`.
+Preset hardware cron shells: **`scripts/hardware/`**. Hermes markdown templates: **`scripts/bundled-profiles/`**. Shared bash modules: **`scripts/lib/`**. Full layout: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ---
 
@@ -105,12 +104,12 @@ Control Hub reads and writes Hermes **`config.yaml`** (and related files) throug
 
 ## Bundled Hermes profile templates
 
-Markdown templates live under [`scripts/profiles/`](scripts/profiles/) (QA, DevOps, SWE, plus reserved names for future packs). They install under **`HERMES_HOME/profiles/<name>/`** (default **`~/.hermes`**).
+Markdown templates live under [`scripts/bundled-profiles/`](scripts/bundled-profiles/) (QA, DevOps, SWE, plus reserved names for future packs). They install under **`HERMES_HOME/profiles/<name>/`** (default **`~/.hermes`**).
 
-- **Install** (`install.sh` after `setup.sh`): optional. Requires **`HERMES_HOME/config.yaml`**. Copies **only missing** `SOUL.md` / `AGENTS.md` / `auth.json`. Non-interactive installs need **`INSTALL_HERMES_PROFILE_TEMPLATES=yes`**.
-- **Update** (`update.sh`): refreshes those bundled files from the repo when enabled. Interactive runs prompt before overwriting; API/non-TTY deploys sync by default unless **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no`**. Custom profiles you created are untouched.
+- **Install** (`scripts/bootstrap/install.sh` after `scripts/bootstrap/setup.sh`): optional. Requires **`HERMES_HOME/config.yaml`**. Copies **only missing** `SOUL.md` / `AGENTS.md` / `auth.json`. Non-interactive installs need **`INSTALL_HERMES_PROFILE_TEMPLATES=yes`**.
+- **Update** (`bash scripts/application/ch-deploy.sh update`): refreshes those bundled files from the repo when enabled. Interactive runs prompt before overwriting; dashboard deploy (`POST /api/update`) runs non-interactively and syncs by default unless **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no`**. Custom profiles you created are untouched.
 
-Shared logic: [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-hermes-profile-templates.sh). Keys **`HERMES_HOME`** / **`CH_*`** / **`INSTALL_HERMES_*`** in `.env.local` are read by `update.sh` (and install after setup) where documented.
+Shared logic: [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-hermes-profile-templates.sh). Keys **`HERMES_HOME`** / **`CH_*`** / **`INSTALL_HERMES_*`** in `.env.local` are read by **`ch-deploy`** and **`scripts/bootstrap/install.sh`** where documented.
 
 ---
 
@@ -124,7 +123,7 @@ Shared logic: [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-herm
 | `tests/unit/` | Jest |
 | `tests/e2e/` | Playwright (keep `app-routes.ts` aligned with the sidebar) |
 | `docs/` | Technical and community documentation |
-| `scripts/` | Shell/Node setup, hooks, schema generation |
+| `scripts/` | `bootstrap/`, `application/ch-deploy.sh`, `tooling/`, `lib/`, `hardware/`, `bundled-profiles/`, `git-hooks/` |
 
 For a fuller tree and agent rules, see [AGENTS.md](AGENTS.md).
 

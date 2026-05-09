@@ -2,13 +2,34 @@
 
 ## Host and port
 
-Next.js reads **`PORT`**. After **`bash scripts/setup.sh`**, `.env.local` contains **`PORT`** (first free in **42069–42100** by default, or your chosen port) and **`CH_ALLOWED_DEV_ORIGINS`** for LAN development.
+Next.js reads **`PORT`**. After **`bash scripts/bootstrap/setup.sh`**, `.env.local` contains **`PORT`** (first free in **42069–42100** by default, or your chosen port) and **`CH_ALLOWED_DEV_ORIGINS`** for LAN development.
 
 For **production / household LAN**, prefer **`npm run start:network`** (`next start -H 0.0.0.0`), which avoids Next.js dev-only cross-origin checks on `/_next/webpack-hmr`.
 
 For **`next dev` on another machine** using a URL with a **literal IP** (e.g. `http://192.168.1.10:42069`), the browser `Origin` must be listed in **`CH_ALLOWED_DEV_ORIGINS`** (setup generates common cases). Opening the site via a **`.local` hostname** matches the `*.local` pattern in `next.config.ts` without extra entries.
 
 Override the host port in Docker Compose with **`PORT`** (see `docker-compose.yml`).
+
+## Scripts layout
+
+| Location | Role |
+|----------|------|
+| `scripts/bootstrap/` | **`install.sh`** (clone or `--in-repo`), **`setup.sh`**, **`stop.sh`**, **`backup-hermes-config.sh`**, **`setup-hindsight.sh`**, Python helper for Hindsight |
+| `scripts/application/` | **`ch-deploy.sh`** — single deploy entry for CLI and dashboard (`update`, `restart`, `rebuild`; optional `--branch`) |
+| `scripts/lib/` | Shared bash modules (`ch-deploy-impl.sh`, Hermes profile templates, dotenv, port helpers, …) |
+| `scripts/tooling/` | **`prebuild-db.mjs`**, **`discover-agents.mjs`**, **`generate-json-schema.ts`** (also run via `npm run prebuild`, `npm run discover-agents`, `npm run generate:schema-json`) |
+| `scripts/hardware/` | Preset cron scripts; copied into **`CH_DATA_DIR/scripts`** when missing during **`scripts/bootstrap/setup.sh`** |
+| `scripts/bundled-profiles/` | Hermes markdown templates synced by install/update when enabled |
+| `scripts/git-hooks/` | Optional Git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
+
+Deploy from a shell (same commands the dashboard triggers via **`POST /api/update`**):
+
+```bash
+bash scripts/application/ch-deploy.sh update
+bash scripts/application/ch-deploy.sh update --branch dev
+bash scripts/application/ch-deploy.sh restart
+bash scripts/application/ch-deploy.sh rebuild --branch dev
+```
 
 ## Required environment
 
@@ -34,14 +55,14 @@ Mount `CH_DATA_DIR` (and optionally `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR` if 
 
 ## Hermes bundled profile templates
 
-Control Hub can copy **shipped** Hermes profile markdown from `scripts/profiles/` into **`HERMES_HOME/profiles/`** (see [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh)).
+Control Hub can copy **shipped** Hermes profile markdown from `scripts/bundled-profiles/` into **`HERMES_HOME/profiles/`** (see [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh)).
 
 | Variable | When | Behaviour |
 |----------|------|-----------|
-| `INSTALL_HERMES_PROFILE_TEMPLATES` | `install.sh`, non-interactive | Set to `yes` to install missing template files; omit/`no` skips (interactive defaults to a prompt when Hermes `config.yaml` exists). |
-| `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES` | `update.sh` | `yes`: overwrite bundled `SOUL.md`/`AGENTS.md` from the repo. `no`: skip profile sync. Unset + interactive TTY: prompt. Unset + non-TTY (e.g. deploy API): sync (backward compatible). |
+| `INSTALL_HERMES_PROFILE_TEMPLATES` | `scripts/bootstrap/install.sh`, non-interactive | Set to `yes` to install missing template files; omit/`no` skips (interactive defaults to a prompt when Hermes `config.yaml` exists). |
+| `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES` | `scripts/application/ch-deploy.sh update` | `yes`: overwrite bundled `SOUL.md`/`AGENTS.md` from the repo. `no`: skip profile sync. Unset + interactive TTY: prompt. Unset + non-TTY (e.g. dashboard deploy spawn): sync by default. |
 
-`update.sh` loads **`HERMES_HOME`** and the variables above from **`.env.local`** when present (same keys as Next.js). For **systemd** or Docker **without** `.env.local**, export these in the unit file or Compose `environment` block.
+`ch-deploy` loads **`HERMES_HOME`** and the variables above from **`.env.local`** when present (same keys as Next.js). For **systemd** or Docker **without** `.env.local**, export these in the unit file or Compose `environment` block.
 
 ## TLS
 

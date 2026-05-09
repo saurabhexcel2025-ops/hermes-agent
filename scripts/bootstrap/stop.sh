@@ -2,7 +2,7 @@
 # Stop Control Hub Next.js server on PORT (from env, .env.local, or default 3000).
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$(dirname "$SCRIPT_DIR")"
+APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CH_PORT_FILE=""
 if [ -z "${PORT:-}" ] && [ -f "$APP_DIR/.env.local" ]; then
   CH_PORT_FILE="$(grep -E '^PORT=' "$APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"

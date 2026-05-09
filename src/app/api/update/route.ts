@@ -16,7 +16,7 @@ import { appendAuditLine } from "@/lib/audit-log";
 // Update API — Version Check + Update + Restart
 // ═══════════════════════════════════════════════════════════════
 // GET  /api/update                       → check for updates
-// POST /api/update { action: "update" }  → pull + build + restart (gated)
+// POST /api/update { action: "update" }  → spawn scripts/application/ch-deploy.sh update (gated)
 // POST /api/update { action: "rebuild" } → build + restart (no git, gated)
 // POST /api/update { action: "restart" } → restart only (gated)
 //
@@ -25,9 +25,7 @@ import { appendAuditLine } from "@/lib/audit-log";
 // CH_UPDATE_GIT_BRANCH (default dev) — remote tracking branch for deploy.
 
 const APP_DIR = process.cwd();
-const LOCK_FILE = tmpdir() + "/ch-deploy.lock";
-const RELEASE_SCRIPT = APP_DIR + "/scripts/release.sh";
-const RESTART_SCRIPT = APP_DIR + "/scripts/restart.sh";
+const CH_DEPLOY_SCRIPT = APP_DIR + "/scripts/application/ch-deploy.sh";
 const CACHE_FILE = tmpdir() + "/ch-version-cache.json";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -201,15 +199,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const action = body.action || "update";
 
-    if (existsSync(LOCK_FILE)) {
-      return NextResponse.json(
-        { error: "Update already in progress" },
-        { status: 409 }
-      );
-    }
-
     if (action === "restart") {
-      spawnScript(RESTART_SCRIPT);
+      const missing = deployScriptMissingResponse();
+      if (missing) return missing;
+      spawnChDeploy("ch-restart", ["restart"]);
       appendAuditLine({
         action: "deploy.restart",
         resource: "update",
@@ -226,9 +219,10 @@ export async function POST(request: NextRequest) {
       // Run build as a detached background process so the server's memory
       // context is not consumed by npm/build child processes (avoids OOM
       // kills on memory-constrained systems). Uses systemd-run like restart.
-      const BUILD_SCRIPT = APP_DIR + "/scripts/build.sh";
+      const missing = deployScriptMissingResponse();
+      if (missing) return missing;
       try {
-        spawnScript(BUILD_SCRIPT, "ch-rebuild", rebuildBranch);
+        spawnChDeploy("ch-rebuild", ["rebuild", "--branch", rebuildBranch]);
       } catch (error) {
         logApiError("POST /api/update", "spawn build", error);
         appendAuditLine({
@@ -253,91 +247,42 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "update") {
+      const updateBranch = body.branch
+        ? sanitizeGitBranch(String(body.branch))
+        : UPDATE_BRANCH;
+      const missing = deployScriptMissingResponse();
+      if (missing) return missing;
       try {
-        runGit(["fetch", "origin", UPDATE_BRANCH, "--quiet"]);
-        runGit(["checkout", UPDATE_BRANCH, "--quiet"]);
-        runGit(["reset", "--hard", "origin/" + UPDATE_BRANCH, "--quiet"]);
+        spawnChDeploy("ch-update", ["update", "--branch", updateBranch]);
       } catch (error) {
-        logApiError("POST /api/update", "git operations", error);
+        logApiError("POST /api/update", "spawn update", error);
         appendAuditLine({
           action: "deploy.update",
-          resource: "git",
-          ok: false,
-          detail: "git failed",
-          correlationId,
-        });
-        return NextResponse.json({ error: "Git update failed" }, { status: 500 });
-      }
-
-      try {
-        const diff = execSync(
-          'git diff --name-only HEAD@{1} HEAD 2>/dev/null || echo ""',
-          { cwd: APP_DIR, encoding: "utf-8", timeout: 30000 }
-        );
-        if (diff.includes("package")) {
-          execSync("npm install --prefer-offline", {
-            cwd: APP_DIR,
-            timeout: 120000,
-            stdio: "pipe",
-          });
-        }
-      } catch (error) {
-        logApiError("POST /api/update", "npm install", error);
-        appendAuditLine({
-          action: "deploy.update",
-          resource: "npm",
-          ok: false,
-          correlationId,
-        });
-        return NextResponse.json({ error: "npm install failed" }, { status: 500 });
-      }
-
-      try {
-        execSync("npm run build", {
-          cwd: APP_DIR,
-          timeout: 180000,
-          stdio: "pipe",
-        });
-      } catch (error) {
-        logApiError("POST /api/update", "build", error);
-        appendAuditLine({
-          action: "deploy.update",
-          resource: "build",
+          resource: "ch-deploy",
           ok: false,
           correlationId,
         });
         return NextResponse.json(
-          {
-            error: "Build failed — update aborted (server still running)",
-          },
+          { error: "Failed to start update" },
           { status: 500 }
         );
       }
-
-      spawnScript(RELEASE_SCRIPT);
       try {
         unlinkSync(CACHE_FILE);
       } catch (error) {
         logApiError("POST /api/update", "cache cleanup", error);
       }
 
-      let short = "";
-      try {
-        short = runGit(["rev-parse", "--short", "HEAD"]);
-      } catch {
-        // Keep response successful even if git hash retrieval fails.
-      }
-
       appendAuditLine({
         action: "deploy.update",
         resource: "full",
         ok: true,
-        detail: short,
+        detail: updateBranch,
         correlationId,
       });
 
       return NextResponse.json({
-        data: { action: "update", status: "started", newHash: short },
+        data: { action: "update", status: "started", branch: updateBranch },
       });
     }
 
@@ -351,9 +296,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function spawnScript(scriptPath: string, unitName = "ch-action", branch?: string): void {
-  const branchArgs = branch ? `--branch "${branch}"` : "";
-  const command = `sleep 3; bash "${scriptPath}" ${branchArgs}`.trimEnd();
+function quoteShellSingle(arg: string): string {
+  return "'" + arg.replace(/'/g, "'\"'\"'") + "'";
+}
+
+function spawnChDeploy(unitName: string, deployArgs: string[]): void {
+  const command =
+    `sleep 3; bash ${quoteShellSingle(CH_DEPLOY_SCRIPT)} ${deployArgs.map(quoteShellSingle).join(" ")}`.trimEnd();
 
   try {
     spawn(
@@ -381,4 +330,14 @@ function spawnScript(scriptPath: string, unitName = "ch-action", branch?: string
   } catch {
     // ignore
   }
+}
+
+function deployScriptMissingResponse(): NextResponse | null {
+  if (!existsSync(CH_DEPLOY_SCRIPT)) {
+    return NextResponse.json(
+      { error: "Deploy script missing (scripts/application/ch-deploy.sh)" },
+      { status: 500 }
+    );
+  }
+  return null;
 }

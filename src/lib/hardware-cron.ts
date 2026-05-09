@@ -5,7 +5,7 @@
 
 /**
  * UI labels + filenames for hardware cron presets.
- * Ship matching files under `scripts/hardware/` (setup copies into CH_DATA_DIR/scripts).
+ * Ship matching files under `scripts/hardware/` (`scripts/bootstrap/setup.sh` copies into CH_DATA_DIR/scripts).
  */
 export const HARDWARE_CRON_UI_PRESETS = [
   { label: "Watchdog", file: "ch-watchdog.sh" },

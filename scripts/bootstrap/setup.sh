@@ -6,7 +6,7 @@
 #
 # Usage:
 #   cd control-hub
-#   bash scripts/setup.sh
+#   bash scripts/bootstrap/setup.sh
 #
 # Prerequisites:
 #   - Node.js 18+
@@ -21,13 +21,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
-# shellcheck source=lib/ch-env.sh
-source "$SCRIPT_DIR/lib/ch-env.sh"
-# shellcheck source=lib/ch-port.sh
-source "$SCRIPT_DIR/lib/ch-port.sh"
+# shellcheck source=../lib/ch-env.sh
+source "$SCRIPT_DIR/../lib/ch-env.sh"
+# shellcheck source=../lib/ch-port.sh
+source "$SCRIPT_DIR/../lib/ch-port.sh"
 
 echo "╔══════════════════════════════════════════╗"
 echo "║       Control Hub — Setup               ║"
@@ -144,14 +144,15 @@ fi
 echo "✓ Control Hub data directories created at $CH_DATA_ROOT"
 
 # ── Discover local Hermes installs (agents.discovery.json) ───
-if command -v node &>/dev/null && [ -f "$REPO_ROOT/scripts/discover-agents.mjs" ]; then
-    CH_DATA_DIR="$CH_DATA_ROOT" node "$REPO_ROOT/scripts/discover-agents.mjs" || true
+if command -v node &>/dev/null && [ -f "$REPO_ROOT/scripts/tooling/discover-agents.mjs" ]; then
+    CH_DATA_DIR="$CH_DATA_ROOT" node "$REPO_ROOT/scripts/tooling/discover-agents.mjs" || true
 fi
 
 # ── Scripts executable ───────────────────────────────────────
 chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
-chmod +x "$SCRIPT_DIR"/lib/*.sh 2>/dev/null || true
-chmod +x "$SCRIPT_DIR"/hardware/*.sh 2>/dev/null || true
+chmod +x "$REPO_ROOT/scripts/lib"/*.sh 2>/dev/null || true
+chmod +x "$REPO_ROOT/scripts/application"/*.sh 2>/dev/null || true
+chmod +x "$REPO_ROOT/scripts/hardware"/*.sh 2>/dev/null || true
 echo "✓ Scripts ready"
 
 # ── Dependencies ─────────────────────────────────────────────
@@ -197,5 +198,5 @@ echo "Development (hot reload):"
 echo "  npm run dev            # PORT and CH_ALLOWED_DEV_ORIGINS come from .env.local"
 echo ""
 echo "Deploy / update:"
-echo "  bash scripts/update.sh   (branch: CH_UPDATE_GIT_BRANCH in .env.local, default dev)"
+echo "  bash scripts/application/ch-deploy.sh update   (branch: CH_UPDATE_GIT_BRANCH in .env.local, default dev)"
 echo ""

@@ -7,11 +7,11 @@ import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
 import { toJSONSchema } from "zod";
-import { missionV1Schema } from "../src/lib/schema/mission-v1";
-import { templatePackManifestSchema } from "../src/lib/schema/template-pack-v1";
+import { missionV1Schema } from "../../src/lib/schema/mission-v1";
+import { templatePackManifestSchema } from "../../src/lib/schema/template-pack-v1";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const JSON_DIR = resolve(HERE, "../src/lib/schema/json");
+const JSON_DIR = resolve(HERE, "../../src/lib/schema/json");
 
 function stripZodMeta(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;

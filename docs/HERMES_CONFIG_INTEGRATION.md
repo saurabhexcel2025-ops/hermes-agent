@@ -23,7 +23,7 @@ The separate **`hermes-config`** repository (operator-specific automation and do
 
 | Script | Notes |
 |--------|-------|
-| `scripts/setup.sh` | Creates `CH_DATA_DIR` directories (default `~/control-hub/data`). |
-| `scripts/backup-hermes-config.sh` | Backs up `CH_DATA_DIR` when present, else legacy `HERMES_HOME/control-hub/data`. |
+| `scripts/bootstrap/setup.sh` | Creates `CH_DATA_DIR` directories (default `~/control-hub/data`). |
+| `scripts/bootstrap/backup-hermes-config.sh` | Backs up `CH_DATA_DIR` when present, else legacy `HERMES_HOME/control-hub/data`. |
 
 When you add or clone `hermes-config`, inventory its shell scripts and align any data paths with the table above.

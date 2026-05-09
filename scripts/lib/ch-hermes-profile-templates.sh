@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# Bundled Hermes profile templates — shared by install.sh and update.sh
+# Bundled Hermes profile templates — shared by bootstrap/install.sh and ch-deploy update
 #
 # Hermes root: HERMES_HOME (default ~/.hermes). Profiles live under
 #   $HERMES_HOME/profiles/<name>/
 # Control Hub data (CH_DATA_DIR) is never used for profile paths here.
 # ═══════════════════════════════════════════════════════════════
 
-# Ordered list (single source of truth; templates exist only where scripts/profiles has files).
+# Ordered list (single source of truth; templates exist only where scripts/bundled-profiles has files).
 CH_BUNDLED_PROFILE_LIST=(
   qa-engineer
   devops-engineer
@@ -43,7 +43,7 @@ _ch_hermes_cli_ok() {
 # Install mode: create missing profile dirs; copy SOUL.md / AGENTS.md / auth.json only if destination missing.
 ch_bundled_profiles_install() {
   local repo_root="$1"
-  local templates="$repo_root/scripts/profiles"
+  local templates="$repo_root/scripts/bundled-profiles"
   local profile profile_dir
 
   ch_resolve_hermes_home
@@ -82,7 +82,7 @@ ch_bundled_profiles_install() {
 # Update mode: ensure dirs exist; overwrite SOUL.md / AGENTS.md from repo templates when present.
 ch_bundled_profiles_sync() {
   local repo_root="$1"
-  local templates="$repo_root/scripts/profiles"
+  local templates="$repo_root/scripts/bundled-profiles"
   local profile profile_dir
 
   ch_resolve_hermes_home

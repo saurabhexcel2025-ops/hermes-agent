@@ -22,7 +22,7 @@ Extends `~/.hermes/AGENT.md` (base instructions). This file adds project-specifi
 
 cd ~/control-hub
 
-npm run dev     # Start dev server (PORT from .env.local; setup.sh defaults 42069–42100)
+npm run dev     # Start dev server (PORT from .env.local; scripts/bootstrap/setup.sh defaults 42069–42100)
 
 npm run build   # Production build
 
@@ -144,11 +144,13 @@ control-hub/
 
 │   ├── e2e/                        # Playwright (incl. app-routes nav matrix)
 
+│   ├── integration/                # Docker install/update harness (Python)
+
 │   ├── jest.setup.ts
 
 │   └── __mocks__/better-sqlite3.cjs
 
-├── scripts/                        # setup.sh, update.sh, discover-agents.mjs, prebuild-db.mjs, …
+├── scripts/                        # bootstrap/, application/ch-deploy.sh, tooling/, lib/, hardware/, …
 
 ├── scripts/git-hooks/              # Optional pre-push (see docs/CONTRIBUTING.md)
 
@@ -310,15 +312,17 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-3000}
 
 **Scripts:**
 
-- `scripts/restart.sh` — Stop and restart the server (no git/build)
+- `scripts/application/ch-deploy.sh` — **`restart`** (no git/build), **`rebuild`**, or **`update`** (pull **CH_UPDATE_GIT_BRANCH**, install deps if needed, build, profile gate, restart); reads **`CH_*` / `HERMES_HOME` / `INSTALL_HERMES_*`** from `.env.local`; bundled Hermes profile sync gated by **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES`** (see `scripts/lib/ch-deploy-impl.sh`)
 
-- `scripts/update.sh` — Pull from **CH_UPDATE_GIT_BRANCH** (default **dev**), build, restart; reads **`CH_*` / `HERMES_HOME` / `INSTALL_HERMES_*`** from `.env.local`; bundled Hermes profile sync gated by **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES`** (see script header)
+- `scripts/bootstrap/install.sh` — Bootstrap clone + setup, or **`--in-repo`**; optional **`INSTALL_HERMES_PROFILE_TEMPLATES`** for bundled Hermes templates (see script header)
 
-- `scripts/install.sh` — Bootstrap clone + setup, or **`--in-repo`**; optional **`INSTALL_HERMES_PROFILE_TEMPLATES`** for bundled Hermes templates (see script header)
+- `scripts/bootstrap/setup.sh` — Post-clone setup (PORT + `.env.local`, npm install, build)
 
-- `scripts/setup.sh` — Post-clone setup (PORT + `.env.local`, npm install, build)
+- `scripts/bootstrap/stop.sh` — Stop listeners on PORT (used standalone; `ch-deploy restart` stops port inline)
 
-- `scripts/lib/ch-hermes-profile-templates.sh` — Shared bundled Hermes profile install/sync (used by install/update)
+- `scripts/lib/ch-hermes-profile-templates.sh` — Shared bundled Hermes profile install/sync (used by bootstrap install + `ch-deploy update`)
+
+- **Scripts layout** (bootstrap vs tooling vs `ch-deploy`): **[docs/DEPLOY.md](docs/DEPLOY.md)**
 
 
 

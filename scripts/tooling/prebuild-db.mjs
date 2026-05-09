@@ -8,7 +8,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "..");
+const ROOT = join(__dirname, "..", "..");
 const DB_DIR = join(ROOT, "data");
 const DB_PATH = join(DB_DIR, "control-hub.db");
 const MIGRATIONS_DIR = join(ROOT, "src/lib/db/migrations");

@@ -10,7 +10,7 @@
 
     "dev": "next dev",
     "dev:network": "next dev -H 0.0.0.0",
-    "prebuild": "node scripts/prebuild-db.mjs",
+    "prebuild": "node scripts/tooling/prebuild-db.mjs",
 
     "build": "next build",
 
@@ -28,14 +28,14 @@
 
     "test:e2e": "cross-env PORT=3000 playwright test",
 
-    "test:full-install": "python scripts/test_full_install_update_process.py --profile smoke --skip-http",
+    "test:full-install": "python tests/integration/test_full_install_update_process.py --profile smoke --skip-http",
 
-    "test:full-install-release": "python scripts/test_full_install_update_process.py --profile release --skip-http",
+    "test:full-install-release": "python tests/integration/test_full_install_update_process.py --profile release --skip-http",
 
-    "test:full-install-hermes": "python scripts/test_full_install_update_process.py --profile release --skip-http --with-real-hermes-install",
-    "discover-agents": "node scripts/discover-agents.mjs",
+    "test:full-install-hermes": "python tests/integration/test_full_install_update_process.py --profile release --skip-http --with-real-hermes-install",
+    "discover-agents": "node scripts/tooling/discover-agents.mjs",
 
-    "generate:schema-json": "npx tsx scripts/generate-json-schema.ts"
+    "generate:schema-json": "npx tsx scripts/tooling/generate-json-schema.ts"
 
   },
 

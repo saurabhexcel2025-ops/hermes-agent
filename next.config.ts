@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-// Comma-separated full origins (scheme + host + port). scripts/setup.sh generates
+// Comma-separated full origins (scheme + host + port). scripts/bootstrap/setup.sh generates
 // CH_ALLOWED_DEV_ORIGINS for your chosen PORT (localhost, 127.0.0.1, LAN IPv4s).
 
 const extraOrigins = (process.env.CH_ALLOWED_DEV_ORIGINS || "")

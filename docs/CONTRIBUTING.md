@@ -25,7 +25,7 @@ Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDU
 
 ## Local server and E2E
 
-- `scripts/setup.sh` writes **`.env.local`** with **`PORT`** (default: first free **42069–42100**) and **`CH_ALLOWED_DEV_ORIGINS`** for LAN `next dev` (HMR).
+- `scripts/bootstrap/setup.sh` writes **`.env.local`** with **`PORT`** (default: first free **42069–42100**) and **`CH_ALLOWED_DEV_ORIGINS`** for LAN `next dev` (HMR).
 - **`npm run start`** / **`npm run start:network`** read **`PORT`** from the environment; Next.js also loads **`.env.local`** from the repo root when you start via npm.
 - Playwright uses **`process.env.PORT`** (see `playwright.config.ts`). **CI sets `PORT=3000`** so the dev server URL stays fixed in automation. Locally, omit `PORT` to follow `.env.local`, or export `PORT` to match your setup.
 
@@ -48,3 +48,4 @@ See **[TESTING.md](TESTING.md)** for layout, commands, and CI. In short: add or 
 - Update docs in the same PR when behavior or configuration changes.
 - Keep naming aligned with the shipped product (no legacy “edition” terminology).
 - Keep docs implementation-accurate and remove stale references.
+- Bootstrap paths live under **`scripts/bootstrap/`**; deploy actions use **`scripts/application/ch-deploy.sh`** (see **[DEPLOY.md](DEPLOY.md)** and the doc index **[README.md](README.md)**).

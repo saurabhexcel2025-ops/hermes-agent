@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
 # Validates scripts/lib/ch-dotenv-local.sh and ch-hermes-profile-templates.sh
-# plus the CH_UPDATE_SYNC_* decision logic (mirror of scripts/update.sh).
+# plus the CH_UPDATE_SYNC_* decision logic (mirror of scripts/lib/ch-deploy-impl.sh).
 #
 # Safe: uses mktemp fake HERMES_HOME only.
 # ═══════════════════════════════════════════════════════════════
@@ -74,9 +74,9 @@ pass "strips CR on keys"
 rm -rf "$TMP_ENV"
 TMP_ENV=""
 
-# ── eval_sync_gate — MUST match scripts/update.sh gate ─────────
+# ── eval_sync_gate — MUST match ch-deploy-impl.sh gate ──────────
 echo ""
-echo "== update profile sync gate (mirror of update.sh)"
+echo "== update profile sync gate (mirror of ch-deploy update)"
 
 eval_sync_gate() {
   local sync_profiles=false
@@ -191,8 +191,8 @@ pass "sync overwrites SOUL.md from repo templates"
 echo ""
 echo "== bash -n on scripts"
 for f in \
-  "$REPO_ROOT/scripts/install.sh" \
-  "$REPO_ROOT/scripts/update.sh" \
+  "$REPO_ROOT/scripts/bootstrap/install.sh" \
+  "$REPO_ROOT/scripts/application/ch-deploy.sh" \
   "$REPO_ROOT/scripts/lib/ch-hermes-profile-templates.sh" \
   "$REPO_ROOT/scripts/lib/ch-dotenv-local.sh"; do
   bash -n "$f" || fail "bash -n $f"

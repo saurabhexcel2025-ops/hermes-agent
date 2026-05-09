@@ -8,7 +8,7 @@
 | `tests/e2e/` | Playwright | Browser flows against a real `next start` server (see `playwright.config.ts`). |
 | `tests/jest.setup.ts` | Jest | Global setup and shared mocks (`jest.config.js` → `setupFilesAfterEnv`). |
 | `tests/__mocks__/better-sqlite3.cjs` | Jest | CJS shim so the native `better-sqlite3` addon is never loaded in unit tests. |
-| [`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) | Bash | Validates [`scripts/lib/ch-dotenv-local.sh`](../scripts/lib/ch-dotenv-local.sh), [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh), and the update-profile sync gate (mirror of `update.sh`). Uses a fake `HERMES_HOME` under `/tmp` only. CI: **`shell-custom-scripts`** job. |
+| [`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) | Bash | Validates [`scripts/lib/ch-dotenv-local.sh`](../scripts/lib/ch-dotenv-local.sh), [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh), and the update-profile sync gate (mirror of `ch-deploy update`). Uses a fake `HERMES_HOME` under `/tmp` only. CI: **`shell-custom-scripts`** job. |
 
 ## Shell helper tests (bash)
 
@@ -47,16 +47,16 @@ npm run test:e2e
 
 ## Local release-confidence harness (Docker)
 
-**Local-only** heavy integration: [`scripts/test_full_install_update_process.py`](../scripts/test_full_install_update_process.py) builds an ephemeral image, runs scenarios in throwaway containers, and deletes them afterward. It exercises [`scripts/install.sh`](../scripts/install.sh) (bootstrap clone via `file://` bare repo + `setup.sh`), [`scripts/install.sh --in-repo`](../scripts/install.sh), [`scripts/setup.sh`](../scripts/setup.sh), and [`scripts/update.sh`](../scripts/update.sh), with runtime-generated markers under `CH_DATA_DIR` and `HERMES_HOME`. This is **not** part of CI—run it manually before releases. Complements [`tests/scripts/run-shell-custom-tests.sh`](tests/scripts/run-shell-custom-tests.sh).
+**Local-only** heavy integration: [`tests/integration/test_full_install_update_process.py`](../tests/integration/test_full_install_update_process.py) builds an ephemeral image, runs scenarios in throwaway containers, and deletes them afterward. It exercises [`scripts/bootstrap/install.sh`](../scripts/bootstrap/install.sh) (bootstrap clone via `file://` bare repo + [`scripts/bootstrap/setup.sh`](../scripts/bootstrap/setup.sh)), [`scripts/bootstrap/install.sh --in-repo`](../scripts/bootstrap/install.sh), [`scripts/bootstrap/setup.sh`](../scripts/bootstrap/setup.sh), and [`scripts/application/ch-deploy.sh update`](../scripts/application/ch-deploy.sh), with runtime-generated markers under `CH_DATA_DIR` and `HERMES_HOME`. This is **not** part of CI—run it manually before releases. Complements [`tests/scripts/run-shell-custom-tests.sh`](tests/scripts/run-shell-custom-tests.sh).
 
 **Prerequisites:** Docker daemon running; Python 3 (stdlib only).
 
-Default **`--profile smoke`** (core personas + basic update). Use **`--profile release`** for the full matrix (install bootstrap / `install.sh --in-repo`, update with sync off/on).
+Default **`--profile smoke`** (core personas + basic update). Use **`--profile release`** for the full matrix (install bootstrap / `bootstrap/install.sh --in-repo`, update with sync off/on).
 
 ```bash
-python scripts/test_full_install_update_process.py --skip-http
+python tests/integration/test_full_install_update_process.py --skip-http
 
-python scripts/test_full_install_update_process.py --profile release --skip-http
+python tests/integration/test_full_install_update_process.py --profile release --skip-http
 ```
 
 npm: `npm run test:full-install` (smoke + `--skip-http`), `npm run test:full-install-release` (release profile).

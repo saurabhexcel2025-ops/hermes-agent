@@ -151,6 +151,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const [dropdownPurpose, setDropdownPurpose] = useState<"check" | "rebuild">("check");
   const [branches, setBranches] = useState<string[]>(["main", "dev"]);
   const [selectedBranch, setSelectedBranch] = useState("main");
+  /** Branch last used for GET /api/update?branch=… — POST update uses the same branch. */
+  const [deployBranch, setDeployBranch] = useState<string | null>(null);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
@@ -203,6 +205,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
       const d = await res.json();
       if (d.data) {
         setVersion(d.data);
+        setDeployBranch(branch);
         setCheckState(d.data.updateAvailable ? "update-available" : "up-to-date");
       } else {
         setCheckState("idle");
@@ -217,12 +220,15 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const handleUpdate = async () => {
     if (updating || !version?.updateAvailable) return;
     setUpdating(true);
-    setMessage("Updating...");
+    setMessage("Update started — deploying in background...");
     try {
       const res = await fetch("/api/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update" }),
+        body: JSON.stringify({
+          action: "update",
+          ...(deployBranch ? { branch: deployBranch } : {}),
+        }),
       });
       const d = await res.json();
       if (d.error) {

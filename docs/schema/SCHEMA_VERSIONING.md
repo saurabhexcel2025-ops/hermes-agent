@@ -15,7 +15,7 @@
 
 ## Generated JSON Schema
 
-After changing Zod schemas, run from the repo root:
+After changing Zod schemas, run from the repo root (implementation: `scripts/tooling/generate-json-schema.ts`):
 
 ```bash
 npm run generate:schema-json

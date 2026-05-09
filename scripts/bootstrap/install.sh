@@ -7,11 +7,11 @@
 #
 # Usage:
 #   Bootstrap (clones to INSTALL_DIR, default ~/control-hub):
-#     bash path/to/scripts/install.sh
+#     bash path/to/scripts/bootstrap/install.sh
 #   Already cloned this repo (runs setup only):
-#     bash scripts/install.sh --in-repo
+#     bash scripts/bootstrap/install.sh --in-repo
 #   Typical developer path after git clone:
-#     bash scripts/setup.sh
+#     bash scripts/bootstrap/setup.sh
 #
 # Environment (non-interactive / CI / VPS):
 #   CH_INSTALL_NONINTERACTIVE=1  or  CI=1
@@ -28,7 +28,7 @@
 # Hermes two-pass: if you choose to install Hermes when prompted, this script runs the official
 # installer and `hermes setup`, then exits — run install.sh again to finish Control Hub setup.
 #
-# Override: INSTALL_DIR=/path/to/hub bash scripts/install.sh
+# Override: INSTALL_DIR=/path/to/hub bash scripts/bootstrap/install.sh
 # Prerequisites: Node.js 18+, git. Hermes recommended (see prompts).
 # ═══════════════════════════════════════════════════════════════
 
@@ -45,7 +45,7 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/control-hub}"
 BRANCH="${BRANCH:-dev}"
 
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
-SCRIPT_REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
+SCRIPT_REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd -P)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -81,17 +81,17 @@ if [ "$IN_REPO" = true ]; then
     fi
     info "Running in-repo setup from $SCRIPT_REPO_ROOT"
     cd "$SCRIPT_REPO_ROOT"
-    bash scripts/setup.sh
+    bash scripts/bootstrap/setup.sh
 
-    # shellcheck source=lib/ch-dotenv-local.sh
+    # shellcheck source=../lib/ch-dotenv-local.sh
     source "$SCRIPT_REPO_ROOT/scripts/lib/ch-dotenv-local.sh"
     ch_load_control_hub_env_local "$SCRIPT_REPO_ROOT"
-    # shellcheck source=lib/ch-hermes-profile-templates.sh
+    # shellcheck source=../lib/ch-hermes-profile-templates.sh
     source "$SCRIPT_REPO_ROOT/scripts/lib/ch-hermes-profile-templates.sh"
     ch_resolve_hermes_home
 
     if ! ch_hermes_config_present; then
-        info "Skipping optional Hermes profile templates (no $HERMES_HOME/config.yaml). Run Hermes setup, then re-run install or apply templates from scripts/profiles/."
+        info "Skipping optional Hermes profile templates (no $HERMES_HOME/config.yaml). Run Hermes setup, then re-run install or apply templates from scripts/bundled-profiles/."
     else
         run_profile_templates=false
         if noninteractive; then
@@ -190,8 +190,8 @@ if ! hermes_cli_ok; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "  Re-run this script to finish Control Hub setup:"
-            echo "    bash scripts/install.sh --in-repo"
-            echo "    # or: bash scripts/setup.sh"
+            echo "    bash scripts/bootstrap/install.sh --in-repo"
+            echo "    # or: bash scripts/bootstrap/setup.sh"
             echo "  (from your repo clone, or the path you used to start the installer)"
             echo "════════════════════════════════════════════════════════════"
             exit 0
@@ -221,9 +221,9 @@ if [ -d "$INSTALL_DIR" ]; then
         fail "Cannot bootstrap in place: this script lives inside $INSTALL_DIR.
 
 Use one of:
-  bash scripts/setup.sh              # post-clone setup (recommended)
-  bash scripts/install.sh --in-repo # same as setup.sh from repo root
-  cd $INSTALL_DIR && git pull origin $BRANCH && bash scripts/setup.sh
+  bash scripts/bootstrap/setup.sh              # post-clone setup (recommended)
+  bash scripts/bootstrap/install.sh --in-repo # same as setup.sh from repo root
+  cd $INSTALL_DIR && git pull origin $BRANCH && bash scripts/bootstrap/setup.sh
 
 Or clone into a different INSTALL_DIR, or remove this directory and re-run the installer."
     fi
@@ -236,9 +236,9 @@ Or clone into a different INSTALL_DIR, or remove this directory and re-run the i
     else
         info "Using existing installation"
         cd "$INSTALL_DIR"
-        if [ -f "scripts/setup.sh" ]; then
+        if [ -f "scripts/bootstrap/setup.sh" ]; then
             info "Running setup in existing directory..."
-            bash scripts/setup.sh
+            bash scripts/bootstrap/setup.sh
             echo ""
             ok "Setup complete! Start with: npm run start:network"
             exit 0
@@ -282,10 +282,10 @@ else
 fi
 
 cd "$INSTALL_DIR"
-if [ ! -f "scripts/setup.sh" ]; then
-    fail "setup.sh not found after clone"
+if [ ! -f "scripts/bootstrap/setup.sh" ]; then
+    fail "scripts/bootstrap/setup.sh not found after clone"
 fi
-bash scripts/setup.sh
+bash scripts/bootstrap/setup.sh
 
 # shellcheck source=lib/ch-dotenv-local.sh
 source "$INSTALL_DIR/scripts/lib/ch-dotenv-local.sh"
@@ -360,8 +360,8 @@ if [ "$HINDSIGHT_ALREADY" = false ]; then
     if noninteractive; then
         case "${INSTALL_HINDSIGHT:-auto}" in
             yes|YES|1|true|True)
-                if [ -f "$INSTALL_DIR/scripts/setup-hindsight.sh" ]; then
-                    bash "$INSTALL_DIR/scripts/setup-hindsight.sh" || warn "Hindsight setup encountered issues"
+                if [ -f "$INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh" ]; then
+                    bash "$INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh" || warn "Hindsight setup encountered issues"
                 else
                     warn "setup-hindsight.sh not found — skipping"
                 fi
@@ -378,18 +378,18 @@ if [ "$HINDSIGHT_ALREADY" = false ]; then
         echo ""
         if [[ $SETUP_HINDSIGHT =~ ^[Yy]$ ]]; then
             echo ""
-            if [ -f "$INSTALL_DIR/scripts/setup-hindsight.sh" ]; then
-                bash "$INSTALL_DIR/scripts/setup-hindsight.sh" || {
+            if [ -f "$INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh" ]; then
+                bash "$INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh" || {
                     warn "Hindsight setup encountered issues"
-                    echo "  You can retry later with: bash $INSTALL_DIR/scripts/setup-hindsight.sh"
+                    echo "  You can retry later with: bash $INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh"
                 }
             else
                 warn "setup-hindsight.sh not found — skipping Hindsight setup"
-                echo "  Set up later with: bash $INSTALL_DIR/scripts/setup-hindsight.sh"
+                echo "  Set up later with: bash $INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh"
             fi
         else
             info "Skipping Hindsight — set up later with:"
-            echo "  bash $INSTALL_DIR/scripts/setup-hindsight.sh"
+            echo "  bash $INSTALL_DIR/scripts/bootstrap/setup-hindsight.sh"
         fi
     fi
 fi
