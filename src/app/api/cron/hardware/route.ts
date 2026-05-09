@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Hardware Cron API — System crontab management
  *
  * GET    /api/cron/hardware         — List all hardware cron jobs
- * POST   /api/cron/hardware         — Create a new hardware cron job
+ * POST   /api/cron/hardware         — Create a new hardware cron job (or { action: "pauseAll" } to disable all)
  * PUT    /api/cron/hardware         — Update an existing hardware cron job
  * DELETE /api/cron/hardware?id=...  — Delete a hardware cron job by ID
  *
@@ -195,6 +195,27 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // ── pauseAll action ────────────────────────────────────────────────
+    if (body && typeof body === "object" && (body as Record<string, unknown>).action === "pauseAll") {
+      const disabledIds = loadDisabledIds();
+      const crontab = await readCrontab();
+      const lines = crontab.split("\n");
+      const jobIds: string[] = [];
+
+      for (const line of lines) {
+        const parsed = parseCrontabLine(line);
+        if (parsed) {
+          jobIds.push(parsed.id);
+          disabledIds.add(parsed.id);
+        }
+      }
+
+      saveDisabledIds(disabledIds);
+      return NextResponse.json({ data: { success: true, pausedCount: jobIds.length } });
+    }
+
+    // ── Create new hardware cron job ────────────────────────────────────
     const { schedule, command, name, logFile } = body as {
       schedule?: string;
       command?: string;

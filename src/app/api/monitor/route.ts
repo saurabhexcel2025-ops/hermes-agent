@@ -217,10 +217,11 @@ export async function GET() {
             state: j.state || "unknown",
             enabled: j.enabled !== false,
             schedule:
-              j.schedule_display ||
               (typeof j.schedule === "object" && j.schedule !== null
                 ? (j.schedule as { display?: string }).display || String((j.schedule as { minutes?: number }).minutes ? `${(j.schedule as { minutes: number }).minutes}m` : JSON.stringify(j.schedule))
-                : String(j.schedule || "")),
+                : String(j.schedule || "")) ||
+              j.schedule_display ||
+              "",
             lastRun: j.last_run_at || null,
             nextRun: j.next_run_at || null,
             lastStatus: j.last_status || null,

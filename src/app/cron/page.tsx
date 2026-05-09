@@ -364,6 +364,17 @@ function EditJobModal({
     }
   };
 
+  // Derive the actual cron expression from the current schedule value.
+  // CronScheduleInput stores either a raw 5-field expr ("*/5 * * * *")
+  // or a parsed interval display ("every 60m"). We re-parse to get the expr.
+  const cronExpr =
+    schedule.trim().split(/\s+/).length === 5
+      ? schedule.trim()
+      : (() => {
+          const p = parseSchedule(schedule);
+          return p.kind !== "invalid" ? p.kind : schedule;
+        })();
+
   return (
     <Modal
       open
@@ -401,6 +412,14 @@ function EditJobModal({
           onChange={setSchedule}
           error={null}
         />
+
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-800 border border-white/5">
+          <span className="text-xs font-medium text-white/40">Cron:</span>
+          <code className="text-xs font-mono text-neon-orange bg-dark-900 px-2 py-0.5 rounded">
+            {cronExpr}
+          </code>
+          <span className="text-xs text-white/30">— base schedule format</span>
+        </div>
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-white/70">Prompt</label>
@@ -611,6 +630,7 @@ export default function CronPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [pauseAllBusy, setPauseAllBusy] = useState(false);
+  const [hwPauseAllBusy, setHwPauseAllBusy] = useState(false);
   // Hardware cron tab state
   const [activeTab, setActiveTab] = useState<"agent" | "hardware">("agent");
   const [showHardwareCreate, setShowHardwareCreate] = useState(false);
@@ -782,6 +802,29 @@ export default function CronPage() {
     loadHardwareJobs();
   };
 
+  const handleHwPauseAll = async () => {
+    if (!confirm("Pause all hardware cron jobs? They will not run until you re-enable each one individually.")) return;
+    setHwPauseAllBusy(true);
+    try {
+      const res = await fetch("/api/cron/hardware", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pauseAll" }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        showToast(j.error || "Failed to pause hardware jobs", "error");
+      } else {
+        showToast(`Paused ${j.data?.pausedCount ?? 0} hardware job(s)`);
+        loadHardwareJobs();
+      }
+    } catch {
+      showToast("Failed to pause hardware jobs", "error");
+    } finally {
+      setHwPauseAllBusy(false);
+    }
+  };
+
   const filteredJobs =
     data?.jobs.filter(
       (job) =>
@@ -875,15 +918,27 @@ export default function CronPage() {
               </>
             )}
             {activeTab === "hardware" && (
-              <Button
-                variant="primary"
-                color="cyan"
-                size="sm"
-                icon={Plus}
-                onClick={() => setShowHardwareCreate(true)}
-              >
-                New HW Job
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  color="cyan"
+                  size="sm"
+                  icon={Pause}
+                  disabled={hwPauseAllBusy || !hardwareJobs.length}
+                  onClick={() => void handleHwPauseAll()}
+                >
+                  {hwPauseAllBusy ? "Pausing…" : "Pause all"}
+                </Button>
+                <Button
+                  variant="primary"
+                  color="cyan"
+                  size="sm"
+                  icon={Plus}
+                  onClick={() => setShowHardwareCreate(true)}
+                >
+                  New Job
+                </Button>
+              </>
             )}
           </div>
         }
