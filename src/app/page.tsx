@@ -262,7 +262,7 @@ export default function Dashboard() {
     // One-shot fetches (fire-and-forget with abort support)
     fetch("/api/status", { signal }).then((r) => r.json()).then((d) => setStatus(d.data)).catch(() => {});
     fetch("/api/config", { signal }).then((r) => r.json()).then((d) => setConfig(d.data)).catch(() => {});
-    fetch("/api/missions?action=templates", { signal }).then((r) => r.json()).then((d) => setTemplates(d.data?.templates || [])).catch(() => {});
+    fetch("/api/templates", { signal }).then((r) => r.json()).then((d) => setTemplates(d.data?.templates || [])).catch(() => {});
 
     // Staggered polling — avoid burst load from simultaneous API calls
     fetch("/api/monitor", { signal }).then((r) => r.json()).then((d) => setMonitor(d.data)).catch(() => {});
