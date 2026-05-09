@@ -39,6 +39,7 @@ import {
   Layers,
 } from "lucide-react";
 import Link from "next/link";
+import PageHeader from "@/components/layout/PageHeader";
 import Card, { StatusDot } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -189,9 +190,9 @@ const statusColors: Record<
   string,
   { dot: "online" | "warning" | "error" | "idle"; bg: string; text: string }
 > = {
-  queued: { dot: "warning", bg: "bg-orange-500/10", text: "text-neon-orange" },
-  dispatched: { dot: "online", bg: "bg-blue-500/10", text: "text-blue-400" },
-  successful: { dot: "online", bg: "bg-green-500/10", text: "text-neon-green" },
+  queued: { dot: "warning", bg: "bg-neon-orange/10", text: "text-neon-orange" },
+  dispatched: { dot: "online", bg: "bg-neon-cyan/10", text: "text-neon-cyan" },
+  successful: { dot: "online", bg: "bg-neon-green/10", text: "text-neon-green" },
   failed: { dot: "error", bg: "bg-red-500/10", text: "text-red-400" },
 };
 
@@ -768,29 +769,27 @@ export default function MissionsPage() {
     <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
       {toastElement}
 
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4 flex items-center justify-between sticky top-0 z-30 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <Rocket className="w-5 h-5 text-neon-cyan" />
-          <div>
-            <h1 className="text-lg font-bold text-white">Missions</h1>
-            <p className="text-xs text-white/40 font-mono">
-              Dispatch and track agent missions
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchData}
-            className="p-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <Button onClick={() => setShowCreate(true)} size="sm">
-            <Plus className="w-3.5 h-3.5" /> New Mission
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        icon={Rocket}
+        title="Missions"
+        subtitle="Dispatch and track agent missions"
+        color="cyan"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={fetchData}
+              className="p-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
+              aria-label="Refresh missions"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <Button onClick={() => setShowCreate(true)} size="sm">
+              <Plus className="w-3.5 h-3.5" /> New Mission
+            </Button>
+          </>
+        }
+      />
 
       <div className="max-w-7xl mx-auto px-6 py-6">
         {/* Stats Row */}
@@ -803,7 +802,7 @@ export default function MissionsPage() {
               {missions.length}
             </div>
           </div>
-          <div className="rounded-lg border border-orange-500/20 bg-dark-900/50 p-3">
+          <div className="rounded-lg border border-neon-orange/20 bg-dark-900/50 p-3">
             <div className="text-[10px] font-mono text-neon-orange uppercase">
               Active
             </div>
@@ -811,7 +810,7 @@ export default function MissionsPage() {
               {activeCount}
             </div>
           </div>
-          <div className="rounded-lg border border-green-500/20 bg-dark-900/50 p-3">
+          <div className="rounded-lg border border-neon-green/20 bg-dark-900/50 p-3">
             <div className="text-[10px] font-mono text-neon-green uppercase">
               Completed
             </div>
@@ -1441,7 +1440,7 @@ export default function MissionsPage() {
                             status === "queued"
                               ? "bg-neon-orange"
                               : status === "dispatched"
-                                ? "bg-blue-400"
+                                ? "bg-neon-cyan"
                                 : status === "successful"
                                   ? "bg-neon-green"
                                   : "bg-red-400"
@@ -1526,7 +1525,7 @@ export default function MissionsPage() {
                                       <XCircle className="w-3.5 h-3.5 text-red-400" />
                                     )}
                                     {mission.status === "dispatched" && (
-                                      <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                                      <Loader2 className="w-3.5 h-3.5 text-neon-cyan animate-spin" />
                                     )}
                                     {mission.status === "queued" && (
                                       <Clock className="w-3.5 h-3.5 text-neon-orange" />
@@ -1610,7 +1609,7 @@ export default function MissionsPage() {
 
                                       {/* Cron Job Status */}
                                       {detail.cronJob && (
-                                        <div className="rounded-lg border border-orange-500/20 bg-dark-900/50 p-2">
+                                        <div className="rounded-lg border border-neon-orange/20 bg-dark-900/50 p-2">
                                           <div className="flex items-center justify-between mb-1">
                                             <div className="flex items-center gap-1">
                                               <Zap className="w-3 h-3 text-neon-orange" />
@@ -1958,14 +1957,14 @@ export default function MissionsPage() {
                           : "border-transparent"
                       } ${
                         color === "cyan"
-                          ? "bg-cyan-500/30"
+                          ? "bg-neon-cyan/30"
                           : color === "purple"
-                            ? "bg-purple-500/30"
+                            ? "bg-neon-purple/30"
                             : color === "pink"
-                              ? "bg-pink-500/30"
+                              ? "bg-neon-pink/30"
                               : color === "green"
-                                ? "bg-green-500/30"
-                                : "bg-orange-500/30"
+                                ? "bg-neon-green/30"
+                                : "bg-neon-orange/30"
                       }`}
                       title={color}
                     />

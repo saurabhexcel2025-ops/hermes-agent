@@ -37,6 +37,7 @@ import TemplateCard from "@/components/ui/TemplateCard";
 import { useToast } from "@/components/ui/Toast";
 import type { SystemStatus, AccentColor } from "@/types/hermes";
 import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
+import { shellHeaderBarClasses } from "@/lib/theme";
 
 interface AgentRun {
   id: string;
@@ -84,9 +85,9 @@ const LiveClock = reactMemo(function LiveClock() {
 // ── Status Badge ──────────────────────────────────────────────
 function MissionStatusBadge({ status }: { status: string }) {
   const styles: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-    queued: { bg: "bg-orange-500/10", text: "text-neon-orange", icon: <Clock className="w-3 h-3" /> },
-    dispatched: { bg: "bg-blue-500/10", text: "text-blue-400", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
-    successful: { bg: "bg-green-500/10", text: "text-neon-green", icon: <CheckCircle2 className="w-3 h-3" /> },
+    queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-3 h-3" /> },
+    dispatched: { bg: "bg-neon-cyan/10", text: "text-neon-cyan", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
+    successful: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-3 h-3" /> },
     failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-3 h-3" /> },
   };
   const s = styles[status] || styles.queued;
@@ -127,28 +128,28 @@ function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }
   }
   if (state === "running") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-green-500/10 text-neon-green">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-green/10 text-neon-green">
         <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running
       </span>
     );
   }
   if (state === "scheduled") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-green-500/10 text-neon-green">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-green/10 text-neon-green">
         <Play className="w-2.5 h-2.5" /> Active
       </span>
     );
   }
   if (state === "queued") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-500/10 text-neon-orange">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-orange/10 text-neon-orange">
         <Clock className="w-2.5 h-2.5" /> Queued
       </span>
     );
   }
   if (state === "completed") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-green-500/10 text-neon-green">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-green/10 text-neon-green">
         <CheckCircle2 className="w-2.5 h-2.5" /> Done
       </span>
     );
@@ -180,11 +181,11 @@ function StatPill({
   color: AccentColor;
 }) {
   const colorClasses: Record<AccentColor, string> = {
-    cyan: "border-cyan-500/20 text-neon-cyan",
-    purple: "border-purple-500/20 text-neon-purple",
-    green: "border-green-500/20 text-neon-green",
-    pink: "border-pink-500/20 text-neon-pink",
-    orange: "border-orange-500/20 text-neon-orange",
+    cyan: "border-neon-cyan/20 text-neon-cyan",
+    purple: "border-neon-purple/20 text-neon-purple",
+    green: "border-neon-green/20 text-neon-green",
+    pink: "border-neon-pink/20 text-neon-pink",
+    orange: "border-neon-orange/20 text-neon-orange",
   };
   return (
     <div className={`rounded-lg border ${colorClasses[color]} bg-dark-900/50 px-4 py-3 flex items-center gap-3`}>
@@ -301,7 +302,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
       {/* Top Bar */}
-      <div className="border-b border-white/10 bg-dark-900/50 backdrop-blur-xl px-6 py-4 min-h-[var(--ch-shell-header-min-height)] flex items-center justify-between">
+      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between`}>
         <div>
           <h1 className="text-xl font-bold tracking-tight">
             <span className="text-neon-cyan text-glow-cyan">CONTROL</span>{" "}
@@ -383,7 +384,7 @@ export default function Dashboard() {
         </div>
 
         {/* ═══ Mission Dispatch Quick Launch ═══ */}
-        <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50 overflow-hidden">
+        <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 overflow-hidden">
           <button
             onClick={() => setDispatchExpanded(!dispatchExpanded)}
             className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.02] transition-colors"
@@ -506,7 +507,7 @@ export default function Dashboard() {
 
         {/* ═══ Active Missions ═══ */}
         {activeMissions.length > 0 && (
-          <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50 overflow-hidden">
+          <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-dark-800/50">
               <div className="flex items-center gap-2">
                 <Rocket className="w-3.5 h-3.5 text-neon-cyan" />
@@ -564,7 +565,7 @@ export default function Dashboard() {
         {/* ═══ Three-Panel System Monitor ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Cron Jobs Panel */}
-          <div className="rounded-xl border border-orange-500/20 bg-dark-900/50 overflow-hidden">
+          <div className="rounded-xl border border-neon-orange/20 bg-dark-900/50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-dark-800/50">
               <div className="flex items-center gap-2">
                 <ListTodo className="w-3.5 h-3.5 text-neon-orange" />
@@ -623,7 +624,7 @@ export default function Dashboard() {
           </div>
 
           {/* Platforms Panel */}
-          <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50 overflow-hidden">
+          <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-dark-800/50">
               <div className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-neon-cyan" />
@@ -728,21 +729,21 @@ export default function Dashboard() {
             />
           </div>
           {agents.length === 0 ? (
-            <div className="rounded-xl border border-purple-500/20 bg-dark-900/50 p-6 text-center">
+            <div className="rounded-xl border border-neon-purple/20 bg-dark-900/50 p-6 text-center">
               <Bot className="w-8 h-8 text-white/20 mx-auto mb-2" />
               <div className="text-xs text-white/30">No Active Agents Detected</div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {agents.map((agent) => (
-                <div key={agent.id} className="rounded-xl border border-purple-500/20 bg-dark-900/50 p-4">
+                <div key={agent.id} className="rounded-xl border border-neon-purple/20 bg-dark-900/50 p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <Radio className={`w-4 h-4 ${agent.status === "running" ? "text-neon-green pulse-glow" : "text-white/30"}`} />
                       <span className="text-sm text-white/90 font-medium truncate">{agent.name}</span>
                     </div>
                     <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                      agent.status === "running" ? "bg-green-500/10 text-neon-green" : "bg-white/5 text-white/30"
+                      agent.status === "running" ? "bg-neon-green/10 text-neon-green" : "bg-white/5 text-white/30"
                     }`}>
                       {titleCase(agent.status)}
                     </span>

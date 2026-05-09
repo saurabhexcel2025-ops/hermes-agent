@@ -4,6 +4,10 @@
 
 import type { AccentColor } from "@/types/hermes";
 
+/** Aligns main-column top bar with Sidebar brand row (`--ch-shell-header-min-height` in globals.css). */
+export const shellHeaderBarClasses =
+  "border-b border-white/10 bg-dark-900/50 backdrop-blur-xl min-h-[var(--ch-shell-header-min-height)] flex items-center px-6";
+
 // ── Icon Color Map ────────────────────────────────────────────
 export const iconColorMap: Record<AccentColor, string> = {
   cyan: "text-neon-cyan",
@@ -31,13 +35,22 @@ export const focusColorMap: Record<AccentColor, string> = {
   orange: "focus:border-neon-orange/50",
 };
 
-// ── Glow Class Map ────────────────────────────────────────────
+// ── Glow Class Map (legacy box-shadow utilities in globals.css) ─
 export const glowClassMap: Record<AccentColor, string> = {
   cyan: "glow-cyan",
   purple: "glow-purple",
   green: "glow-green",
   pink: "glow-pink",
   orange: "glow-orange",
+};
+
+/** RGB triplets for `rgb(var(--glow-surface-rgb) / …)` (matches @theme neon hex). */
+export const glowSurfaceRgbMap: Record<AccentColor, string> = {
+  cyan: "0, 245, 255",
+  purple: "184, 41, 255",
+  green: "57, 255, 20",
+  pink: "255, 45, 149",
+  orange: "255, 107, 53",
 };
 
 // ── Badge Background Color ────────────────────────────────────

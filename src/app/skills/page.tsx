@@ -6,17 +6,21 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  FileText, Search, ToggleRight, ToggleLeft, Save, X, ChevronDown, Loader2,
+  FileText, ToggleRight, ToggleLeft, Save, X, ChevronDown,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { SearchInput } from "@/components/ui/Input";
-import { Toggle } from "@/components/ui/Input";
 import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import ProfileSelector from "@/components/ui/ProfileSelector";
+import {
+  effectiveSkillEnabled,
+  matchesSkillTab,
+  type SkillFilterTab,
+} from "@/lib/skills-ui";
 
 interface Skill {
   name: string;
@@ -36,8 +40,6 @@ interface SkillsData {
   profile: string;
 }
 
-type SkillFilter = "all" | "enabled" | "disabled";
-
 export default function SkillsPage() {
   const [data, setData] = useState<SkillsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +49,7 @@ export default function SkillsPage() {
   const [saving, setSaving] = useState(false);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [skillContent, setSkillContent] = useState<string>("");
-  const [filter, setFilter] = useState<SkillFilter>("all");
+  const [filter, setFilter] = useState<SkillFilterTab>("all");
   const { showToast, toastElement } = useToast();
 
   const loadSkills = useCallback(async () => {
@@ -121,29 +123,20 @@ export default function SkillsPage() {
     }
   };
 
-  const isSkillEnabled = (skill: Skill) => {
-    if (skill.name in pendingToggles) return pendingToggles[skill.name];
-    return skill.enabled;
-  };
+  const isSkillEnabled = (skill: Skill) =>
+    effectiveSkillEnabled(skill, pendingToggles);
 
   const hasPendingChanges = Object.keys(pendingToggles).length > 0;
   const total = data?.skills.length || 0;
   const enabledCount = data?.skills.filter((s) => isSkillEnabled(s)).length || 0;
   const disabledCount = total - enabledCount;
 
-  // Apply search + filter
-  // NOTE: filter checks skill.enabled directly (not isSkillEnabled) so that
-  // pending un-saved toggles don't pollute the filter views. isSkillEnabled
-  // is still used for visual state (badges, accent bars, toggle icons).
   const filteredSkills = (data?.skills || []).filter((s) => {
     const matchesSearch =
       !search ||
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.description.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter =
-      filter === "all" ||
-      (filter === "enabled" && s.enabled) ||
-      (filter === "disabled" && !s.enabled);
+    const matchesFilter = matchesSkillTab(filter, s, pendingToggles);
     return matchesSearch && matchesFilter;
   });
 
@@ -198,7 +191,7 @@ export default function SkillsPage() {
 
             {/* Filter Tabs */}
             <div className="flex items-center rounded-lg border border-white/10 bg-dark-900/80 backdrop-blur p-0.5 gap-0.5">
-              {(["all", "enabled", "disabled"] as SkillFilter[]).map((f) => (
+              {(["all", "enabled", "disabled"] as SkillFilterTab[]).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}

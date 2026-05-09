@@ -16,6 +16,7 @@ import {
   ChevronRight,
   X,
 } from "lucide-react";
+import PageHeader from "@/components/layout/PageHeader";
 import TeamAgentCard from "@/components/kanban/TeamAgentCard";
 import ProfileSelector from "@/components/ui/ProfileSelector";
 import { useToast } from "@/components/ui/Toast";
@@ -276,29 +277,31 @@ export default function TeamsPage() {
   };
 
   return (
-    <div className="pl-6 flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Users className="w-6 h-6 text-neon-purple" />
-            Teams
-          </h1>
-          <p className="text-xs text-white/40 mt-0.5">
-            Agent teams — assign a leader and specialists to a board
-          </p>
-        </div>
-        <button
-          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-neon-purple/30
-            text-neon-purple hover:bg-neon-purple/10 transition-colors"
-          onClick={() => setShowCreate(true)}
-        >
-          <Plus className="w-4 h-4" />
-          New Team
-        </button>
-      </div>
+    <div className="min-h-screen bg-dark-950 grid-bg flex flex-col">
+      {toastElement}
+      <PageHeader
+        icon={Users}
+        title="Teams"
+        subtitle="Agent teams — assign a leader and specialists to a board"
+        color="purple"
+        backHref="/kanban"
+        backIconOnly
+        backLabel="Back to Kanban"
+        actions={
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-neon-purple/30
+              text-neon-purple hover:bg-neon-purple/10 transition-colors"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus className="w-4 h-4" />
+            New Team
+          </button>
+        }
+      />
 
       {/* Content */}
+      <div className="flex-1 flex flex-col min-h-0 px-6 py-4">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-neon-purple animate-spin" />
@@ -405,6 +408,7 @@ export default function TeamsPage() {
           </div>
         </div>
       )}
+      </div>
 
       {/* Create modal */}
       <CreateTeamModal
@@ -415,8 +419,6 @@ export default function TeamsPage() {
           showToast(`Team "${team.name}" created`, "success");
         }}
       />
-
-      {toastElement}
     </div>
   );
 }

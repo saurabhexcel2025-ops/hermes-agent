@@ -13,8 +13,8 @@ import {
   Loader2,
   ChevronRight,
   Bot,
-  ArrowLeft,
 } from "lucide-react";
+import PageHeader from "@/components/layout/PageHeader";
 import KanbanBoardComponent from "@/components/kanban/KanbanBoard";
 import CardDetailModal from "@/components/kanban/CardDetailModal";
 import GoalLoopPanel from "@/components/kanban/GoalLoopPanel";
@@ -546,45 +546,39 @@ export default function KanbanPage() {
   // ── Render ───────────────────────────────────────────────────
 
   return (
-    <div className="pl-6 flex flex-col h-full">
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="text-white/30 hover:text-white/60 transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Bot className="w-6 h-6 text-neon-purple" />
-              Kanban
-            </h1>
-            <p className="text-xs text-white/40 mt-0.5">
-              Multi-Agent Coordination Board
-            </p>
+    <div className="min-h-screen bg-dark-950 grid-bg flex flex-col">
+      {toastElement}
+      <PageHeader
+        icon={Bot}
+        title="Kanban"
+        subtitle="Multi-Agent Coordination Board"
+        color="purple"
+        backHref="/"
+        backIconOnly
+        backLabel="Dashboard home"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap justify-end max-w-[min(100%,42rem)]">
+            <BoardSelector
+              boards={boards}
+              selectedId={selectedBoardId}
+              onSelect={setSelectedBoardId}
+              onCreate={handleCreateBoard}
+            />
+            <Link
+              href="/orchestration/teams"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border shrink-0
+                border-white/10 text-white/50 hover:text-white/80 hover:border-white/20 transition-colors"
+            >
+              <Bot className="w-3.5 h-3.5" />
+              Teams
+              <ChevronRight className="w-3 h-3" />
+            </Link>
           </div>
-        </div>
-
-        {/* Board selector */}
-        <div className="flex items-center gap-2">
-          <BoardSelector
-            boards={boards}
-            selectedId={selectedBoardId}
-            onSelect={setSelectedBoardId}
-            onCreate={handleCreateBoard}
-          />
-          <Link
-            href="/orchestration/teams"
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border
-              border-white/10 text-white/50 hover:text-white/80 hover:border-white/20 transition-colors ml-4"
-          >
-            <Bot className="w-3.5 h-3.5" />
-            Teams
-            <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Content */}
+      <div className="flex-1 flex flex-col min-h-0 px-6 py-4">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-neon-purple animate-spin" />
@@ -654,6 +648,7 @@ export default function KanbanPage() {
           </div>
         </div>
       )}
+      </div>
 
       {/* Card Detail Modal */}
       {selectedCard && doc && (
@@ -670,8 +665,6 @@ export default function KanbanPage() {
           onDeleteCard={handleDeleteCard}
         />
       )}
-
-      {toastElement}
     </div>
   );
 }

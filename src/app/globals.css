@@ -10,6 +10,7 @@
   --color-neon-pink: #ff2d95;
   --color-neon-green: #39ff14;
   --color-neon-orange: #ff6b35;
+  --color-neon-yellow: #facc15;
   --color-dark-950: #030712;
   --color-dark-900: #0a0e1a;
   --color-dark-800: #111827;
@@ -54,6 +55,33 @@
 .glow-orange {
   box-shadow: 0 0 20px rgba(255, 107, 53, 0.15), 0 0 40px rgba(255, 107, 53, 0.05);
 }
+
+/* Variable-driven surface glow (see GlowSurface.tsx); --glow-surface-rgb set inline */
+.glow-surface {
+  --glow-surface-alpha: 0.15;
+  --glow-surface-alpha-outer: 0.05;
+  box-shadow:
+    0 0 20px rgb(var(--glow-surface-rgb) / var(--glow-surface-alpha)),
+    0 0 42px rgb(var(--glow-surface-rgb) / var(--glow-surface-alpha-outer));
+}
+
+@keyframes glow-surface-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 18px rgb(var(--glow-surface-rgb) / var(--glow-surface-alpha)),
+      0 0 36px rgb(var(--glow-surface-rgb) / var(--glow-surface-alpha-outer));
+  }
+  50% {
+    box-shadow:
+      0 0 28px rgb(var(--glow-surface-rgb) / calc(var(--glow-surface-alpha) * 1.35)),
+      0 0 52px rgb(var(--glow-surface-rgb) / calc(var(--glow-surface-alpha-outer) * 1.6));
+  }
+}
+
+.glow-surface--pulse {
+  animation: glow-surface-breathe 3s ease-in-out infinite;
+}
+
 .text-glow-cyan {
   text-shadow: 0 0 10px rgba(0, 245, 255, 0.5);
 }
