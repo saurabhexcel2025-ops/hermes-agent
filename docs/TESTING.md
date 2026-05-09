@@ -40,7 +40,7 @@ npm run test:e2e
 
 Primary pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Ubuntu (install, `prebuild`, lint, Hermes-path grep gate, `tsc`, Jest coverage, build, Playwright smoke with `PLAYWRIGHT_SMOKE=1`) plus macOS build/test, and a separate Ubuntu job for E2E smoke.
 
-Other workflows: **gitleaks** (secret scan), **branch-guard** (informational notice on push to `main`).
+Other workflows: **gitleaks** (secret scan).
 
 ## Auth in route tests
 

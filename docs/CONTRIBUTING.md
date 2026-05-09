@@ -1,5 +1,7 @@
 # Contributing
 
+Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Workflow
 
 1. Branch from `dev`.
@@ -34,11 +36,12 @@ Full Playwright and Jest notes (including **`npm run prebuild`** before E2E on a
 ## Git hooks and branch protection
 
 - This repo ships [`scripts/git-hooks/pre-push`](../scripts/git-hooks/pre-push): when installed as your Git hooks path (`git config core.hooksPath scripts/git-hooks` from the repo root, or by copying the script into `.git/hooks/pre-push`), it **blocks non-merge pushes directly to `main`** so day-to-day work stays on `dev` or feature branches.
-- **GitHub** runs [`.github/workflows/branch-guard.yml`](../.github/workflows/branch-guard.yml) on pushes to `main` as an **informational** audit trail; real enforcement is **repository branch protection** (require PR, reviews, checks). The local hook is optional convenience.
+- **Enforcement** is primarily **repository branch protection** on `main` (require PR, reviews, checks). The local hook is optional convenience.
+- **Automation:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes and PRs to `main` and `dev`. [`.github/workflows/gitleaks.yml`](../.github/workflows/gitleaks.yml) runs secret scanning.
 
 ## Testing
 
-See **[TESTING.md](TESTING.md)** for layout, commands, and CI. In short: add or update tests for every change; unit tests live in `tests/unit/`; E2E lives in `tests/e2e/`. CI is **[`.github/workflows/ci.yml`](../.github/workflows/ci.yml)** (lint, typecheck, Jest with coverage, build, Playwright smoke on Ubuntu; build+test on macOS; **gitleaks** and **branch-guard** are separate workflows).
+See **[TESTING.md](TESTING.md)** for layout, commands, and CI. In short: add or update tests for every change; unit tests live in `tests/unit/`; E2E lives in `tests/e2e/`. CI is **[`.github/workflows/ci.yml`](../.github/workflows/ci.yml)** (lint, typecheck, Jest with coverage, build, Playwright smoke on Ubuntu; build+test on macOS). **Gitleaks** runs via a separate workflow.
 
 ## Documentation
 

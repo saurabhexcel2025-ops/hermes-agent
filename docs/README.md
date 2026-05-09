@@ -7,9 +7,13 @@
 | [DEPLOY.md](DEPLOY.md) | Deploy, TLS, Docker, ports |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [TESTING.md](TESTING.md) | Jest, Playwright, CI, and navigation-matrix upkeep |
+| [SUPPORT.md](SUPPORT.md) | Where to get help; upstream vs this repo |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
 | [MIGRATION.md](MIGRATION.md) | Data directory and migrations |
 | [HERMES_CONFIG_INTEGRATION.md](HERMES_CONFIG_INTEGRATION.md) | Hermes `config.yaml` integration |
 | [PLATFORM_VISION.md](PLATFORM_VISION.md) | Architecture and product direction |
+| [Pull request template](../.github/pull_request_template.md) | PR checklist (GitHub prefill) |
 | [internal/README.md](internal/README.md) | Internal / scratch notes |
 
 ## Mission and template schemas
