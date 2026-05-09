@@ -20,6 +20,7 @@ test-results/
 # Next.js
 .next/
 **/.next/
+.swc/
 out/
 build/
 
@@ -47,3 +48,6 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Legacy workspace package build output (generated; do not commit)
+packages/schema/dist/
