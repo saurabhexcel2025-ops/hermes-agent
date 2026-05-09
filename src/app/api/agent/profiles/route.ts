@@ -4,7 +4,7 @@ import { readFileSync, existsSync, statSync, readdirSync, writeFileSync, mkdirSy
 
 
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 
 import { logApiError } from "@/lib/api-logger";
 
@@ -209,9 +209,9 @@ export async function GET() {
 
     const defaultPersonality = loadYamlPersonality(
 
-      existsSync(HERMES_HOME + "/config.yaml")
+      existsSync(getActiveHermesHome() + "/config.yaml")
 
-        ? readFileSync(HERMES_HOME + "/config.yaml", "utf-8")
+        ? readFileSync(getActiveHermesHome() + "/config.yaml", "utf-8")
 
         : ""
 
@@ -233,11 +233,11 @@ export async function GET() {
 
       isBundled: false,
 
-      skillsCount: countProfileSkills(HERMES_HOME),
+      skillsCount: countProfileSkills(getActiveHermesHome()),
 
       toolsCount: 0,
 
-      files: getProfileFiles(HERMES_HOME),
+      files: getProfileFiles(getActiveHermesHome()),
 
     });
 
@@ -245,7 +245,7 @@ export async function GET() {
 
     // Named profiles
 
-    const profilesDir = HERMES_HOME + "/profiles";
+    const profilesDir = getActiveHermesHome() + "/profiles";
 
     if (existsSync(profilesDir)) {
 
@@ -362,7 +362,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: prof.error }, { status: 400 });
     }
 
-    const profileDir = HERMES_HOME + "/profiles/" + slug;
+    const profileDir = getActiveHermesHome() + "/profiles/" + slug;
 
     if (existsSync(profileDir)) {
       return NextResponse.json(
@@ -385,8 +385,8 @@ export async function POST(request: NextRequest) {
     // Copy config and .env from default or cloneFrom
     const sourceDir =
       cloneFrom && cloneFrom !== "default"
-        ? HERMES_HOME + "/profiles/" + cloneFrom
-        : HERMES_HOME;
+        ? getActiveHermesHome() + "/profiles/" + cloneFrom
+        : getActiveHermesHome();
 
     if (existsSync(sourceDir + "/config.yaml")) {
       writeFileSync(

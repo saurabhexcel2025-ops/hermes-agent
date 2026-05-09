@@ -15,3 +15,11 @@
    - `CH_DATA_DIR=/home/you/.hermes/control-hub/data`
 
 **Cron repeat:** Recurring jobs created by CH use **`repeat.times: null`** for “run forever”, matching Hermes’ canonical form.
+
+## Active Hermes installs (`agents-registry.json`)
+
+**Current behaviour:** Under **`CH_DATA_DIR`**, Control Hub persists **`agents-registry.json`** (active agent id + registered Hermes filesystem roots). API routes and the UI resolve Hermes paths via **`getActiveHermesPaths()`**, not a single implicit **`HERMES_HOME`** at runtime.
+
+**If you only ever used env vars:** On first run, the registry is **seeded** from **`AGENT_HOME`** or **`HERMES_HOME`** when the file does not exist. After that, prefer switching installs from **Agents** in the UI or **`POST /api/agent/active`** so every surface stays consistent.
+
+**Backups:** Include **`CH_DATA_DIR/agents-registry.json`** with the rest of `CH_DATA_DIR` so active-install choice survives restores. See [CONTROL_HUB.md](CONTROL_HUB.md) and [DEPLOY.md](DEPLOY.md).

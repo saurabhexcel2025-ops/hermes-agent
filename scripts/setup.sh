@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════
 # Control Hub — Setup Script
 # ═══════════════════════════════════════════════════════════════
-# Run this after cloning the repository to set up Control Hub.
+# Run after cloning the repository (golden path for developers / in-repo install).
 #
 # Usage:
 #   cd control-hub
@@ -10,36 +10,31 @@
 #
 # Prerequisites:
 #   - Node.js 18+
-#   - Hermes agent installed at ~/.hermes/ (run `hermes update` first)
+#   - Hermes optional: without ~/.hermes/config.yaml you get a standalone Control Hub
+#     (missions/cron tied to Hermes paths will be limited until Hermes is installed).
+#
+# Environment:
+#   CI=1 or CH_INSTALL_NONINTERACTIVE=1 — non-interactive; set PORT or auto-pick 42069–42100
+#   CH_INSTALL_ADVANCED=1 — prompt for CH_DATA_DIR, HERMES_HOME, branch, API key (interactive only)
 # ═══════════════════════════════════════════════════════════════
 
 set -e
 
-# Resolve repo root from script location (works regardless of CWD)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# shellcheck source=lib/ch-env.sh
+source "$SCRIPT_DIR/lib/ch-env.sh"
+# shellcheck source=lib/ch-port.sh
+source "$SCRIPT_DIR/lib/ch-port.sh"
+
 echo "╔══════════════════════════════════════════╗"
-echo "║       Control Hub — Setup             ║"
+echo "║       Control Hub — Setup               ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# ── Detect HERMES_HOME ────────────────────────────────────────
-HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-echo "Hermes Home: $HERMES_HOME"
-
-# ── Verify Hermes is installed ────────────────────────────────
-if [ ! -f "$HERMES_HOME/config.yaml" ]; then
-    echo "✗ config.yaml not found at $HERMES_HOME/config.yaml"
-    echo "  Make sure Hermes agent is installed and configured."
-    echo "  Run: hermes update"
-    echo "  Or see: https://github.com/NousResearch/hermes-agent"
-    exit 1
-fi
-echo "✓ Hermes config found"
-
-# ── Check Node.js ─────────────────────────────────────────────
+# ── Node.js ────────────────────────────────────────────────────
 if ! command -v node &>/dev/null; then
     echo "✗ Node.js not found. Please install Node.js 18+ first."
     exit 1
@@ -51,29 +46,76 @@ if [ "$NODE_VERSION" -lt 18 ]; then
 fi
 echo "✓ Node.js $(node -v)"
 
-# ── Check holographic memory (optional) ───────────────────────
-echo ""
-if [ -f "$HERMES_HOME/memory_store.db" ]; then
-    echo "✓ Holographic memory detected"
-else
-    echo "ℹ  Holographic memory not found — Memory page will show an install notice."
-    echo "   To enable: hermes plugins install hermes-memory-store"
+# ── PORT + LAN dev origins (.env.local) ───────────────────────
+ch_setup_port_and_dev_origins "$REPO_ROOT" || exit 1
+CH_PORT_DISPLAY="${CH_SELECTED_PORT}"
+
+ENV_LOCAL="${REPO_ROOT}/.env.local"
+
+# ── Advanced env (optional; before Hermes detection) ─────────
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+if ! ch_noninteractive_install; then
+    if [ "${CH_INSTALL_ADVANCED:-}" = "1" ]; then
+        ADVANCED=yes
+    else
+        read -r -p "Advanced: custom data directory, Hermes home, or update branch? [y/N]: " ADVANCED
+        echo ""
+    fi
+    if [[ "${ADVANCED:-}" =~ ^[Yy]$ ]]; then
+        read -r -p "CH_DATA_DIR [${CH_DATA_DIR:-$HOME/control-hub/data}]: " in_data
+        echo ""
+        if [ -n "${in_data// /}" ]; then
+            export CH_DATA_DIR="${in_data// /}"
+            ch_env_set "$ENV_LOCAL" "CH_DATA_DIR" "$CH_DATA_DIR"
+        fi
+        read -r -p "HERMES_HOME [${HERMES_HOME}]: " in_hm
+        echo ""
+        if [ -n "${in_hm// /}" ]; then
+            export HERMES_HOME="${in_hm// /}"
+            ch_env_set "$ENV_LOCAL" "HERMES_HOME" "$HERMES_HOME"
+        fi
+        read -r -p "CH_UPDATE_GIT_BRANCH for deploy scripts [${CH_UPDATE_GIT_BRANCH:-dev}]: " in_br
+        echo ""
+        if [ -n "${in_br// /}" ]; then
+            ch_env_set "$ENV_LOCAL" "CH_UPDATE_GIT_BRANCH" "${in_br// /}"
+        fi
+    fi
 fi
 
-# ── Enable Gateway API Server (required for Rec Room) ────────
-echo ""
-if [ -f "$HERMES_HOME/.env" ] && grep -q "API_SERVER_ENABLED=true" "$HERMES_HOME/.env" 2>/dev/null; then
-    echo "✓ Gateway API server already enabled"
+# ── Hermes / agent home (optional) ────────────────────────────
+HERMES_CONFIGURED=false
+if [ -f "$HERMES_HOME/config.yaml" ]; then
+    HERMES_CONFIGURED=true
+    echo "✓ Hermes config found at $HERMES_HOME/config.yaml"
 else
-    echo "Enabling gateway API server for Rec Room..."
-    echo "" >> "$HERMES_HOME/.env"
-    echo "# Enable API server for Control Hub Rec Room" >> "$HERMES_HOME/.env"
-    echo "API_SERVER_ENABLED=true" >> "$HERMES_HOME/.env"
-    echo "✓ API server enabled — restart gateway to activate"
-    echo "  Run: systemctl --user restart hermes-gateway"
+    echo "ℹ  No Hermes config at $HERMES_HOME/config.yaml — standalone mode."
+    echo "   Install Hermes and run hermes setup for full gateway, cron, and config editing."
 fi
 
-# ── Create data directories (align with CH_DATA_DIR default: ~/control-hub/data) ──
+if [ "$HERMES_CONFIGURED" = true ]; then
+    echo ""
+    if [ -f "$HERMES_HOME/memory_store.db" ]; then
+        echo "✓ Holographic memory detected"
+    else
+        echo "ℹ  Holographic memory not found — Memory page will show an install notice."
+        echo "   To enable: hermes plugins install hermes-memory-store"
+    fi
+
+    echo ""
+    if [ -f "$HERMES_HOME/.env" ] && grep -q "API_SERVER_ENABLED=true" "$HERMES_HOME/.env" 2>/dev/null; then
+        echo "✓ Gateway API server already enabled"
+    else
+        echo "Enabling gateway API server for Rec Room..."
+        mkdir -p "$HERMES_HOME"
+        echo "" >> "$HERMES_HOME/.env"
+        echo "# Enable API server for Control Hub Rec Room" >> "$HERMES_HOME/.env"
+        echo "API_SERVER_ENABLED=true" >> "$HERMES_HOME/.env"
+        echo "✓ API server enabled — restart gateway to activate"
+        echo "  Run: systemctl --user restart hermes-gateway  (or: hermes gateway stop && hermes gateway start)"
+    fi
+fi
+
+# ── Data directories ─────────────────────────────────────────
 echo ""
 echo "Creating data directories..."
 CH_DATA_ROOT="${CH_DATA_DIR:-$HOME/control-hub/data}"
@@ -82,20 +124,33 @@ mkdir -p "$CH_DATA_ROOT/templates"
 mkdir -p "$CH_DATA_ROOT/operations"
 mkdir -p "$CH_DATA_ROOT/recroom"
 mkdir -p "$CH_DATA_ROOT/stories"
-mkdir -p "$HERMES_HOME/logs"
+mkdir -p "$CH_DATA_ROOT/teams" 2>/dev/null || true
+mkdir -p "$CH_DATA_ROOT/workspaces" 2>/dev/null || true
+mkdir -p "$CH_DATA_ROOT/audit" 2>/dev/null || true
+mkdir -p "$CH_DATA_ROOT/scripts" 2>/dev/null || true
+mkdir -p "$CH_DATA_ROOT/logs" 2>/dev/null || true
+if [ "$HERMES_CONFIGURED" = true ]; then
+    mkdir -p "$HERMES_HOME/logs"
+fi
 echo "✓ Control Hub data directories created at $CH_DATA_ROOT"
 
-# ── Ensure scripts are executable ─────────────────────────────
-chmod +x scripts/*.sh
+# ── Discover local Hermes installs (agents.discovery.json) ───
+if command -v node &>/dev/null && [ -f "$REPO_ROOT/scripts/discover-agents.mjs" ]; then
+    CH_DATA_DIR="$CH_DATA_ROOT" node "$REPO_ROOT/scripts/discover-agents.mjs" || true
+fi
+
+# ── Scripts executable ───────────────────────────────────────
+chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
+chmod +x "$SCRIPT_DIR"/lib/*.sh 2>/dev/null || true
 echo "✓ Scripts ready"
 
-# ── Install dependencies ──────────────────────────────────────
+# ── Dependencies ─────────────────────────────────────────────
 echo ""
 echo "Installing dependencies..."
 npm install
 echo "✓ Dependencies installed"
 
-# ── Run tests ─────────────────────────────────────────────────
+# ── Tests ────────────────────────────────────────────────────
 echo ""
 echo "Running tests..."
 if npm test -- --passWithNoTests 2>/dev/null; then
@@ -110,20 +165,27 @@ echo "Building production bundle..."
 npm run build
 echo "✓ Build complete"
 
-# ── Done ──────────────────────────────────────────────────────
+# ── Summary ───────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║       Setup Complete!                     ║"
+echo "║       Setup Complete!                    ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
+echo "PORT (Control Hub):     $CH_PORT_DISPLAY"
+echo "CH_DATA_DIR:            $CH_DATA_ROOT"
+echo "HERMES_HOME:            $HERMES_HOME"
+echo "Hermes integrated:     $HERMES_CONFIGURED"
+echo ""
 echo "Start the server:"
-echo "  npm run start          # localhost only"
-echo "  npm run start:network  # accessible on LAN"
+echo "  npm run start          # bind per package.json / .env.local"
+echo "  npm run start:network  # 0.0.0.0 (LAN)"
 echo ""
-echo "Or for development:"
-echo "  npm run dev            # hot reload on localhost:3000"
+echo "Local URL:  http://127.0.0.1:${CH_PORT_DISPLAY}/"
+echo "LAN: use http://<this-host-ip>:${CH_PORT_DISPLAY}/ or http://<hostname>.local:${CH_PORT_DISPLAY}/"
 echo ""
-echo "Update from main branch (from the app):"
-echo "  Use the 'Check' and 'Update' buttons in the sidebar"
-echo "  Or manually: bash scripts/update.sh"
+echo "Development (hot reload):"
+echo "  npm run dev            # PORT and CH_ALLOWED_DEV_ORIGINS come from .env.local"
+echo ""
+echo "Deploy / update:"
+echo "  bash scripts/update.sh   (branch: CH_UPDATE_GIT_BRANCH in .env.local, default dev)"
 echo ""

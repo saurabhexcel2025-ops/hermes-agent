@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Clock,
   Plus,
@@ -21,7 +21,6 @@ import {
   Check,
   Loader2,
   Zap,
-  Server,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
@@ -725,7 +724,7 @@ export default function CronPage() {
 
   // ── Hardware Cron handlers ────────────────────────────────────
 
-  const loadHardwareJobs = async () => {
+  const loadHardwareJobs = useCallback(async () => {
     setHardwareLoading(true);
     try {
       const res = await fetch("/api/cron/hardware");
@@ -738,7 +737,7 @@ export default function CronPage() {
     } finally {
       setHardwareLoading(false);
     }
-  };
+  }, [showToast]);
 
   const handleHardwareToggle = async (id: string) => {
     const job = hardwareJobs.find((j) => j.id === id);
@@ -767,10 +766,6 @@ export default function CronPage() {
       const body = await res.json().catch(() => null);
       showToast(body?.error || "Failed to delete hardware job", "error");
     }
-  };
-
-  const handleHardwareEdit = (job: HardwareCronJob) => {
-    setEditingHardwareJob(job);
   };
 
   const handleHardwareSave = async (job: Partial<HardwareCronJob>) => {
@@ -854,7 +849,7 @@ export default function CronPage() {
     if (activeTab !== "hardware") {
       setHwLoaded(false);
     }
-  }, [activeTab, hwLoaded]);
+  }, [activeTab, hwLoaded, loadHardwareJobs]);
 
   const pageSubtitle = data
     ? `Agent: ${enabledCount}/${data.total}  •  Hardware: ${enabledHwCount}/${hardwareJobs.length || 0}`

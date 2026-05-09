@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import * as yaml from "js-yaml";
 
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
-const CONFIG_PATH = HERMES_PATHS.config;
+
+function configYamlPath(): string {
+  return getActiveHermesPaths().config;
+}
 
 interface PersonalityData {
   name: string;
@@ -12,9 +15,9 @@ interface PersonalityData {
 }
 
 function readPersonalities(): Record<string, string> {
-  if (!existsSync(CONFIG_PATH)) return {};
+  if (!existsSync(configYamlPath())) return {};
   try {
-    const content = readFileSync(CONFIG_PATH, "utf-8");
+    const content = readFileSync(configYamlPath(), "utf-8");
     // Use js-yaml to parse — handles multi-line quoted strings properly
     const parsed = yaml.load(content) as Record<string, unknown> | undefined;
     const raw = ((parsed?.agent as Record<string, unknown>)?.personalities as Record<string, unknown>) || {};
@@ -29,9 +32,9 @@ function readPersonalities(): Record<string, string> {
 }
 
 function writePersonalities(personalities: Record<string, string>): boolean {
-  if (!existsSync(CONFIG_PATH)) return false;
+  if (!existsSync(configYamlPath())) return false;
   try {
-    const content = readFileSync(CONFIG_PATH, "utf-8");
+    const content = readFileSync(configYamlPath(), "utf-8");
     const lines = content.split("\n");
     const result: string[] = [];
     let inAgent = false;
@@ -121,7 +124,7 @@ function writePersonalities(personalities: Record<string, string>): boolean {
       }
     }
 
-    writeFileSync(CONFIG_PATH, result.join("\n"), "utf-8");
+    writeFileSync(configYamlPath(), result.join("\n"), "utf-8");
     return true;
   } catch {
     return false;

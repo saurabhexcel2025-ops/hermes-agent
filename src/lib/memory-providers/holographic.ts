@@ -6,7 +6,7 @@
 // This is the original memory provider and remains fully supported.
 
 import { existsSync, statSync } from "fs";
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import type {
   MemoryProvider,
@@ -22,7 +22,7 @@ import type {
 // Dynamic import for better-sqlite3 (native module)
 async function getDb(readonly = true) {
   const Database = (await import("better-sqlite3")).default;
-  const dbPath = HERMES_PATHS.memoryDb;
+  const dbPath = getActiveHermesPaths().memoryDb;
   const db = new Database(dbPath, { readonly, timeout: 5000 });
   if (!readonly) {
     db.pragma("journal_mode = WAL");
@@ -35,7 +35,7 @@ export const holographicProvider: MemoryProvider = {
   type: "holographic",
 
   async healthCheck(): Promise<MemoryProviderHealth> {
-    const dbPath = HERMES_PATHS.memoryDb;
+    const dbPath = getActiveHermesPaths().memoryDb;
     if (!existsSync(dbPath)) {
       return {
         available: false,
@@ -71,7 +71,7 @@ export const holographicProvider: MemoryProvider = {
   },
 
   async readFacts(options): Promise<MemoryReadResult> {
-    const dbPath = HERMES_PATHS.memoryDb;
+    const dbPath = getActiveHermesPaths().memoryDb;
     if (!existsSync(dbPath)) {
       return {
         facts: [],
@@ -160,7 +160,7 @@ export const holographicProvider: MemoryProvider = {
   },
 
   async addFact(input: FactInput): Promise<MemoryAddResult> {
-    const dbPath = HERMES_PATHS.memoryDb;
+    const dbPath = getActiveHermesPaths().memoryDb;
     if (!existsSync(dbPath)) {
       return { success: false, error: "Holographic memory is not installed" };
     }
@@ -205,7 +205,7 @@ export const holographicProvider: MemoryProvider = {
   },
 
   async updateFact(input: FactUpdateInput): Promise<MemoryUpdateResult> {
-    const dbPath = HERMES_PATHS.memoryDb;
+    const dbPath = getActiveHermesPaths().memoryDb;
     if (!existsSync(dbPath)) {
       return { success: false, error: "Holographic memory is not installed" };
     }
@@ -267,7 +267,7 @@ export const holographicProvider: MemoryProvider = {
   },
 
   async deleteFact(id: number): Promise<MemoryDeleteResult> {
-    const dbPath = HERMES_PATHS.memoryDb;
+    const dbPath = getActiveHermesPaths().memoryDb;
     if (!existsSync(dbPath)) {
       return { success: false, error: "Holographic memory is not installed" };
     }

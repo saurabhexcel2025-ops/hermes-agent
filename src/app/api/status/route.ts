@@ -2,22 +2,23 @@ import { NextResponse } from "next/server";
 import { existsSync, statSync } from "fs";
 import { readdir } from "fs/promises";
 
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 
 export async function GET() {
   try {
+    const H = getActiveHermesPaths();
     // Check SOUL.md
-    const soulPath = HERMES_PATHS.soul;
+    const soulPath = H.soul;
     const soulFile = existsSync(soulPath);
 
     // Check config.yaml
-    const configPath = HERMES_PATHS.config;
+    const configPath = H.config;
     const configFile = existsSync(configPath);
 
     // Count skills
     let skillsCount = 0;
-    const skillsPath = HERMES_PATHS.skills;
+    const skillsPath = H.skills;
     if (existsSync(skillsPath)) {
       const countSkills = async (dir: string): Promise<number> => {
         let count = 0;
@@ -38,7 +39,7 @@ export async function GET() {
 
     // Count sessions
     let sessionsCount = 0;
-    const sessionsPath = HERMES_PATHS.sessions;
+    const sessionsPath = H.sessions;
     if (existsSync(sessionsPath)) {
       try {
         const files = await readdir(sessionsPath);
@@ -48,7 +49,7 @@ export async function GET() {
 
     // Memory DB size
     let memorySize = "N/A";
-    const memoryPath = HERMES_PATHS.memoryDb;
+    const memoryPath = H.memoryDb;
     if (existsSync(memoryPath)) {
       try {
         const stats = statSync(memoryPath);

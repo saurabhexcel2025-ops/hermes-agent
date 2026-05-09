@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 
-import { HERMES_PATHS, getDefaultModelConfig } from "@/lib/hermes";
+import { getActiveHermesPaths, getDefaultModelConfig } from "@/lib/hermes-agent-runtime";
 
 import { logApiError } from "@/lib/api-logger";
 
@@ -34,9 +34,10 @@ import {
 
 
 
-const CRON_PATH = HERMES_PATHS.cronJobs;
-
-const JOBS_BACKUP_DIR = HERMES_PATHS.backups + "/ch-cron-jobs";
+function cronPaths() {
+  const H = getActiveHermesPaths();
+  return { CRON_PATH: H.cronJobs, JOBS_BACKUP_DIR: H.backups + "/ch-cron-jobs" };
+}
 
 
 
@@ -45,6 +46,8 @@ const JOBS_BACKUP_DIR = HERMES_PATHS.backups + "/ch-cron-jobs";
 export async function GET() {
 
   try {
+
+    const { CRON_PATH } = cronPaths();
 
     const parsed = readJobsFile(CRON_PATH);
 
@@ -159,6 +162,8 @@ export async function POST(request: NextRequest) {
 
 
   try {
+
+    const { CRON_PATH, JOBS_BACKUP_DIR } = cronPaths();
 
     let raw: unknown;
 
@@ -392,6 +397,8 @@ export async function PUT(request: NextRequest) {
 
   try {
 
+    const { CRON_PATH, JOBS_BACKUP_DIR } = cronPaths();
+
     let raw: unknown;
 
     try {
@@ -587,6 +594,8 @@ export async function DELETE(request: NextRequest) {
 
 
   try {
+
+    const { CRON_PATH, JOBS_BACKUP_DIR } = cronPaths();
 
     const { searchParams } = new URL(request.url);
 

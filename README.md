@@ -10,13 +10,12 @@ A command centre dashboard for [Hermes Agent](https://github.com/NousResearch/he
 
 
 
-**Docs:** [OSS scope](docs/OSS_SCOPE.md) · [Edition components](docs/EDITION_COMPONENTS.md) · [Platform vision](docs/PLATFORM_VISION.md) · [Deploy / TLS / Docker](docs/DEPLOY.md) · [Changelog](CHANGELOG.md) · [Migration (data dir)](docs/MIGRATION.md) · [hermes-config checklist](docs/HERMES_CONFIG_INTEGRATION.md)
+**Docs:** [Doc index](docs/README.md) · [Control Hub overview](docs/CONTROL_HUB.md) · [Testing](docs/TESTING.md) · [Platform vision](docs/PLATFORM_VISION.md) · [Deploy / TLS / Docker](docs/DEPLOY.md) · [Changelog](CHANGELOG.md) · [Migration (data dir)](docs/MIGRATION.md) · [Hermes config checklist](docs/HERMES_CONFIG_INTEGRATION.md)
 
 
 
 
 
-![Dashboard](screenshots/Hermes_Dashboard.png)
 
 
 
@@ -43,7 +42,7 @@ A command centre dashboard for [Hermes Agent](https://github.com/NousResearch/he
 | **Dashboard** | Live stats, active missions, system health, collapsible mission dispatch |
 
 
-| **Missions** | Built-in templates and custom templates within the OSS scope ([docs/OSS_SCOPE.md](docs/OSS_SCOPE.md)) |
+| **Missions** | Built-in templates and custom templates ([docs/CONTROL_HUB.md](docs/CONTROL_HUB.md)) |
 
 
 | **Agent Profiles** | QA, DevOps, and SWE specialist profiles |
@@ -104,7 +103,7 @@ A command centre dashboard for [Hermes Agent](https://github.com/NousResearch/he
 ```bash
 
 
-# Clone and install
+# Clone and set up (golden path — writes .env.local with PORT + CH_ALLOWED_DEV_ORIGINS)
 
 
 git clone https://github.com/Daniel-Parke/hermes-control-hub.git ~/control-hub
@@ -113,7 +112,7 @@ git clone https://github.com/Daniel-Parke/hermes-control-hub.git ~/control-hub
 cd ~/control-hub
 
 
-bash scripts/install.sh
+bash scripts/setup.sh
 
 
 ```
@@ -122,37 +121,39 @@ bash scripts/install.sh
 
 
 
-The installer will:
+`setup.sh` will:
 
 
-1. Check prerequisites (Node.js 18+, Hermes agent)
+1. Check Node.js 18+ and pick **PORT** (first free **42069–42100** by default, or your choice)
 
 
-2. Install dependencies and build
+2. Write **`.env.local`** with `PORT` and `CH_ALLOWED_DEV_ORIGINS` (for LAN `next dev` / HMR)
 
 
-3. Create 3 specialist agent profiles (QA Engineer, DevOps Engineer, SWE Engineer)
+3. Optionally integrate **Hermes** when `~/.hermes/config.yaml` exists (standalone mode if not)
 
 
-4. Optionally set up Hindsight memory (PostgreSQL + semantic search)
-
-
-
-
-
-The dashboard will be available at `http://localhost:3000` (or `http://localhost:$PORT` if you set the `PORT` environment variable; Next.js reads `PORT` for `npm run dev` / `npm run start`).
+4. Install dependencies, run tests, and **`npm run build`**
 
 
 
 
+**Bootstrap installer** (clones into `INSTALL_DIR`, default `~/control-hub`, then runs `setup.sh`): run `scripts/install.sh` **from outside** that directory, or after clone use **`bash scripts/install.sh --in-repo`** (same as `setup.sh`). Hermes profiles + optional Hindsight still run from `install.sh` after setup when Hermes is configured.
 
-### OSS build output vs runtime routes
+
+The dashboard URL is **`http://127.0.0.1:$PORT/`** with the `PORT` shown at the end of setup (Next.js reads **`PORT`** for `npm run dev` / `npm run start`).
 
 
 
 
 
-`next build` may list routes from the compiled graph; **what you can open** in this repository is defined by the shipped source tree plus **`middleware`** and **`CH_EDITION` / `NEXT_PUBLIC_CH_EDITION`** (see `.env.example`). See [docs/OSS_SCOPE.md](docs/OSS_SCOPE.md).
+### Build output vs runtime routes
+
+
+
+
+
+`next build` may list routes from the compiled graph; **what you can open** is defined by the shipped `src/app` routes and static assets. Optional tuning (ports, data dirs) lives in **`.env.example`**. See [docs/CONTROL_HUB.md](docs/CONTROL_HUB.md).
 
 
 
@@ -164,7 +165,7 @@ The dashboard will be available at `http://localhost:3000` (or `http://localhost
 
 
 
-If `npm run start` fails because port 3000 is taken, stop the old server first (often a previous `next start`). On Linux: `fuser -k 3000/tcp` or use another port, e.g. `PORT=3001 npm run start`.
+If `npm run start` fails because the port is taken, stop the old server first. **`scripts/stop.sh`** reads **`PORT`** from **`.env.local`** when unset. On Linux: `fuser -k ${PORT}/tcp` or change **`PORT`** in `.env.local` and retry.
 
 
 
@@ -215,7 +216,7 @@ If `npm run start` fails because port 3000 is taken, stop the old server first (
 |----------|---------|
 
 
-| `CH_API_KEY` | When set, mutating API routes require header `X-CH-API-Key` or `Authorization: Bearer <key>`. |
+| `PORT` | TCP port for Next.js; **`scripts/setup.sh`** picks first free **42069–42100** by default and writes **`.env.local`**. |
 
 
 | `CH_READ_ONLY` | Set to `1` or `true` to reject writes (503). |
@@ -224,10 +225,16 @@ If `npm run start` fails because port 3000 is taken, stop the old server first (
 | `CH_ENABLE_DEPLOY_API` | Set to `false` to block `POST /api/update` even in development. In **production**, deploy is off unless you set this to `true`. |
 
 
+| `CH_REQUEST_SIGNING_SECRET` | Optional: when set with signature headers, selected flows (e.g. deploy) can require signed requests — see `src/lib/api-auth.ts`. |
+
+
 | `CH_UPDATE_GIT_BRANCH` | Branch for git pull/reset (default `dev`) |
 
 
 | `CH_ALLOWED_DEV_ORIGINS` | Comma-separated origins allowed with Next dev (see `next.config.ts`). |
+
+
+Mutating REST routes do **not** enforce `CH_API_KEY`; run Control Hub on a network you trust or behind your own proxy/access controls.
 
 
 
@@ -248,13 +255,19 @@ Audit-style events append JSON lines to `~/.hermes/logs/ch-audit.log`. See [.env
 ```bash
 
 
-npm test          # Jest (OSS suite)
+npm test          # Jest — `tests/unit/`
 
 
-npm run build && PLAYWRIGHT_OSS_ONLY=1 npm run test:e2e   # Playwright OSS smoke
+npm run prebuild && npm run build && npm run test:e2e   # Playwright — `tests/e2e/` (prebuild migrates SQLite on fresh data dirs)
+
+
+npm run build && cross-env PLAYWRIGHT_SMOKE=1 npm run test:e2e   # Playwright smoke only (CI)
 
 
 ```
+
+
+Mission and template Zod schemas live in **`src/lib/schema/`**; see [docs/TESTING.md](docs/TESTING.md) for CI and sidebar / `app-routes` sync.
 
 
 
@@ -275,7 +288,7 @@ npm run build && PLAYWRIGHT_OSS_ONLY=1 npm run test:e2e   # Playwright OSS smoke
 - **Node.js** 18+
 
 
-- **Hermes Agent** with data under `~/.hermes/` (or set **`HERMES_HOME`** to match Hermes; Control Hub defaults to `path.join(os.homedir(), '.hermes')` in Node, same idea as Hermes). Run `hermes update` first.
+- **Hermes Agent** (optional for standalone UI): the UI resolves the active install via **`agents-registry.json`** in **`CH_DATA_DIR`**, seeded from **`AGENT_HOME`** / **`HERMES_HOME`** (default **`~/.hermes/`**). Use **Agents** in the app to switch local installs. Run **`npm run discover-agents`** (also run from `setup.sh` / `update.sh`) to refresh **`agents.discovery.json`**. Run `hermes update` first when using Hermes.
 
 
 
@@ -296,16 +309,16 @@ For long-term memory with semantic search, install Hindsight during setup:
 ```bash
 
 
-# During install — answer "y" when prompted
+# During bootstrap install — answer "y" when prompted, or on an existing repo:
 
 
-bash scripts/install.sh
+bash scripts/setup.sh
 
 
 
 
 
-# Or install on existing setup
+# Or install Hindsight only on an existing setup
 
 
 bash scripts/setup-hindsight.sh
@@ -428,22 +441,19 @@ Each profile has its own SOUL.md, AGENTS.md, USER.md, MEMORY.md, and skill/tool 
 |--------|---------|
 
 
-| `install.sh` | One-command installer (fresh or reinstall) |
+| `install.sh` | Bootstrap clone into `INSTALL_DIR` then `setup.sh`, or **`--in-repo`** for setup-only |
 
 
-| `setup.sh` | Post-clone setup (npm install, build, test) |
+| `setup.sh` | Post-clone setup: PORT + `.env.local`, optional Hermes, npm install, test, build |
 
 
 | `setup-hindsight.sh` | Standalone Hindsight memory installer |
 
 
-| `restart.sh` | Safe server restart (kill port 3000, start, health check) |
+| `restart.sh` | Stop listener on **PORT** (from env or `.env.local`), `next start`, health check |
 
 
-| `safe-restart.sh` | Minimal restart (kill + start, no health check) |
-
-
-| `update.sh` | Pull from main, npm install (if needed), build, update profiles, restart |
+| `update.sh` | Pull from **`CH_UPDATE_GIT_BRANCH`** (default **dev**), npm install if needed, build, profiles, restart |
 
 
 | `backup-hermes-config.sh` | Backup/restore Hermes config |
@@ -480,6 +490,12 @@ cd ~/control-hub
 
 
 npm run dev
+
+
+# Dev server on all interfaces (LAN) — still uses PORT from .env.local
+
+
+npm run dev:network
 
 
 
@@ -581,7 +597,7 @@ cd ~/control-hub && npm run build
 # 2. Kill existing server
 
 
-fuser -k 3000/tcp 2>/dev/null; sleep 2
+fuser -k "${PORT:-3000}/tcp" 2>/dev/null; sleep 2
 
 
 
@@ -590,7 +606,7 @@ fuser -k 3000/tcp 2>/dev/null; sleep 2
 # 3. Start server (use background=true in terminal tool — NEVER use nohup ... &)
 
 
-node node_modules/next/dist/bin/next start -p 3000 -H 0.0.0.0
+node node_modules/next/dist/bin/next start -p "${PORT:-3000}" -H 0.0.0.0
 
 
 ```
@@ -611,7 +627,7 @@ Or use the Update API for zero-downtime-style deploys:
 # Check for updates
 
 
-curl http://localhost:3000/api/update
+curl "http://127.0.0.1:${PORT:-3000}/api/update"
 
 
 
@@ -620,7 +636,7 @@ curl http://localhost:3000/api/update
 # Trigger update (pull + build + restart)
 
 
-curl -X POST http://localhost:3000/api/update \
+curl -X POST "http://127.0.0.1:${PORT:-3000}/api/update" \
 
 
   -H "Content-Type: application/json" \
@@ -635,7 +651,7 @@ curl -X POST http://localhost:3000/api/update \
 # Restart only
 
 
-curl -X POST http://localhost:3000/api/update \
+curl -X POST "http://127.0.0.1:${PORT:-3000}/api/update" \
 
 
   -H "Content-Type: application/json" \
@@ -755,10 +771,7 @@ Documentation for **Control Hub OSS** lives in the `docs/` directory:
 |----------|-------------|
 
 
-| [OSS scope](docs/OSS_SCOPE.md) | What this repository includes and excludes |
-
-
-| [Edition components](docs/EDITION_COMPONENTS.md) | OSS component inventory for this repository |
+| [Control Hub overview](docs/CONTROL_HUB.md) | What this repository is and doc map |
 
 
 | [API Reference](docs/API.md) | REST endpoints with request/response formats |
@@ -848,7 +861,7 @@ control-hub/
 │   │   ├── config-schema.ts    # Config section definitions
 
 
-│   │   ├── hermes.ts           # Path constants, config helpers
+│   │   ├── paths.ts            # Path constants, Hermes paths, config helpers
 
 
 │   │   ├── jobs-repository.ts # Atomic jobs.json read/write (Hermes-compatible)
@@ -866,7 +879,7 @@ control-hub/
 ├── scripts/                    # Shell scripts
 
 
-│   ├── install.sh              # One-command installer (with optional Hindsight)
+│   ├── install.sh              # Bootstrap clone + setup, or --in-repo; optional Hindsight
 
 
 │   ├── setup.sh                # Post-clone setup (npm install, build)
@@ -876,9 +889,6 @@ control-hub/
 
 
 │   ├── restart.sh              # Safe server restart (no nohup)
-
-
-│   ├── safe-restart.sh         # Minimal restart script
 
 
 │   ├── update.sh               # Git pull + build + restart

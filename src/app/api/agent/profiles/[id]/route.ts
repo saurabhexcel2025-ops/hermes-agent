@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync, rmSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
@@ -31,7 +31,7 @@ export async function PUT(
     );
   }
 
-  const profileDir = HERMES_HOME + "/profiles/" + prof.profile;
+  const profileDir = getActiveHermesHome() + "/profiles/" + prof.profile;
   if (!existsSync(profileDir)) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
@@ -58,7 +58,7 @@ export async function PUT(
           return NextResponse.json({ error: newProf.error }, { status: 400 });
         }
 
-        const newDir = HERMES_HOME + "/profiles/" + newSlug;
+        const newDir = getActiveHermesHome() + "/profiles/" + newSlug;
         if (existsSync(newDir)) {
           return NextResponse.json(
             { error: `Profile "${newSlug}" already exists` },
@@ -113,7 +113,7 @@ export async function DELETE(
     );
   }
 
-  const profileDir = HERMES_HOME + "/profiles/" + prof.profile;
+  const profileDir = getActiveHermesHome() + "/profiles/" + prof.profile;
   if (!existsSync(profileDir)) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }

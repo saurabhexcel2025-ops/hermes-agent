@@ -18,6 +18,7 @@ set -e
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── Helpers ──────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -309,8 +310,13 @@ echo "Services:"
 echo "  Hindsight: sudo systemctl status hindsight"
 echo "  PostgreSQL: sudo systemctl status postgresql"
 echo ""
+CH_WEB_PORT="${CONTROL_HUB_PORT:-3000}"
+if [ -f "$REPO_ROOT/.env.local" ]; then
+  _p="$(grep -E '^PORT=' "$REPO_ROOT/.env.local" 2>/dev/null | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
+  [ -n "$_p" ] && CH_WEB_PORT="$_p"
+fi
 echo "Dashboard:"
-echo "  Memory page at http://localhost:3000/memory"
+echo "  Memory page at http://localhost:${CH_WEB_PORT}/memory"
 echo ""
 echo "Useful commands:"
 echo "  sudo systemctl restart hindsight    # Restart server"

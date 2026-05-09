@@ -4,7 +4,7 @@ import { exec } from "child_process";
 import yaml from "js-yaml";
 
 // Use string concatenation to avoid Turbopack NFT tracing issues
-import { HERMES_PATHS, HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesPaths, getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { readJobsFile } from "@/lib/jobs-repository";
 import type { CronJobData } from "@/lib/utils";
@@ -40,7 +40,7 @@ async function buildMemoryStats(): Promise<MemoryStatsCache> {
   }
 
   if (providerType === "holographic") {
-    const dbPath = HERMES_PATHS.memoryDb;
+    const dbPath = getActiveHermesPaths().memoryDb;
     if (!existsSync(dbPath)) {
       return { factCount: 0, dbSize: "N/A", provider: "Holographic", expiresAt: 0 };
     }
@@ -64,8 +64,9 @@ async function buildMemoryStats(): Promise<MemoryStatsCache> {
     // Fetch fact count via bridge (lightweight: limit=1, reads total field)
     try {
       const bridgeResult = await new Promise<{ count?: number; error?: string }>((resolve) => {
-        const cmd = HERMES_HOME + "/hermes-agent/venv/bin/python3 " + HERMES_HOME + "/scripts/hindsight_bridge.py count";
-        exec(cmd, { timeout: 8000, env: { ...process.env, PYTHONPATH: HERMES_HOME + "/hermes-agent" } }, (err, stdout) => {
+        const hm = getActiveHermesHome();
+        const cmd = hm + "/hermes-agent/venv/bin/python3 " + hm + "/scripts/hindsight_bridge.py count";
+        exec(cmd, { timeout: 8000, env: { ...process.env, PYTHONPATH: hm + "/hermes-agent" } }, (err, stdout) => {
           if (err || !stdout) {
             resolve({ count: 0, error: err?.message || "No output" });
             return;
@@ -149,6 +150,7 @@ interface MonitorData {
 
 export async function GET() {
   try {
+    const H = getActiveHermesPaths();
     const data: MonitorData = {
       cron: { total: 0, active: 0, paused: 0, jobs: [] },
       sessions: { total: 0, recent: [] },
@@ -164,10 +166,10 @@ export async function GET() {
       },
     };
 
-    if (existsSync(HERMES_PATHS.config)) {
+    if (existsSync(H.config)) {
       data.capabilities.configPresent = true;
       try {
-        const cfg = yaml.load(readFileSync(HERMES_PATHS.config, "utf-8")) as Record<
+        const cfg = yaml.load(readFileSync(H.config, "utf-8")) as Record<
           string,
           unknown
         >;
@@ -184,7 +186,7 @@ export async function GET() {
     }
 
     // ── Cron Jobs ──────────────────────────────────────────────
-    const cronPath = HERMES_PATHS.cronJobs;
+    const cronPath = H.cronJobs;
     const jobsParsed = readJobsFile(cronPath);
     if (!jobsParsed.ok) {
       data.capabilities.jobsJsonReadable = false;
@@ -244,7 +246,7 @@ export async function GET() {
     }
 
     // ── Sessions (recent 10) ───────────────────────────────────
-    const sessionsPath = HERMES_PATHS.sessions;
+    const sessionsPath = H.sessions;
     if (existsSync(sessionsPath)) {
       try {
         const files = readdirSync(sessionsPath);
@@ -270,7 +272,7 @@ export async function GET() {
     }
 
     // ── Gateway Platforms ──────────────────────────────────────
-    const envPath = HERMES_PATHS.env;
+    const envPath = H.env;
     if (existsSync(envPath)) {
       try {
         const envContent = readFileSync(envPath, "utf-8");
@@ -307,7 +309,7 @@ export async function GET() {
 
       // For holographic, read SQLite directly for stats
       if (providerType === "holographic") {
-        const dbPath = HERMES_PATHS.memoryDb;
+        const dbPath = H.memoryDb;
         if (existsSync(dbPath)) {
           const stats = statSync(dbPath);
           const sizeKB = Math.round(stats.size / 1024);
@@ -345,7 +347,7 @@ export async function GET() {
     } catch (error) { logApiError("GET /api/monitor", "reading memory stats", error); }
 
     // ── Recent Errors (from gateway.log) ───────────────────────
-    const logPath = HERMES_PATHS.logs + "/gateway.log";
+    const logPath = H.logs + "/gateway.log";
     if (existsSync(logPath)) {
       try {
         const content = readFileSync(logPath, "utf-8");
@@ -371,7 +373,7 @@ export async function GET() {
     }
 
     // Also check errors.log
-    const errLogPath = HERMES_PATHS.logs + "/errors.log";
+    const errLogPath = H.logs + "/errors.log";
     if (existsSync(errLogPath)) {
       try {
         const content = readFileSync(errLogPath, "utf-8");

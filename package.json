@@ -9,6 +9,7 @@
   "scripts": {
 
     "dev": "next dev",
+    "dev:network": "next dev -H 0.0.0.0",
     "prebuild": "node scripts/prebuild-db.mjs",
 
     "build": "next build",
@@ -19,21 +20,20 @@
 
     "start:network": "next start -H 0.0.0.0",
 
-    "test": "cross-env CH_EDITION=oss jest",
+    "test": "jest",
 
     "test:watch": "jest --watch",
 
     "test:coverage": "jest --coverage",
 
-    "test:e2e": "cross-env CH_EDITION=oss NEXT_PUBLIC_CH_EDITION=oss PLAYWRIGHT_OSS_ONLY=1 playwright test"
+    "test:e2e": "cross-env PORT=3000 playwright test",
+    "discover-agents": "node scripts/discover-agents.mjs",
+
+    "generate:schema-json": "npx tsx scripts/generate-json-schema.ts"
 
   },
 
   "dependencies": {
-
-    "@agent-control-hub/config": "file:./packages/config",
-
-    "@agent-control-hub/schema": "file:./packages/schema",
 
     "@radix-ui/react-dialog": "^1.1.15",
 
@@ -98,6 +98,8 @@
     "tailwindcss": "^4",
 
     "ts-jest": "^29.4.9",
+
+    "tsx": "^4.21.0",
 
     "typescript": "^5"
 

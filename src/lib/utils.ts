@@ -99,16 +99,7 @@ export function messageSummary(content: string | undefined): string {
 
 export type { ParsedSchedule } from "@/lib/schedule/types";
 
-import type { ParsedSchedule } from "@/lib/schedule/types";
-import { parseScheduleOss } from "@/lib/schedule/parse-schedule-oss";
-
-/**
- * Parse a schedule string (Control Hub Simple / OSS export).
- * Hermes-compatible intervals, cron, and ISO one-shots only.
- */
-export function parseSchedule(raw: string): ParsedSchedule {
-  return parseScheduleOss(raw);
-}
+export { parseSchedule } from "@/lib/schedule/parse-schedule";
 
 // ── Cron Job Types ────────────────────────────────────────────
 

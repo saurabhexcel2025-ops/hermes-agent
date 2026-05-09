@@ -6,9 +6,12 @@
 # Handles fresh install, re-install, optional Hermes bootstrap (two-pass), and Hindsight.
 #
 # Usage:
-#   cd <repo> && bash scripts/install.sh
-#   # Or standalone (auto-clones); INSTALL_DIR defaults to ~/control-hub:
-#   bash install.sh
+#   Bootstrap (clones to INSTALL_DIR, default ~/control-hub):
+#     bash path/to/scripts/install.sh
+#   Already cloned this repo (runs setup only):
+#     bash scripts/install.sh --in-repo
+#   Typical developer path after git clone:
+#     bash scripts/setup.sh
 #
 # Environment (non-interactive / CI / VPS):
 #   CH_INSTALL_NONINTERACTIVE=1  or  CI=1
@@ -26,9 +29,15 @@
 
 set -e
 
+IN_REPO=false
+while [ "${1:-}" = "--in-repo" ]; do
+    IN_REPO=true
+    shift
+done
+
 REPO_URL="${REPO_URL:-https://github.com/Daniel-Parke/hermes-control-hub.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/control-hub}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-dev}"
 
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 SCRIPT_REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
@@ -60,6 +69,16 @@ echo "╔═══════════════════════�
 echo "║   Control Hub — Installer                 ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
+
+if [ "$IN_REPO" = true ]; then
+    if ! command -v node &>/dev/null; then
+        fail "Node.js not found. Install Node.js 18+ first: https://nodejs.org"
+    fi
+    info "Running in-repo setup from $SCRIPT_REPO_ROOT"
+    cd "$SCRIPT_REPO_ROOT"
+    bash scripts/setup.sh
+    exit $?
+fi
 
 if ! command -v node &>/dev/null; then
     fail "Node.js not found. Install Node.js 18+ first: https://nodejs.org"
@@ -119,7 +138,8 @@ if ! hermes_cli_ok; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "  Re-run this script to finish Control Hub setup:"
-            echo "    bash scripts/install.sh"
+            echo "    bash scripts/install.sh --in-repo"
+            echo "    # or: bash scripts/setup.sh"
             echo "  (from your repo clone, or the path you used to start the installer)"
             echo "════════════════════════════════════════════════════════════"
             exit 0
@@ -146,12 +166,14 @@ if [ -d "$INSTALL_DIR" ]; then
     EXISTING_ABS="$(cd "$INSTALL_DIR" && pwd -P)"
     if [ "$SCRIPT_REPO_ROOT" = "$EXISTING_ABS" ]; then
         echo ""
-        fail "Cannot reinstall in place: this script lives inside $INSTALL_DIR.
+        fail "Cannot bootstrap in place: this script lives inside $INSTALL_DIR.
 
-Use an in-place update instead:
+Use one of:
+  bash scripts/setup.sh              # post-clone setup (recommended)
+  bash scripts/install.sh --in-repo # same as setup.sh from repo root
   cd $INSTALL_DIR && git pull origin $BRANCH && bash scripts/setup.sh
 
-Or remove the directory manually from another path, then run this installer again."
+Or clone into a different INSTALL_DIR, or remove this directory and re-run the installer."
     fi
     read -p "   Reinstall? This will DELETE the directory. (y/N): " -n 1 -r
     echo ""
@@ -253,7 +275,7 @@ echo ""
 echo "  Hindsight provides long-term memory with semantic search"
 echo "  using a knowledge graph. Requires PostgreSQL + ~2GB disk."
 echo ""
-echo "  If your Hermes memory provider already differs, see docs: OSS_SCOPE.md,"
+echo "  If your Hermes memory provider already differs, see docs: CONTROL_HUB.md,"
 echo "  HERMES_CONFIG_INTEGRATION.md — this script will not overwrite your config."
 echo ""
 
@@ -308,8 +330,14 @@ echo "╔═══════════════════════�
 echo "║   Installation Complete!                  ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
+CH_DONE_PORT="(see .env.local PORT)"
+if [ -f "$INSTALL_DIR/.env.local" ]; then
+    CH_DONE_PORT="$(grep -E '^PORT=' "$INSTALL_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
+fi
 echo "Start the server:"
 echo "  cd $INSTALL_DIR"
 echo "  npm run start:network"
+echo ""
+echo "Listen port: $CH_DONE_PORT  →  http://127.0.0.1:${CH_DONE_PORT}/"
 echo ""
 ok "Install complete. Start the server with: cd $INSTALL_DIR && npm run start:network"

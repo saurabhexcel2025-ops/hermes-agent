@@ -11,7 +11,7 @@
 //   - none: Graceful degradation when no provider configured
 
 import { readFileSync, existsSync } from "fs";
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { holographicProvider } from "./holographic";
 
 // ── Shared Types (inlined from former ./types.ts) ─────────────────
@@ -126,7 +126,7 @@ export interface MemoryProvider {
 /** Parse the memory provider from config.yaml */
 function getConfiguredProvider(): MemoryProviderType {
   try {
-    const configPath = HERMES_PATHS.config;
+    const configPath = getActiveHermesPaths().config;
     if (!existsSync(configPath)) return "none";
 
     const content = readFileSync(configPath, "utf-8");
@@ -204,6 +204,6 @@ export function getMemoryProviderType(): MemoryProviderType {
 
 /** Check if holographic DB exists (for backward compat) */
 export function hasHolographicDb(): boolean {
-  const dbPath = HERMES_PATHS.memoryDb;
+  const dbPath = getActiveHermesPaths().memoryDb;
   return existsSync(dbPath);
 }

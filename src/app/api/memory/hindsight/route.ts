@@ -3,19 +3,17 @@ import { exec } from "child_process";
 import { readFileSync, existsSync } from "fs";
 import * as path from "path";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import type { ApiResponse } from "@/types/hermes";
 
-const BRIDGE_SCRIPT = HERMES_HOME + "/scripts/hindsight_bridge.py";
-
 // Resolve python3 from the hermes-agent venv — try common locations
-function resolvePython(): string {
+function resolvePython(hermesHome: string): string {
   const candidates = [
-    path.join(HERMES_HOME, "hermes-agent", "venv", "bin", "python3"),
-    path.join(HERMES_HOME, "hermes-agent", ".venv", "bin", "python3"),
-    path.join(HERMES_HOME, "..", ".local", "share", "hermes-agent", "venv", "bin", "python3"),
-    path.join(HERMES_HOME, "..", "hermes-agent", "venv", "bin", "python3"),
+    path.join(hermesHome, "hermes-agent", "venv", "bin", "python3"),
+    path.join(hermesHome, "hermes-agent", ".venv", "bin", "python3"),
+    path.join(hermesHome, "..", ".local", "share", "hermes-agent", "venv", "bin", "python3"),
+    path.join(hermesHome, "..", "hermes-agent", "venv", "bin", "python3"),
     path.join(process.env.HOME || "", ".local", "share", "hermes-agent", "venv", "bin", "python3"),
     "/usr/bin/python3",
   ];
@@ -32,18 +30,20 @@ function runBridgeAsync(
   timeoutMs = 15000
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
+    const hermesHome = getActiveHermesHome();
+    const bridgeScript = hermesHome + "/scripts/hindsight_bridge.py";
     const argStr = Object.entries(args)
       .filter(([, v]) => v !== undefined && v !== null && v !== "")
       .map(([k, v]) => `--${k} ${JSON.stringify(String(v))}`)
       .join(" ");
 
-    const python = resolvePython();
-    const cmd = `${python} ${BRIDGE_SCRIPT} ${command} ${argStr}`;
+    const python = resolvePython(hermesHome);
+    const cmd = `${python} ${bridgeScript} ${command} ${argStr}`;
 
     // Inject HINDSIGHT_API_KEY from config if present
     const apiKey = (() => {
       try {
-        const cfgPath = path.join(HERMES_HOME, "hindsight", "config.json");
+        const cfgPath = path.join(hermesHome, "hindsight", "config.json");
         if (existsSync(cfgPath)) {
           const cfg = JSON.parse(readFileSync(cfgPath, "utf-8"));
           // local_external uses llm_api_key, cloud uses top-level HINDSIGHT_API_KEY env
@@ -55,7 +55,7 @@ function runBridgeAsync(
 
     const execEnv = {
       ...process.env,
-      PYTHONPATH: path.join(HERMES_HOME, "hermes-agent"),
+      PYTHONPATH: path.join(hermesHome, "hermes-agent"),
       ...(apiKey ? { HINDSIGHT_API_KEY: apiKey } : {}),
     };
 

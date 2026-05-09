@@ -3,16 +3,16 @@ const nextJest = require("next/jest.js");
 
 const createJestConfig = nextJest({ dir: "./" });
 
-/** OSS export: community test surface is `src/__tests__/oss/**` only. */
+/** Unit tests live under `tests/unit/**`. */
 const config = {
   testEnvironment: "jest-environment-jsdom",
-  setupFilesAfterEnv: ["<rootDir>/config/jest.setup.ts"],
+  setupFilesAfterEnv: ["<rootDir>/tests/jest.setup.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
     // Intercept better-sqlite3 at resolution time so the real CJS module
     // (which calls require('fs') at evaluation time) is never loaded.
     // The mock exports a minimal Database-compatible object with prepare/run/get/all.
-    "^better-sqlite3$": "<rootDir>/__mocks__/better-sqlite3.cjs",
+    "^better-sqlite3$": "<rootDir>/tests/__mocks__/better-sqlite3.cjs",
   },
   collectCoverageFrom: [
     "src/**/*.{ts,tsx}",
@@ -30,8 +30,8 @@ const config = {
     },
   },
   testMatch: [
-    "<rootDir>/src/__tests__/oss/**/*.test.ts",
-    "<rootDir>/src/__tests__/oss/**/*.test.tsx",
+    "<rootDir>/tests/unit/**/*.test.ts",
+    "<rootDir>/tests/unit/**/*.test.tsx",
   ],
 };
 

@@ -10,7 +10,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join, dirname } from "path";
 import { spawn } from "child_process";
 import * as yaml from "js-yaml";
-import { AGENT_HOME, PATHS, getDefaultModelConfig } from "../paths";
+import { PATHS } from "../paths";
+import { getActiveHermesPaths, getAgentLlmEndpoints } from "../hermes-agent-runtime";
 import { callLLM as genericCallLLM } from "../llm";
 import {
   AgentProfile,
@@ -109,7 +110,7 @@ const HERMES_DEFAULT_TOOLS: Omit<ToolDefinition, "id">[] = [
 // ── Profile directory helpers ───────────────────────────────────
 
 function profileDir(profileId: string): string {
-  return join(PATHS.agentProfiles, profileId);
+  return join(getActiveHermesPaths().profiles, profileId);
 }
 
 function hermesProfileToAgentProfile(
@@ -138,11 +139,12 @@ export class HermesAgentBackend implements AgentBackend {
 
   async listProfiles(): Promise<AgentProfile[]> {
     try {
-      if (!existsSync(PATHS.agentProfiles)) return [];
-      const entries = readdirSync(PATHS.agentProfiles);
+      const hp = getActiveHermesPaths();
+      if (!existsSync(hp.profiles)) return [];
+      const entries = readdirSync(hp.profiles);
       const profiles: AgentProfile[] = [];
       for (const id of entries) {
-        const cfg = join(PATHS.agentProfiles, id, "config.yaml");
+        const cfg = join(hp.profiles, id, "config.yaml");
         if (existsSync(cfg)) {
           try {
             const raw = readFileSync(cfg, "utf-8");
@@ -162,7 +164,7 @@ export class HermesAgentBackend implements AgentBackend {
 
   async getProfile(id: string): Promise<AgentProfile | null> {
     try {
-      const cfg = join(PATHS.agentProfiles, id, "config.yaml");
+      const cfg = join(getActiveHermesPaths().profiles, id, "config.yaml");
       if (!existsSync(cfg)) return null;
       const raw = readFileSync(cfg, "utf-8");
       const disk = yaml.load(raw) as HermesProfileDisk;
@@ -203,7 +205,7 @@ export class HermesAgentBackend implements AgentBackend {
     id: string,
     input: Partial<CreateProfileInput>
   ): Promise<AgentProfile> {
-    const cfg = join(PATHS.agentProfiles, id, "config.yaml");
+    const cfg = join(getActiveHermesPaths().profiles, id, "config.yaml");
     let disk: HermesProfileDisk = { name: "" };
     if (existsSync(cfg)) {
       disk = yaml.load(readFileSync(cfg, "utf-8")) as HermesProfileDisk;
@@ -333,9 +335,10 @@ export class HermesAgentBackend implements AgentBackend {
 
   async ping(): Promise<boolean> {
     try {
+      const { gatewayBase } = getAgentLlmEndpoints();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2000);
-      const resp = await fetch("http://127.0.0.1:8642/health", {
+      const resp = await fetch(gatewayBase + "/health", {
         signal: controller.signal,
       });
       clearTimeout(timeout);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 
 /** Find the SKILL.md file for a given skill name */
@@ -9,11 +9,11 @@ function findSkillFile(skillName: string, profile: string): string | null {
   const searchDirs: string[] = [];
 
   if (profile === "default") {
-    searchDirs.push(HERMES_HOME + "/skills");
+    searchDirs.push(getActiveHermesHome() + "/skills");
   } else {
-    searchDirs.push(HERMES_HOME + "/profiles/" + profile + "/skills");
+    searchDirs.push(getActiveHermesHome() + "/profiles/" + profile + "/skills");
     // Also check default skills directory
-    searchDirs.push(HERMES_HOME + "/skills");
+    searchDirs.push(getActiveHermesHome() + "/skills");
   }
 
   for (const baseDir of searchDirs) {

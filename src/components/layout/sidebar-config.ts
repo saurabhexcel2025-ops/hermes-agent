@@ -1,6 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // Sidebar Navigation — Static configuration data
 // ═══════════════════════════════════════════════════════════════
+// When adding or changing `href` values here, update `tests/e2e/app-routes.ts`
+// so Playwright navigation-matrix tests stay aligned.
 
 import {
   Terminal, FileText, Database, Clock, Shield, Zap,

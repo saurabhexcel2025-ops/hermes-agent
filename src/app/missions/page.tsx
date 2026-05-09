@@ -263,6 +263,7 @@ export default function MissionsPage() {
       .then((loaded) => {
         setTemplates(loaded);
         if (!templateApplied.current && loaded.length > 0) {
+          // Same-origin URL — host/port come from the browser; no hardcoded Control Hub port.
           const url = new URL(window.location.href);
           const templateId = url.searchParams.get("template");
           if (templateId) {
@@ -404,7 +405,7 @@ export default function MissionsPage() {
               action: "update",
               missionId: editingId,
               name: newName,
-              instruction: buildPrompt(),
+              instruction: fullPrompt,
               goals: newGoals.split("\n").filter((g) => g.trim()),
               profile: newProfile || undefined,
               missionTimeMinutes: newMissionTime,
@@ -437,7 +438,7 @@ export default function MissionsPage() {
           body: JSON.stringify({
             action: "dispatch",
             name: newName,
-            instruction: buildPrompt(),
+            instruction: fullPrompt,
             goals: newGoals.split("\n").filter((g) => g.trim()),
             dispatchMode: "now",
             profile: newProfile || undefined,
@@ -472,7 +473,7 @@ export default function MissionsPage() {
         body: JSON.stringify({
           action: "dispatch",
           name: newName,
-          instruction: buildPrompt(),
+          instruction: fullPrompt,
           goals: newGoals.split("\n").filter((g) => g.trim()),
           dispatchMode: newDispatch,
           schedule: newDispatch === "cron" ? newSchedule : undefined,
@@ -830,7 +831,7 @@ export default function MissionsPage() {
 
         {/* Quick Deploy Templates */}
         {!showCreate && (
-          <div className="mb-6">
+          <div className="mb-6" data-testid="missions-quick-templates">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
                 <Zap className="w-3 h-3 text-neon-cyan" />

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
-import { BEHAVIOR_FILES } from "@/lib/behavior-files";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
+import { getBehaviorFiles } from "@/lib/behavior-files";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
@@ -16,7 +16,7 @@ function resolveFilePath(
   | { path: string; name: string; description: string }
   | { error: string }
   | null {
-  const fileConfig = BEHAVIOR_FILES[key];
+  const fileConfig = getBehaviorFiles()[key];
   if (!fileConfig) return null;
 
   const prof = resolveSafeProfileName(profileParam);
@@ -30,13 +30,16 @@ function resolveFilePath(
   }
 
   // Profile-specific paths (segment is allowlisted; no traversal)
-  const profileDir = HERMES_HOME + "/profiles/" + profile;
+  const root = getActiveHermesHome();
+  const profileDir = root + "/profiles/" + profile;
   const pathMap: Record<string, string> = {
     soul: profileDir + "/SOUL.md",
     agents: profileDir + "/AGENTS.md",
     user: profileDir + "/memories/USER.md",
     memory: profileDir + "/memories/MEMORY.md",
-    env: HERMES_HOME + "/.env",  // .env is global, not per-profile
+    env: root + "/.env", // .env is global, not per-profile
+    hermes: profileDir + "/HERMES.md",
+    config: root + "/config.yaml",
   };
 
   const resolvedPath = pathMap[key];
@@ -132,7 +135,7 @@ export async function PUT(
 
     // Optional backup
     if (backup && existsSync(resolved.path)) {
-      const backupDir = HERMES_HOME + "/backups";
+      const backupDir = getActiveHermesHome() + "/backups";
       if (!existsSync(backupDir)) mkdirSync(backupDir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const backupName = `${key}-${ts}.md`;

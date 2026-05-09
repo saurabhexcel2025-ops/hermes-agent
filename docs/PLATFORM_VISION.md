@@ -1,90 +1,54 @@
-# Control Hub platform vision (OSS)
-
-
+# Control Hub platform vision
 
 Control Hub is the **Next.js control plane** for [Hermes Agent](https://github.com/NousResearch/hermes-agent): missions, cron, configuration, sessions, memory, and day-to-day operator workflows. Execution remains in **Hermes** (gateway, scheduler). This app edits Hermes and Control Hub JSON through audited REST routes.
 
-
-
 ## Architecture (layers)
 
-
-
 ```mermaid
-
 flowchart TB
-
   UI[Next.js UI]
-
   API[API routes]
-
-  FS[(HERMES_HOME + CH_DATA_DIR)]
-
+  CH[(CH_DATA_DIR)]
+  AH[Active Hermes tree]
   H[Hermes runtime]
-
   UI --> API
-
-  API --> FS
-
-  H --> FS
-
+  API --> CH
+  API --> AH
+  H --> AH
 ```
 
+- **`CH_DATA_DIR`** (default `~/control-hub/data`, overridable via `CH_DATA_DIR` / `CONTROL_HUB_DATA_DIR`): Control Hub state—missions, templates, stories, Rec Room data, SQLite (`control-hub.db`), **`agents-registry.json`**, optional **`agents.discovery.json`**, hardware cron scripts/logs defaults (`CH_SCRIPTS_DIR`, `CH_HARDWARE_LOG_DIR` under this tree unless overridden).
 
+- **Active Hermes install:** Paths for profiles, skills, sessions, logs, `config.yaml`, agent **`cron/jobs.json`**, and related files come from **`getActiveHermesPaths()`** / **`getActiveHermesHome()`** in `src/lib/hermes-agent-runtime.ts`, driven by **`agents-registry.json`** (active row + registered roots). **`AGENT_HOME`** / **`HERMES_HOME`** seed the registry when it is first created; the UI can switch installs without relying on a single global `HERMES_HOME` at runtime.
 
-- **`HERMES_HOME`** (`~/.hermes`): `config.yaml`, `cron/jobs.json`, sessions, skills, logs.
-
-- **`CH_DATA_DIR`** (default `~/control-hub/data`): missions, templates, stories, Rec Room data, and other JSON used by this build. Some directory names may exist for compatibility with broader Hermes tooling; **this OSS app only ships UIs and APIs present in the repository** (see [OSS_SCOPE.md](OSS_SCOPE.md)).
-
-
+- **Hardware cron** (OS-level scripts managed by Control Hub) is separate from Hermes agent cron: different directories and **`/api/cron/hardware`** vs Hermes **`jobs.json`** via **`/api/cron`**.
 
 ## Scheduling
 
-
-
-- Cron jobs are rows in **`HERMES_HOME/cron/jobs.json`**. Control Hub uses a file lock compatible with Hermes.
+- **Agent cron:** Jobs are rows in the active install’s **`cron/jobs.json`** (path from `getActiveHermesPaths().cronJobs`). Control Hub uses a file lock compatible with Hermes.
 
 - Recurring jobs use **`repeat.times: null`** for infinite runs (Hermes canonical).
 
 - **`parseSchedule`** accepts interval expressions, ISO one-shots, and five- or six-field cron strings; invalid input is rejected on user-facing routes.
 
-
-
-## Core features in OSS
-
-
+## Core features
 
 | Area | Role |
-
 |------|------|
-
 | Model / provider | `GET`/`PUT /api/config/model` — validated updates, masked keys, audit. |
-
-| Missions | CRUD, dispatch, templates (built-in set in OSS). |
-
-| Cron | CRUD against Hermes `jobs.json`. |
-
+| Missions | CRUD, dispatch, templates (built-in set). |
+| Cron | CRUD against the active Hermes `jobs.json`; hardware cron under `CH_*` paths. |
 | Config / sessions / memory / gateway / logs / skills / personalities | Hermes-aligned surfaces as shipped in this repo. |
 
-
-
-This document describes only the OSS product surface in this repository.
-
-
+This document describes the product surface shipped in this repository.
 
 ## Security
 
-
-
-- Mutating routes use **`CH_API_KEY`** when set (`src/lib/api-auth.ts`).
+- Treat the UI and API as **same-trust**: run on a private network or behind your own access controls. Optional **`CH_REQUEST_SIGNING_SECRET`** can harden selected routes (see `src/lib/api-auth.ts`).
 
 - Config writes use whitelisted sections; model updates go through **`/api/config/model`**.
 
-
-
 ## Related docs
-
-
 
 - [MIGRATION.md](MIGRATION.md) — data directory migration.
 
@@ -92,3 +56,4 @@ This document describes only the OSS product surface in this repository.
 
 - [HERMES_CONFIG_INTEGRATION.md](HERMES_CONFIG_INTEGRATION.md) — optional `hermes-config` checklist.
 
+- [CONTROL_HUB.md](CONTROL_HUB.md) — registry, discovery, and where to read next.

@@ -21,7 +21,7 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 USER nextjs
-EXPOSE 3000
+EXPOSE 42069
 ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
+ENV PORT=42069
 CMD ["npm", "run", "start:network"]

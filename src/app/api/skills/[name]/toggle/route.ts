@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { resolveSafeProfileName } from "@/lib/path-security";
@@ -36,9 +36,9 @@ export async function PUT(
 
     let configPath: string;
     if (profile === "default") {
-      configPath = HERMES_HOME + "/config.yaml";
+      configPath = getActiveHermesHome() + "/config.yaml";
     } else {
-      configPath = HERMES_HOME + "/profiles/" + profile + "/config.yaml";
+      configPath = getActiveHermesHome() + "/profiles/" + profile + "/config.yaml";
     }
 
     if (!existsSync(configPath)) {

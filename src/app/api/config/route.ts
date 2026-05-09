@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import yaml from "js-yaml";
 
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
-const CONFIG_PATH = HERMES_PATHS.config;
 
 function parseConfig(): Record<string, unknown> {
-  if (!existsSync(CONFIG_PATH)) {
+  const configPath = getActiveHermesPaths().config;
+  if (!existsSync(configPath)) {
     return {};
   }
-  const content = readFileSync(CONFIG_PATH, "utf-8");
+  const content = readFileSync(configPath, "utf-8");
   return (yaml.load(content) as Record<string, unknown>) || {};
 }
 
@@ -84,12 +84,14 @@ export async function PUT(request: NextRequest) {
     const config = parseConfig();
 
     // Create backup
-    if (existsSync(CONFIG_PATH)) {
-      const backupDir = HERMES_PATHS.backups;
+    const H = getActiveHermesPaths();
+    const configPath = H.config;
+    if (existsSync(configPath)) {
+      const backupDir = H.backups;
       mkdirSync(backupDir, { recursive: true });
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const backupPath = `${backupDir}/config.yaml.${timestamp}.bak`;
-      writeFileSync(backupPath, readFileSync(CONFIG_PATH, "utf-8"), "utf-8");
+      writeFileSync(backupPath, readFileSync(configPath, "utf-8"), "utf-8");
     }
 
     // Merge values into section
@@ -98,7 +100,7 @@ export async function PUT(request: NextRequest) {
 
     // Write back
     const content = yaml.dump(config, { lineWidth: -1, noRefs: true });
-    writeFileSync(CONFIG_PATH, content, "utf-8");
+    writeFileSync(getActiveHermesPaths().config, content, "utf-8");
 
     appendAuditLine({
       action: "config.put",

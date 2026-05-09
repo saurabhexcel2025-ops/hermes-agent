@@ -7,12 +7,11 @@ import { readFileSync, existsSync, statSync } from "fs";
 
 import { logApiError } from "@/lib/api-logger";
 
-// Static behavior files — each defines a different aspect of agent personality
-import { BEHAVIOR_FILES } from "@/lib/behavior-files";
+import { getBehaviorFiles } from "@/lib/behavior-files";
 
 export async function GET() {
   try {
-    const files = Object.entries(BEHAVIOR_FILES).map(([key, config]) => {
+    const files = Object.entries(getBehaviorFiles()).map(([key, config]) => {
       const exists = existsSync(config.path);
       let size = 0;
       let lastModified: string | null = null;

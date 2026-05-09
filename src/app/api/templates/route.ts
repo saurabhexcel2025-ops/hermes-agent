@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
-import { parseTemplatePackManifestV1 } from "@agent-control-hub/schema";
+import { parseTemplatePackManifestV1 } from "@/lib/schema";
 import { zodErrorResponse } from "@/lib/api-schemas";
 import { logApiError } from "@/lib/api-logger";
 import { PATHS } from "@/lib/paths";

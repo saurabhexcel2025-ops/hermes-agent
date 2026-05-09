@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import { execSync, ExecSyncOptions } from "child_process";
 
+import { getChScriptsDir, getChHardwareLogDir, CH_DATA_DIR } from "@/lib/paths";
+
 /**
  * Hardware Cron API — System crontab management
  *
@@ -11,18 +13,18 @@ import { execSync, ExecSyncOptions } from "child_process";
  * DELETE /api/cron/hardware?id=...  — Delete a hardware cron job by ID
  *
  * Hardware cron jobs are system cron entries managed via crontab(1).
- * They survive agent restarts and run independently of the Hermes agent.
+ * They survive agent restarts and run independently of any agent install.
  *
  * Entry format in crontab:
  *   {min} {hour} {dom} {mon} {dow} HOME={homedir} {cmd} >> {log} 2>&1
  *
  * We identify our managed entries by their script path prefix:
- *   $HOME/.hermes/scripts/
+ *   CH_SCRIPTS_DIR (default: CH_DATA_DIR/scripts)
  */
 
-const SCRIPTS_DIR = process.env.HOME + "/.hermes/scripts";
-const LOG_DIR = process.env.HOME + "/.hermes/logs";
-const DISABLED_STATE_FILE = process.env.HOME + "/.hermes/logs/.disabled_hardware_crons.json";
+const SCRIPTS_DIR = getChScriptsDir();
+const LOG_DIR = getChHardwareLogDir();
+const DISABLED_STATE_FILE = CH_DATA_DIR + "/.disabled_hardware_crons.json";
 
 /**
  * Expand ${HOME} and $HOME in a string to their actual values.

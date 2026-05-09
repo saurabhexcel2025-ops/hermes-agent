@@ -1,10 +1,15 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  workflow_dispatch:
 
 # Parallel jobs: unit+build per OS, and E2E on Ubuntu only — avoids duplicate Jest runs and long serial time.
 jobs:
@@ -23,16 +28,22 @@ jobs:
       - name: Run database migrations
         run: npm run prebuild
       - run: npm run lint
+      - name: Forbid HERMES_PATHS in API routes (use getActiveHermesPaths)
+        run: |
+          if grep -rE "HERMES_PATHS|HERMES_HOME" src/app/api --include="*.ts" -q 2>/dev/null; then
+            echo "Use @/lib/hermes-agent-runtime instead of HERMES_PATHS/HERMES_HOME in API routes"
+            exit 1
+          fi
       - run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
         run: npm run test:coverage
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
       - run: npm run build
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
+      - name: Upload coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov-report
+          if-no-files-found: ignore
 
   build-test-macos:
     runs-on: macos-latest
@@ -49,16 +60,16 @@ jobs:
       - name: Run database migrations
         run: npm run prebuild
       - run: npm run lint
+      - name: Forbid HERMES_PATHS in API routes (use getActiveHermesPaths)
+        run: |
+          if grep -rE "HERMES_PATHS|HERMES_HOME" src/app/api --include="*.ts" -q 2>/dev/null; then
+            echo "Use @/lib/hermes-agent-runtime instead of HERMES_PATHS/HERMES_HOME in API routes"
+            exit 1
+          fi
       - run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
         run: npm run test:coverage
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
       - run: npm run build
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
 
   e2e-smoke:
     runs-on: ubuntu-latest
@@ -84,13 +95,9 @@ jobs:
       - name: Run database migrations
         run: npm run prebuild
       - run: npm run build
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
       - name: E2E smoke
         run: npm run test:e2e
         env:
           CI: true
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
-          PLAYWRIGHT_OSS_ONLY: "1"
+          PORT: "3000"
+          PLAYWRIGHT_SMOKE: "1"

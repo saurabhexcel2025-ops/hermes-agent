@@ -8,8 +8,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Wrench, Check, ChevronDown, ChevronRight, Save,
-  AlertCircle, Info, ToggleLeft, ToggleRight, Plus, X,
+  Wrench, Check, ChevronDown, ChevronRight,
+  Info, ToggleLeft, ToggleRight, Plus,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { execSync } from "child_process";
-import { HERMES_PATHS, PATHS } from "@/lib/hermes";
+import { PATHS } from "@/lib/paths";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { logApiError } from "@/lib/api-logger";
 
 const DATA_DIR = PATHS.missions;
-const CRON_PATH = HERMES_PATHS.cronJobs;
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 interface HealthReport {
@@ -29,6 +29,7 @@ interface HealthReport {
 
 export async function GET() {
   try {
+    const CRON_PATH = getActiveHermesPaths().cronJobs;
     const report: HealthReport = {
       status: "healthy",
       timestamp: new Date().toISOString(),

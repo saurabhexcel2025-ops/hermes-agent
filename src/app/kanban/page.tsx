@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,7 +21,6 @@ import GoalLoopPanel from "@/components/kanban/GoalLoopPanel";
 import { useToast } from "@/components/ui/Toast";
 import type {
   KanbanBoard,
-  KanbanColumn,
   KanbanCard,
   KanbanDocument,
   GoalSession,
@@ -122,7 +121,7 @@ export default function KanbanPage() {
       if (!selectedBoardId && (data.data?.boards?.length ?? 0) > 0) {
         setSelectedBoardId(data.data.boards[0].id);
       }
-    } catch (e) {
+    } catch {
       showToast("Failed to load boards", "error");
     }
   }, [showToast, selectedBoardId]);
@@ -149,8 +148,8 @@ export default function KanbanPage() {
         sessions[s.cardId] = s;
       }
       setGoalSessions(sessions);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load board");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load board");
       showToast("Failed to load board", "error");
     } finally {
       setLoading(false);
@@ -294,7 +293,7 @@ export default function KanbanPage() {
             });
           }
         }
-      } catch (e) {
+      } catch {
         showToast("Failed to save board changes", "error");
         // Reload to recover
         if (selectedBoardId) loadBoardDoc(selectedBoardId);
@@ -326,7 +325,7 @@ export default function KanbanPage() {
         setSelectedBoardId(newBoard.id);
         showToast(`Board "${newBoard.name}" created`, "success");
       }
-    } catch (e) {
+    } catch {
       showToast("Failed to create board", "error");
     }
   }, [loadBoards, showToast]);
@@ -453,8 +452,8 @@ export default function KanbanPage() {
           );
           setModalOpen(false);
         }
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : "Failed to start goal loop", "error");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Failed to start goal loop", "error");
       }
     },
     [showToast]
@@ -574,7 +573,7 @@ export default function KanbanPage() {
             onCreate={handleCreateBoard}
           />
           <Link
-            href="/kanban/teams"
+            href="/orchestration/teams"
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border
               border-white/10 text-white/50 hover:text-white/80 hover:border-white/20 transition-colors ml-4"
           >

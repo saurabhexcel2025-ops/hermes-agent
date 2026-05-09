@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
-import { resolve } from "path";
+import { relative, resolve } from "path";
 
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import type { ApiResponse } from "@/types/hermes";
+
+function logFileUnderLogsDir(logsDir: string, logPath: string): boolean {
+  const R = resolve(logsDir);
+  const C = resolve(logPath);
+  if (C === R) return false;
+  const rel = relative(R, C);
+  return rel !== "" && !rel.startsWith("..") && !rel.includes("..");
+}
 
 export async function GET(request: Request) {
   try {
@@ -14,7 +22,7 @@ export async function GET(request: Request) {
     const parsedLines = parseInt(searchParams.get("lines") || "200", 10);
     const maxLines = Number.isFinite(parsedLines) ? Math.min(parsedLines, 1000) : 200;
 
-    const logsDir = HERMES_PATHS.logs;
+    const logsDir = getActiveHermesPaths().logs;
     if (!existsSync(logsDir)) {
       return NextResponse.json({ error: "No logs directory found" }, { status: 404 });
     }
@@ -50,7 +58,7 @@ export async function GET(request: Request) {
     const resolvedLogsDir = resolve(logsDir);
 
     // Prevent path traversal: ensure resolved path stays within logs directory
-    if (!logPath.startsWith(resolvedLogsDir + "/") && logPath !== resolvedLogsDir) {
+    if (!logFileUnderLogsDir(resolvedLogsDir, logPath)) {
       return NextResponse.json(
         { error: "Invalid log path" },
         { status: 400 }
@@ -99,7 +107,7 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const logName = searchParams.get("name");
 
-  const logsDir = HERMES_PATHS.logs;
+  const logsDir = getActiveHermesPaths().logs;
   if (!existsSync(logsDir)) {
     return NextResponse.json({ error: "No logs directory found" }, { status: 404 });
   }
@@ -110,7 +118,7 @@ export async function DELETE(request: NextRequest) {
       const safeName = logName.replace(/[^a-zA-Z_-]/g, "");
       const logPath = resolve(logsDir, safeName + ".log");
       const resolvedLogsDir = resolve(logsDir);
-      if (!logPath.startsWith(resolvedLogsDir + "/") && logPath !== resolvedLogsDir) {
+      if (!logFileUnderLogsDir(resolvedLogsDir, logPath)) {
         return NextResponse.json({ error: "Invalid log path" }, { status: 400 });
       }
       if (existsSync(logPath)) {
@@ -127,7 +135,7 @@ export async function DELETE(request: NextRequest) {
         if (file.endsWith(".log")) {
           const filePath = resolve(logsDir, file);
           const resolvedLogsDir = resolve(logsDir);
-          if (filePath.startsWith(resolvedLogsDir + "/") || filePath === resolvedLogsDir) {
+          if (logFileUnderLogsDir(resolvedLogsDir, filePath)) {
             writeFileSync(filePath, "");
             cleared++;
           }

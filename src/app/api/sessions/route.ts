@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readdirSync, existsSync, statSync } from "fs";
 
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { sessionsRateLimitResponse } from "@/lib/sessions-api-guard";
 
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const limited = sessionsRateLimitResponse(request);
   if (limited) return limited;
 
-  const sessionsPath = HERMES_PATHS.sessions;
+  const sessionsPath = getActiveHermesPaths().sessions;
 
   if (!existsSync(sessionsPath)) {
     return NextResponse.json({ data: { sessions: [], total: 0 } });

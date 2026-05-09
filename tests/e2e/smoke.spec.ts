@@ -1,0 +1,40 @@
+import { test, expect } from "@playwright/test";
+
+test.describe("Smoke", () => {
+  test("dashboard loads", async ({ page }) => {
+    await page.goto("/");
+    const title = page.locator("h1").filter({ hasText: "MISSION" });
+    await expect(title).toBeVisible();
+    await expect(title.getByText("CONTROL", { exact: true })).toBeVisible();
+  });
+
+  test("cron page loads", async ({ page }) => {
+    await page.goto("/cron");
+    await expect(
+      page.getByRole("heading", { name: "Cron Jobs", exact: true })
+    ).toBeVisible();
+  });
+
+  test("missions page loads", async ({ page }) => {
+    await page.goto("/missions");
+    await expect(
+      page.getByRole("heading", { name: "Missions", exact: true })
+    ).toBeVisible();
+  });
+
+  test("unknown app route returns 404 (no extra middleware redirect)", async ({
+    request,
+  }) => {
+    const response = await request.get("/operations");
+    expect(response.status()).toBe(404);
+  });
+
+  test("agent targets API returns registry shape", async ({ request }) => {
+    const response = await request.get("/api/agent/targets");
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.data).toBeDefined();
+    expect(Array.isArray(body.data.agents)).toBe(true);
+    expect(typeof body.data.activeAgentId).toBe("string");
+  });
+});

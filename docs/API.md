@@ -1,4 +1,4 @@
-# API Reference (OSS)
+# API Reference
 
 All API routes return the envelope:
 
@@ -12,14 +12,17 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 
 | Route | Methods | Purpose |
 |---|---|---|
+| `/api/agent/targets` | `GET` | Active agent id, registry entries, optional `agents.discovery.json`. |
+| `/api/agent/active` | `POST` | Set `activeAgentId` (optional `register` to upsert an entry). |
 | `/api/agent/files` | `GET` | List agent behavior files. |
 | `/api/agent/files/[key]` | `GET`, `PUT` | Read/update one behavior file. |
 | `/api/agent/personality` | `PUT` | Update selected personality config. |
 | `/api/agent/profiles` | `GET` | List available Hermes profiles. |
-| `/api/agents` | `GET` | Inspect running Hermes agent processes. |
+| `/api/agents` | `GET` | Inspect running Hermes agent processes (implementation uses host process listing; behaviour differs by OS). |
 | `/api/config` | `GET`, `PUT` | Read/update parsed config content. |
 | `/api/config/model` | `GET`, `PUT` | Read/update model settings. |
-| `/api/cron` | `GET`, `POST`, `PUT`, `DELETE` | Manage cron jobs. |
+| `/api/cron` | `GET`, `POST`, `PUT`, `DELETE` | Manage **agent** cron jobs (Hermes `jobs.json` for the active install). |
+| `/api/cron/hardware` | `GET`, `POST`, `PUT`, `DELETE` | **Hardware** cron (system crontab): scripts/logs under `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR`; separate from agent `jobs.json`. |
 | `/api/goals` | `GET`, `POST` | Manage goal sessions. |
 | `/api/gateway` | `GET` | Read gateway/platform status. |
 | `/api/kanban` | `GET`, `POST`, `PUT`, `DELETE` | Manage boards, columns, and cards. |
@@ -46,7 +49,7 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 
 ## Auth and Safety Notes
 
-- Mutating routes are gated by `CH_API_KEY` / scoped key policies when configured.
-- Deploy actions (`/api/update` `POST`) are additionally gated by `CH_ENABLE_DEPLOY_API`.
+- **`CH_READ_ONLY`** blocks writes (503) when enabled.
+- Deploy actions (`/api/update` `POST`) are gated by `CH_ENABLE_DEPLOY_API`.
 - Signed request support can be enabled with `CH_REQUEST_SIGNING_SECRET`.
 - Correlation IDs are accepted via `x-correlation-id` or `x-request-id`.

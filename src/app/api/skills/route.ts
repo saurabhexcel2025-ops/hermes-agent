@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, readdirSync, existsSync, statSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 
 interface Skill {
@@ -151,11 +151,11 @@ export async function GET(request: NextRequest) {
     let configPath: string;
 
     if (profile === "default") {
-      skillsDir = HERMES_HOME + "/skills";
-      configPath = HERMES_HOME + "/config.yaml";
+      skillsDir = getActiveHermesHome() + "/skills";
+      configPath = getActiveHermesHome() + "/config.yaml";
     } else {
-      skillsDir = HERMES_HOME + "/profiles/" + profile + "/skills";
-      configPath = HERMES_HOME + "/profiles/" + profile + "/config.yaml";
+      skillsDir = getActiveHermesHome() + "/profiles/" + profile + "/skills";
+      configPath = getActiveHermesHome() + "/profiles/" + profile + "/config.yaml";
     }
 
     const disabled = getDisabledSkills(configPath);

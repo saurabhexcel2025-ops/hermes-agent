@@ -3,16 +3,7 @@
 // agent-agnostic LLM calls made by Control Hub.
 // ═══════════════════════════════════════════════════════════════
 
-// The default points at the Hermes Gateway API when Hermes is running.
-// Set CONTROL_HUB_LLM_API env var to use a different endpoint.
-
-export const LLM_API =
-  process.env.CONTROL_HUB_LLM_API || "http://127.0.0.1:8642/v1/chat/completions";
-
-const GATEWAY_BASE =
-  process.env.CONTROL_HUB_LLM_API
-    ? process.env.CONTROL_HUB_LLM_API.replace("/v1/chat/completions", "")
-    : "http://127.0.0.1:8642";
+import { getAgentLlmEndpoints } from "./hermes-agent-runtime";
 
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
@@ -51,18 +42,19 @@ export class GatewayUnavailableError extends Error {
  * with a descriptive message if the gateway is not responding.
  */
 async function probeGatewayHealth(): Promise<void> {
+  const { gatewayBase } = getAgentLlmEndpoints();
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const resp = await fetch(`${GATEWAY_BASE}/health`, {
+    const resp = await fetch(gatewayBase + "/health", {
       signal: controller.signal,
     });
     clearTimeout(timeout);
     if (!resp.ok) {
       throw new GatewayUnavailableError(
         "Hermes Gateway is not running. Story Weaver needs it for AI generation. " +
-        "Please ensure Hermes is started with API_SERVER_ENABLED=true in ~/.hermes/.env, " +
-        "then restart the gateway."
+          "Please ensure Hermes is started with API_SERVER_ENABLED=true in the agent .env, " +
+          "then restart the gateway."
       );
     }
   } catch (err) {
@@ -70,8 +62,8 @@ async function probeGatewayHealth(): Promise<void> {
     // Network failure or AbortError — gateway is unreachable
     throw new GatewayUnavailableError(
       "Hermes Gateway is not running. Story Weaver needs it for AI generation. " +
-      "Please ensure Hermes is started with API_SERVER_ENABLED=true in ~/.hermes/.env, " +
-      "then restart the gateway."
+        "Please ensure Hermes is started with API_SERVER_ENABLED=true in the agent .env, " +
+        "then restart the gateway."
     );
   }
 }
@@ -90,6 +82,8 @@ export async function callLLM(
     model = "hermes",
   } = opts;
 
+  const { apiUrl } = getAgentLlmEndpoints();
+
   // Check gateway availability before attempting the call
   await probeGatewayHealth();
 
@@ -101,7 +95,7 @@ export async function callLLM(
     const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min
 
     try {
-      const resp = await fetch(LLM_API, {
+      const resp = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

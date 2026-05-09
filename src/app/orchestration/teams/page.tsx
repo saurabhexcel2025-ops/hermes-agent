@@ -5,11 +5,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Plus,
-  Bot,
   Loader2,
   Trash2,
   Crown,
@@ -52,17 +50,8 @@ function CreateTeamModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [leaderProfileId, setLeaderProfileId] = useState("");
-  const [profiles, setProfiles] = useState<AgentProfile[]>([]);
   const [members, setMembers] = useState<Array<{ profileId: string; role: TeamMember["role"] }>>([]);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      apiFetch("/api/agent/profiles")
-        .then((d) => setProfiles(d.data?.profiles ?? []))
-        .catch(() => {});
-    }
-  }, [open]);
 
   const handleAddMember = () => {
     setMembers([...members, { profileId: "", role: "specialist" }]);
@@ -241,7 +230,6 @@ function CreateTeamModal({
 // ── Main Page ─────────────────────────────────────────────────
 
 export default function TeamsPage() {
-  const router = useRouter();
   const { showToast, toastElement } = useToast();
   const [teams, setTeams] = useState<Team[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
@@ -257,7 +245,7 @@ export default function TeamsPage() {
       ]);
       setTeams(teamsData.data?.teams ?? []);
       setProfiles(profilesData.data?.profiles ?? []);
-    } catch (e) {
+    } catch {
       showToast("Failed to load teams", "error");
     } finally {
       setLoading(false);
@@ -285,10 +273,6 @@ export default function TeamsPage() {
   const getProfileName = (profileId: string) => {
     const p = profiles.find((x) => x.id === profileId);
     return p?.name ?? profileId;
-  };
-
-  const getLeaderProfile = (team: Team) => {
-    return profiles.find((p) => p.id === team.leaderProfileId);
   };
 
   return (
@@ -338,7 +322,6 @@ export default function TeamsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {teams.map((team) => {
               const isExpanded = expandedTeamId === team.id;
-              const leaderProfile = getLeaderProfile(team);
 
               return (
                 <div

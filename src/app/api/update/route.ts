@@ -21,8 +21,8 @@ import { appendAuditLine } from "@/lib/audit-log";
 // POST /api/update { action: "restart" } → restart only (gated)
 //
 // CH_ENABLE_DEPLOY_API=true required for POST.
-// CH_API_KEY optional; when set, require X-CH-API-Key or Bearer.
-// CH_UPDATE_GIT_BRANCH (default main) — remote tracking branch for deploy.
+// Optional CH_REQUEST_SIGNING_SECRET + signature headers for POST hardening.
+// CH_UPDATE_GIT_BRANCH (default dev) — remote tracking branch for deploy.
 
 const APP_DIR = process.cwd();
 const LOCK_FILE = tmpdir() + "/ch-deploy.lock";
@@ -32,7 +32,7 @@ const CACHE_FILE = tmpdir() + "/ch-version-cache.json";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const UPDATE_BRANCH = sanitizeGitBranch(
-  process.env.CH_UPDATE_GIT_BRANCH || "main"
+  process.env.CH_UPDATE_GIT_BRANCH || "dev"
 );
 
 // ── Branch listing ──────────────────────────────────────────────
@@ -65,7 +65,7 @@ function listRemoteBranches(): string[] {
 
 function sanitizeGitBranch(raw: string): string {
   const s = raw.replace(/[^a-zA-Z0-9._/-]/g, "").slice(0, 200);
-  return s || "main";
+  return s || "dev";
 }
 
 interface VersionCache {
@@ -170,7 +170,9 @@ export async function GET(request: NextRequest) {
     // Branch listing endpoint
     if (searchParams.get("branches") === "1") {
       const branches = listRemoteBranches();
-      return NextResponse.json({ data: { branches, default: "main" } });
+      return NextResponse.json({
+        data: { branches, default: UPDATE_BRANCH },
+      });
     }
 
     const branchParam = searchParams.get("branch");
@@ -220,7 +222,7 @@ export async function POST(request: NextRequest) {
     if (action === "rebuild") {
       const rebuildBranch = body.branch
         ? sanitizeGitBranch(String(body.branch))
-        : sanitizeGitBranch(process.env.CH_UPDATE_GIT_BRANCH || "main");
+        : sanitizeGitBranch(process.env.CH_UPDATE_GIT_BRANCH || "dev");
       // Run build as a detached background process so the server's memory
       // context is not consumed by npm/build child processes (avoids OOM
       // kills on memory-constrained systems). Uses systemd-run like restart.

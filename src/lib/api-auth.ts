@@ -1,6 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 
-import { getChApiKeyFromEnv } from "@agent-control-hub/config";
 import { NextRequest, NextResponse } from "next/server";
 
 function firstEnvFlag(keys: string[]): string | undefined {
@@ -11,8 +10,9 @@ function firstEnvFlag(keys: string[]): string | undefined {
   return undefined;
 }
 
+/** Legacy helper; optional API keys are not enforced for route access. */
 export function getChApiKey(): string {
-  return getChApiKeyFromEnv();
+  return "";
 }
 
 export function isDeployApiEnabled(): boolean {
@@ -29,31 +29,8 @@ export function isChReadOnly(): boolean {
   return value === "1" || value === "true";
 }
 
-export function requireChApiKey(request: NextRequest): NextResponse | null {
-  const provided =
-    request.headers.get("x-ch-api-key") ||
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ||
-    "";
-  const scopedRaw = process.env.CH_API_KEYS_SCOPED_JSON;
-  if (scopedRaw) {
-    try {
-      const scoped = JSON.parse(scopedRaw) as Record<string, string[]>;
-      const scopes = scoped[provided];
-      if (!scopes) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      const required = request.method === "GET" ? "read" : "write";
-      if (!scopes.includes(required) && !scopes.includes("admin")) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-      return null;
-    } catch {
-      return NextResponse.json({ error: "Invalid key scope configuration" }, { status: 500 });
-    }
-  }
-  const legacy = getChApiKey();
-  if (!legacy) return null;
-  if (provided !== legacy) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+/** Optional API key / scoped key checks are disabled; routes rely on same-trust as the UI. */
+export function requireChApiKey(_request: NextRequest): NextResponse | null {
   return null;
 }
 

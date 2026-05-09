@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readFileSync, readdirSync, existsSync, statSync } from "fs";
 import { execSync } from "child_process";
 
-import { HERMES_PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 
 interface AgentRun {
@@ -45,7 +45,7 @@ export async function GET() {
           // Determine connected platforms from .env
           const platforms: string[] = [];
           try {
-            const envPath = HERMES_PATHS.env;
+            const envPath = getActiveHermesPaths().env;
             if (existsSync(envPath)) {
               const envContent = readFileSync(envPath, "utf-8");
               if (envContent.includes("DISCORD_BOT_TOKEN=") && !envContent.match(/^#\s*DISCORD_BOT_TOKEN/m)) platforms.push("Discord");
@@ -74,7 +74,7 @@ export async function GET() {
     }
 
     // ── Cron job runs (from session files) ───────────────────
-    const sessionsPath = HERMES_PATHS.sessions;
+    const sessionsPath = getActiveHermesPaths().sessions;
     if (existsSync(sessionsPath)) {
       try {
         const files = readdirSync(sessionsPath);
@@ -100,7 +100,7 @@ export async function GET() {
           // Get job name from cron config
           let jobName = `Cron ${jobId.slice(0, 8)}`;
           let jobModel = "unknown";
-          const cronPath = HERMES_PATHS.cronJobs;
+          const cronPath = getActiveHermesPaths().cronJobs;
           if (existsSync(cronPath)) {
             try {
               const cronData = JSON.parse(readFileSync(cronPath, "utf-8"));

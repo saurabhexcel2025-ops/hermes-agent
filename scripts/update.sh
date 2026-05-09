@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════
 # Control Hub — Deploy Script
 # ═══════════════════════════════════════════════════════════════
-# Safely pulls latest code from main, rebuilds, and restarts.
+# Safely pulls latest code from origin (default branch dev), rebuilds, and restarts.
 #
 # Usage:
 #   bash scripts/update.sh [--restart-only]
@@ -13,7 +13,7 @@
 # Safety:
 #   - Lock file prevents concurrent deploys
 #   - Build failure aborts without restart
-#   - Atomic git operations (reset --hard origin/main)
+#   - Atomic git operations (reset --hard origin/$CH_UPDATE_GIT_BRANCH)
 # ═══════════════════════════════════════════════════════════════
 
 set -e
@@ -22,7 +22,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 LOCK_FILE="${TMPDIR:-/tmp}/ch-deploy.lock"
 LOG_FILE="$HOME/.hermes/logs/ch-update.log"
-CH_BRANCH="${CH_UPDATE_GIT_BRANCH:-dev}"
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -159,6 +158,13 @@ if command -v hermes &>/dev/null && [ -f "$HERMES_HOME/.env" ]; then
     else
         log "WARNING: Could not stop gateway — restart manually if needed"
     fi
+fi
+
+# ── Discover local Hermes installs ───────────────────────────
+CH_DATA_ROOT="${CH_DATA_DIR:-$HOME/control-hub/data}"
+mkdir -p "$CH_DATA_ROOT/scripts" "$CH_DATA_ROOT/logs"
+if command -v node &>/dev/null; then
+    CH_DATA_DIR="$CH_DATA_ROOT" node "$APP_DIR/scripts/discover-agents.mjs" >>"$LOG_FILE" 2>&1 || log "WARNING: discover-agents.mjs failed"
 fi
 
 # ── Restart Server ────────────────────────────────────────────

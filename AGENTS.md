@@ -22,7 +22,7 @@ Extends `~/.hermes/AGENT.md` (base instructions). This file adds project-specifi
 
 cd ~/control-hub
 
-npm run dev     # Start dev server (port 3000)
+npm run dev     # Start dev server (PORT from .env.local; setup.sh defaults 42069–42100)
 
 npm run build   # Production build
 
@@ -47,8 +47,6 @@ control-hub/
 │   │   ├── api/                    # REST API routes
 
 │   │   │   ├── agent/files/        # Behaviour file CRUD
-
-│   │   │   ├── agent/agents-md/    # AGENTS.md scanning + CRUD
 
 │   │   │   ├── agent/profiles/     # Agent profile CRUD
 
@@ -81,8 +79,7 @@ control-hub/
 │   │   ├── page.tsx                # Dashboard
 
 │   │   ├── kanban/              # Multi-Agent Coordination Kanban
-│   │   │   ├── page.tsx          # Kanban board view
-│   │   │   └── teams/page.tsx     # Team management
+│   │   ├── orchestration/teams/ # Team management
 │   │   ├── missions/page.tsx      # Missions page
 
 │   │   ├── cron/page.tsx           # Cron manager
@@ -121,6 +118,12 @@ control-hub/
 
 │   │   ├── api.ts                  # Typed fetch wrappers
 
+│   │   ├── agent-registry.ts       # agents-registry.json (active Hermes installs)
+
+│   │   ├── hermes-agent-runtime.ts # Resolved paths for active install
+
+│   │   ├── schema/                 # Mission + template Zod schemas (in-repo)
+
 │   │   ├── config-schema.ts        # Config section definitions
 
 │   │   ├── theme.ts                # Shared theme maps
@@ -135,19 +138,23 @@ control-hub/
 
 │       └── hermes.ts               # All TypeScript interfaces
 
-├── data/
+├── tests/
 
-│   ├── missions/                   # Mission JSON files
+│   ├── unit/                       # Jest unit + API tests
 
-│   ├── kanban/                    # Board JSON files (board, column, card per file)
+│   ├── e2e/                        # Playwright (incl. app-routes nav matrix)
 
-│   ├── teams/                     # Team JSON files
+│   ├── jest.setup.ts
 
-│   ├── goals/                     # Goal session JSON files
+│   └── __mocks__/better-sqlite3.cjs
 
-│   └── templates/                 # Custom template JSON files
+├── scripts/                        # setup.sh, update.sh, discover-agents.mjs, prebuild-db.mjs, …
+
+├── scripts/git-hooks/              # Optional pre-push (see docs/CONTRIBUTING.md)
 
 ├── public/                         # Static assets
+
+├── docs/                           # Technical documentation index → docs/README.md
 
 ├── next.config.ts                  # Next.js config
 
@@ -173,7 +180,7 @@ control-hub/
 
 - **Destructive actions need confirmation**
 
-- **NEVER write to `~/.hermes/` directly** — always through API endpoints
+- **Do not bypass the API to edit Hermes or Control Hub state on disk** — use routes so path validation and registry-aware resolution apply
 
 - **`.env` keys displayed as `sk-...abcd` only**
 
@@ -195,7 +202,9 @@ control-hub/
 
 - `src/lib/api-logger.ts` — `logApiError()`, `safeJsonParse()`, `safeReadJsonFile()`
 
-- `src/lib/hermes.ts` — `PATHS`, `CH_DATA_DIR`, `HERMES_HOME`, `getDefaultModelConfig()`, `getDiscordHomeChannel()`
+- `src/lib/paths.ts` — `PATHS` (Control Hub–owned dirs), `CH_DATA_DIR`, `getChScriptsDir()`, `getChHardwareLogDir()`, `getDiscordHomeChannel()`
+- `src/lib/hermes-agent-runtime.ts` — `getActiveHermesPaths()`, `getActiveHermesHome()`, `getDefaultModelConfig()`, `getAgentLlmEndpoints()`
+- `src/lib/agent-registry.ts` — persisted `agents-registry.json` under `CH_DATA_DIR`
 
 §
 
@@ -269,7 +278,7 @@ cd ~/control-hub && npm run build
 
 # Step 2: Kill existing server
 
-fuser -k 3000/tcp 2>/dev/null; sleep 2
+fuser -k "${PORT:-3000}/tcp" 2>/dev/null; sleep 2
 
 §
 
@@ -289,11 +298,11 @@ In code, deploy via:
 
 ```
 
-terminal(command="cd ~/control-hub && node node_modules/next/dist/bin/next start -p 3000 -H 0.0.0.0", background=true)
+terminal(command="cd ~/control-hub && node node_modules/next/dist/bin/next start -p ${PORT:-3000} -H 0.0.0.0", background=true)
 
 sleep 3
 
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-3000}
 
 ```
 
@@ -303,11 +312,11 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
 
 - `scripts/restart.sh` — Stop and restart the server (no git/build)
 
-- `scripts/update.sh` — Pull from main, build, restart
+- `scripts/update.sh` — Pull from **CH_UPDATE_GIT_BRANCH** (default **dev**), build, restart
 
-- `scripts/install.sh` — Standalone installer (fresh or reinstall)
+- `scripts/install.sh` — Bootstrap clone + setup, or **`--in-repo`**
 
-- `scripts/setup.sh` — Post-clone setup (npm install, build)
+- `scripts/setup.sh` — Post-clone setup (PORT + `.env.local`, npm install, build)
 
 
 

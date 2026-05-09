@@ -30,7 +30,12 @@ log() {
 
 cd "$APP_DIR"
 
-PORT="${PORT:-3000}"
+# Prefer explicit PORT, then .env.local (written by setup.sh), then legacy default.
+CH_PORT_FILE=""
+if [ -z "${PORT:-}" ] && [ -f "$APP_DIR/.env.local" ]; then
+  CH_PORT_FILE="$(grep -E '^PORT=' "$APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
+fi
+PORT="${PORT:-${CH_PORT_FILE:-3000}}"
 HOST="${HOST:-0.0.0.0}"
 
 # Always enable the Deploy API for local self-hosted use

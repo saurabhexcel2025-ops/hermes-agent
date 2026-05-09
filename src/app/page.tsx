@@ -235,7 +235,9 @@ export default function Dashboard() {
       const data = await fetch("/api/missions");
       const d = await data.json();
       if (d.data) setMissions(d.data.missions || []);
-    } catch (e) { showToast("Failed to cancel mission", "error"); }
+    } catch {
+      showToast("Failed to cancel mission", "error");
+    }
   }, [showToast]);
 
   // Update cron job schedule inline
@@ -250,7 +252,7 @@ export default function Dashboard() {
       const res = await fetch("/api/monitor");
       const d = await res.json();
       if (d.data) setMonitor(d.data);
-    } catch (error) {
+    } catch {
       showToast("Failed to update cron schedule", "error");
     }
   }, [showToast]);
