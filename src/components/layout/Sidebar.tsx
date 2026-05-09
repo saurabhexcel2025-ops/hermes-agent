@@ -31,6 +31,7 @@ import {
 import { iconColorMap } from "@/lib/theme";
 import {
   mainSections,
+  configSettingsPinnedLinks,
   configGroups,
 } from "./sidebar-config";
 
@@ -476,7 +477,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           <button
             onClick={() => openDropdown("rebuild")}
             disabled={isBusy}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs font-mono text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-neon-purple/10 border border-neon-purple/20 text-xs font-mono text-neon-purple hover:bg-neon-purple/20 transition-colors disabled:opacity-50"
           >
             <Hammer className={`w-3.5 h-3.5 ${rebuilding ? "animate-spin" : ""}`} />
             {rebuilding ? "..." : "Rebuild"}
@@ -660,6 +661,8 @@ export default function Sidebar() {
         )}
 
         {collapsed && <div className="my-2 border-t border-white/10" />}
+
+        {configSettingsPinnedLinks.map((link) => renderLink(link))}
 
         {/* All Settings link */}
 

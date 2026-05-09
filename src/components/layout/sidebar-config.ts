@@ -65,8 +65,6 @@ export const mainSections: SidebarSection[] = [
       { icon: FileText, label: "Skills", href: "/skills", color: "green" },
       { icon: Wrench, label: "Tools", href: "/agent/tools", color: "purple" },
       { icon: Sparkles, label: "Personalities", href: "/personalities", color: "purple" },
-      { icon: Cpu, label: "HERMES.md", href: "/config/hermes_md", color: "cyan" },
-      { icon: Lock, label: "Environment", href: "/config/env", color: "orange" },
     ],
   },
   {
@@ -83,6 +81,12 @@ export const mainSections: SidebarSection[] = [
       },
     ],
   },
+];
+
+/** Shown under “Config Settings”, above “All Settings” (file editors + env). */
+export const configSettingsPinnedLinks: SidebarLink[] = [
+  { icon: Cpu, label: "HERMES.md", href: "/config/hermes_md", color: "cyan" },
+  { icon: Lock, label: "Environment", href: "/config/env", color: "orange" },
 ];
 
 // ── Config Groups ──────────────────────────────────────────────

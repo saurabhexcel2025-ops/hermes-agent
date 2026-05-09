@@ -8,12 +8,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft,
   FileText,
-  Clock,
-  HardDrive,
   Folder,
 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface SkillData {
@@ -251,50 +250,29 @@ export default function SkillDetailPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-dark-900/50 backdrop-blur-xl sticky top-0 z-30">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/skills"
-                className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="text-sm font-mono">SKILLS</span>
-              </Link>
-              <div className="w-px h-6 bg-white/20" />
-              <div>
-                <h1 className="text-lg font-bold text-neon-green flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  {data.name}
-                </h1>
-                <div className="flex items-center gap-4 text-xs text-white/40 font-mono mt-0.5">
-                  <span>{data.path}</span>
-                  <span className="flex items-center gap-1">
-                    <HardDrive className="w-3 h-3" />
-                    {(data.size / 1024).toFixed(1)} KB
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {new Date(data.lastModified).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowRaw(!showRaw)}
-              className="text-xs font-mono text-white/40 hover:text-white/60 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 transition-colors"
-            >
-              {showRaw ? "Rendered" : "Raw"}
-            </button>
-          </div>
-        </div>
-      </header>
+  const subtitle = `${data.path} · ${(data.size / 1024).toFixed(1)} KB · ${new Date(data.lastModified).toLocaleDateString()}`;
 
-      <div className="max-w-4xl mx-auto px-6 py-6">
+  return (
+    <AppPageShell>
+      <PageHeader
+        icon={FileText}
+        title={data.name}
+        subtitle={subtitle}
+        color="green"
+        backHref="/skills"
+        backLabel="SKILLS"
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowRaw(!showRaw)}
+            className="text-xs font-mono text-white/40 hover:text-white/60 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 transition-colors"
+          >
+            {showRaw ? "Rendered" : "Raw"}
+          </button>
+        }
+      />
+
+      <div className="max-w-4xl mx-auto px-6 py-6 flex-1 w-full">
         <div className="flex gap-6">
           {/* Main content */}
           <div className="flex-1 min-w-0">
@@ -359,6 +337,6 @@ export default function SkillDetailPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AppPageShell>
   );
 }

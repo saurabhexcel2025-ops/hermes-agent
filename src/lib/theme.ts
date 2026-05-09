@@ -17,13 +17,18 @@ export const iconColorMap: Record<AccentColor, string> = {
   orange: "text-neon-orange",
 };
 
-// ── Border Color Map (for hover effects) ─────────────────────
+// ── Border Color Map (for hover effects) — token-aligned ─────
 export const colorBorderMap: Record<AccentColor, string> = {
-  cyan: "border-cyan-500/30 hover:border-cyan-500/60 hover:shadow-[0_0_20px_rgba(0,245,255,0.1)]",
-  purple: "border-purple-500/30 hover:border-purple-500/60 hover:shadow-[0_0_20px_rgba(184,41,255,0.1)]",
-  green: "border-green-500/30 hover:border-green-500/60 hover:shadow-[0_0_20px_rgba(57,255,20,0.1)]",
-  pink: "border-pink-500/30 hover:border-pink-500/60 hover:shadow-[0_0_20px_rgba(255,45,149,0.1)]",
-  orange: "border-orange-500/30 hover:border-orange-500/60 hover:shadow-[0_0_20px_rgba(255,107,53,0.1)]",
+  cyan:
+    "border-neon-cyan/30 hover:border-neon-cyan/60 hover:shadow-[0_0_20px_rgb(var(--ch-rgb-neon-cyan)_/_0.12)]",
+  purple:
+    "border-neon-purple/30 hover:border-neon-purple/60 hover:shadow-[0_0_20px_rgb(var(--ch-rgb-neon-purple)_/_0.12)]",
+  green:
+    "border-neon-green/30 hover:border-neon-green/60 hover:shadow-[0_0_20px_rgb(var(--ch-rgb-neon-green)_/_0.12)]",
+  pink:
+    "border-neon-pink/30 hover:border-neon-pink/60 hover:shadow-[0_0_20px_rgb(var(--ch-rgb-neon-pink)_/_0.12)]",
+  orange:
+    "border-neon-orange/30 hover:border-neon-orange/60 hover:shadow-[0_0_20px_rgb(var(--ch-rgb-neon-orange)_/_0.12)]",
 };
 
 // ── Focus Ring Color (for inputs/selects) ─────────────────────
@@ -44,13 +49,13 @@ export const glowClassMap: Record<AccentColor, string> = {
   orange: "glow-orange",
 };
 
-/** RGB triplets for `rgb(var(--glow-surface-rgb) / …)` (matches @theme neon hex). */
+/** RGB triplets for `rgb(var(--glow-surface-rgb) / …)` — must match docs/design-tokens.md + globals :root */
 export const glowSurfaceRgbMap: Record<AccentColor, string> = {
-  cyan: "0, 245, 255",
-  purple: "184, 41, 255",
-  green: "57, 255, 20",
-  pink: "255, 45, 149",
-  orange: "255, 107, 53",
+  cyan: "0, 191, 255",
+  purple: "139, 92, 255",
+  green: "163, 255, 18",
+  pink: "232, 121, 249",
+  orange: "255, 159, 28",
 };
 
 // ── Badge Background Color ────────────────────────────────────

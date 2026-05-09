@@ -342,5 +342,25 @@ Control Hub is a command centre, not a file manager. The operator opens the dash
 
 §
 
-**Sidebar sections:** Main (Dashboard, Missions, Kanban, Teams, Cron, Sessions, Memory, Gateway, Logs, Config) | Agents (Agents) | Operations (Skills, Tools, Personalities, HERMES.md, Environment) | Config Sections
+**Sidebar sections:** Main (Dashboard, Missions, Kanban, Teams, Cron, Sessions, Memory, Gateway, Logs, Config) | Agents (Agents) | Operations (Skills, Tools, Personalities) | pinned above **All Settings**: HERMES.md, Environment | Config Sections
+
+§
+
+## Shell & UI consistency
+
+§
+
+- **Page chrome:** Prefer `PageHeader` from `@/components/layout/PageHeader` for sticky top bars (title, optional back link, `actions` slot). Use `shellHeaderBarClasses` from `@/lib/theme` only when extending the shell outside `PageHeader`.
+
+§
+
+- **Page frame:** Prefer `AppPageShell` from `@/components/layout/AppPageShell` instead of repeating `min-h-screen bg-dark-950 grid-bg`. Use `variant="scanlines"` where the Rec Room / immersive aesthetic applies.
+
+§
+
+- **Tokens:** Use theme colours (`neon-*`, `dark-*`, `semantic-*`, `rgb(var(--ch-rgb-neon-*)_/_opacity)` in arbitrary shadows) — **do not** introduce raw hex or ad-hoc `purple-500` / `rgba(...)` in TSX unless documenting an exception in `docs/design-tokens.md`.
+
+§
+
+- **Mobile:** `MobileHeader` intentionally uses `--ch-mobile-header-min-height` (3rem), shorter than desktop `--ch-shell-header-min-height` (5rem).
 

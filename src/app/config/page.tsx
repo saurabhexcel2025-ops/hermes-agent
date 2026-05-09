@@ -6,43 +6,13 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import {
-  Settings,
-  Cpu,
-  Globe,
-  Activity,
-  Layers,
-  Terminal,
-  Shield,
-  Volume2,
-  Mic,
-  GitBranch,
-  ListTodo,
-  ChevronRight,
-  HardDrive,
-  Zap,
-  RotateCcw,
-  FileText,
-  ShieldCheck,
-  Wrench,
-  Sparkles,
-  ScrollText,
-  MessageSquare,
-  Clock,
-  Lock,
-  Code,
-} from "lucide-react";
+import { Settings, ChevronRight, Wrench, Sparkles } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { CONFIG_SECTIONS } from "@/lib/config-schema";
+import { getConfigSectionIcon } from "@/lib/config-section-icons";
 import { iconColorMap, colorBorderMap } from "@/lib/theme";
-
-// Map icon names to components
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  Cpu, Globe, Activity, Layers, Terminal, Shield,
-  Volume2, Mic, GitBranch, ListTodo, HardDrive, Zap,
-  RotateCcw, FileText, ShieldCheck, Settings, Wrench, Sparkles,
-  ScrollText, MessageSquare, Clock, Lock, Code,
-};
 
 // ── Category definitions (mirrors sidebar groups) ─────────
 interface CategoryDef {
@@ -98,7 +68,7 @@ export default function ConfigIndexPage() {
     const section = CONFIG_SECTIONS[sectionId];
     if (!section) return null;
 
-    const Icon = iconMap[section.icon] || Settings;
+    const Icon = getConfigSectionIcon(section.icon);
     const sectionData = config?.[section.id] as Record<string, unknown> | undefined;
     const fieldCount = section.fields.length;
 
@@ -138,21 +108,17 @@ export default function ConfigIndexPage() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Settings className="w-5 h-5 text-neon-purple" />
-          <div>
-            <h1 className="text-lg font-bold text-white">Configuration</h1>
-            <p className="text-xs text-white/40 font-mono">
-              {Object.keys(CONFIG_SECTIONS).length} sections — edit config.yaml with auto-backup
-            </p>
-          </div>
-        </div>
-      </div>
+    <AppPageShell>
+      <PageHeader
+        icon={Settings}
+        title="Configuration"
+        subtitle={`${Object.keys(CONFIG_SECTIONS).length} sections — edit config.yaml with auto-backup`}
+        color="purple"
+        backHref="/"
+        backLabel="HOME"
+      />
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-8">
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-8 flex-1 w-full">
         {!config ? (
           <LoadingSpinner text="Loading configuration..." />
         ) : (
@@ -161,7 +127,7 @@ export default function ConfigIndexPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Link
                 href="/personalities"
-                className="group rounded-xl border bg-dark-900/50 p-5 transition-all border-purple-500/20 hover:border-purple-500/50"
+                className={`group rounded-xl border bg-dark-900/50 p-5 transition-all ${colorBorderMap.purple}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <Sparkles className="w-5 h-5 text-neon-purple" />
@@ -181,7 +147,7 @@ export default function ConfigIndexPage() {
               </Link>
               <Link
                 href="/agent/tools"
-                className="group rounded-xl border bg-dark-900/50 p-5 transition-all border-cyan-500/20 hover:border-cyan-500/50"
+                className={`group rounded-xl border bg-dark-900/50 p-5 transition-all ${colorBorderMap.cyan}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <Wrench className="w-5 h-5 text-neon-cyan" />
@@ -218,6 +184,6 @@ export default function ConfigIndexPage() {
           </>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

@@ -8,12 +8,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Save, Check, RotateCcw, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import { Toggle, Select, NumberInput, TextInput } from "@/components/ui/Input";
 import { LoadingSpinner, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import { getSectionDef, type FieldDef } from "@/lib/config-schema";
-import { iconColorMap } from "@/lib/theme";
+import { getConfigSectionIcon } from "@/lib/config-section-icons";
 
 export default function ConfigSectionPage() {
   const params = useParams();
@@ -266,70 +267,56 @@ export default function ConfigSectionPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-dark-900/50 backdrop-blur-xl sticky top-0 z-30">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/config"
-                className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="text-sm font-mono">CONFIG</span>
-              </Link>
-              <div className="w-px h-6 bg-white/20" />
-              <div>
-                <h1 className={`text-lg font-bold flex items-center gap-2 ${iconColorMap[sectionDef.color]}`}>
-                  {sectionDef.label}
-                </h1>
-                <p className="text-xs text-white/40 font-mono">
-                  {sectionDef.description}
-                </p>
-              </div>
-            </div>
-            {(sectionDef.fields.length > 0 || isFileSection) && (
-              <div className="flex items-center gap-3">
-                {hasChanges && (
-                  <span className="text-xs text-neon-orange font-mono flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    UNSAVED
-                  </span>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleReset}
-                  disabled={!hasChanges}
-                  icon={RotateCcw}
-                >
-                  Reset
-                </Button>
-                <Button
-                  variant="primary"
-                  color={sectionDef.color}
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!hasChanges}
-                  loading={saving}
-                  icon={saveStatus === "saved" ? Check : Save}
-                >
-                  {saveStatus === "saving"
-                    ? "Saving..."
-                    : saveStatus === "saved"
-                    ? "Saved!"
-                    : "Save"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+  const SectionIcon = getConfigSectionIcon(sectionDef.icon);
 
-      {/* Content */}
-      <div className="max-w-3xl mx-auto px-6 py-6">
+  return (
+    <AppPageShell>
+      <PageHeader
+        icon={SectionIcon}
+        title={sectionDef.label}
+        subtitle={sectionDef.description}
+        color={sectionDef.color}
+        backHref="/config"
+        backLabel="CONFIG"
+        actions={
+          (sectionDef.fields.length > 0 || isFileSection) ? (
+            <>
+              {hasChanges && (
+                <span className="text-xs text-neon-orange font-mono flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  UNSAVED
+                </span>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleReset}
+                disabled={!hasChanges}
+                icon={RotateCcw}
+              >
+                Reset
+              </Button>
+              <Button
+                variant="primary"
+                color={sectionDef.color}
+                size="sm"
+                onClick={handleSave}
+                disabled={!hasChanges}
+                loading={saving}
+                icon={saveStatus === "saved" ? Check : Save}
+              >
+                {saveStatus === "saving"
+                  ? "Saving..."
+                  : saveStatus === "saved"
+                  ? "Saved!"
+                  : "Save"}
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+
+      <div className="max-w-3xl mx-auto px-6 py-6 flex-1 w-full">
         {error && <ErrorBanner message={error} />}
 
         {/* File editor for file-type sections */}
@@ -432,6 +419,6 @@ export default function ConfigSectionPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

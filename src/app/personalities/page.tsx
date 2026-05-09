@@ -91,7 +91,7 @@ function PersonalityCard({
     <div
       className={`rounded-xl border transition-all ${
         isActive
-          ? "border-neon-cyan/50 bg-neon-cyan/5 shadow-[0_0_20px_rgba(0,245,255,0.15)] animate-pulse"
+          ? "border-neon-cyan/50 bg-neon-cyan/5 shadow-[0_0_20px_rgb(var(--ch-rgb-neon-cyan)_/_0.15)] animate-pulse"
           : "border-white/10 bg-dark-900/50 hover:border-white/20"
       }`}
     >

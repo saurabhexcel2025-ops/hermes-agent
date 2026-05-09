@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, BookOpen, Sparkles, Loader2, X, RefreshCw, PenLine, PlayCircle, AlertTriangle } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import ChapterList from "@/components/story-weaver/ChapterList";
 import GenerateOverlay from "@/components/story-weaver/GenerateOverlay";
 import ReaderSettings, { loadSettings, DEFAULT_SETTINGS, FONTS, THEMES, type ReadingSettings } from "@/components/story-weaver/ReaderSettings";
@@ -317,7 +318,7 @@ export default function StoryReaderPage() {
   const allComplete = chapters.length > 0 && chapters.every((c: Chapter) => c.status === "complete");
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines flex flex-col">
+    <AppPageShell variant="scanlines" className="flex flex-col">
       {/* Error banner — rendered above the overlay so it is always visible */}
       {error && (
         <div className="fixed top-0 left-0 right-0 z-[70] bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center gap-2">
@@ -338,7 +339,7 @@ export default function StoryReaderPage() {
       {/* Edit Chapter Modal */}
       {editModalOpen && (
         <div className="fixed inset-0 z-[60] bg-dark-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-dark-900 border border-purple-500/20 rounded-xl w-full max-w-lg p-6 space-y-4">
+          <div className="bg-dark-900 border border-neon-purple/20 rounded-xl w-full max-w-lg p-6 space-y-4">
             <h3 className="text-sm font-semibold text-white">Edit Chapter {editChapterNum}</h3>
             <p className="text-xs text-white/40">Describe what you want changed. The chapter will be rewritten, and all subsequent chapters will regenerate with the updated context.</p>
             <textarea
@@ -346,7 +347,7 @@ export default function StoryReaderPage() {
               onChange={(e) => setEditPrompt(e.target.value)}
               rows={4}
               placeholder="e.g., Make the dialogue more tense, add a plot twist about the captain..."
-              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-purple-500/30 font-mono resize-none"
+              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/30 font-mono resize-none"
             />
             <div>
               <label className="text-[10px] font-mono text-white/30 uppercase tracking-wider block mb-1.5">Chapter Length</label>
@@ -358,7 +359,7 @@ export default function StoryReaderPage() {
                 ].map((opt) => (
                   <button key={opt.id} onClick={() => setEditWordCount(opt.id)}
                     className={`px-2 py-1 rounded text-[10px] font-mono border transition-all ${
-                      editWordCount === opt.id ? "border-purple-500/40 bg-purple-500/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
+                      editWordCount === opt.id ? "border-neon-purple/40 bg-neon-purple/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
                     }`}>{opt.label}</button>
                 ))}
               </div>
@@ -369,7 +370,7 @@ export default function StoryReaderPage() {
                 {[2, 3, 4, 5].map(n => (
                   <button key={n} onClick={() => setEditCount(n)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
-                      editCount === n ? "border-purple-500/40 bg-purple-500/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
+                      editCount === n ? "border-neon-purple/40 bg-neon-purple/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
                     }`}>{n}</button>
                 ))}
               </div>
@@ -380,7 +381,7 @@ export default function StoryReaderPage() {
                 Cancel
               </button>
               <button onClick={handleEditChapter} disabled={!editPrompt.trim()}
-                className="px-4 py-2 text-xs text-neon-purple rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-30 flex items-center gap-2">
+                className="px-4 py-2 text-xs text-neon-purple rounded-lg border border-neon-purple/30 bg-neon-purple/10 hover:bg-neon-purple/20 disabled:opacity-30 flex items-center gap-2">
                 <PenLine className="w-3 h-3" /> Edit Chapter
               </button>
             </div>
@@ -458,7 +459,7 @@ export default function StoryReaderPage() {
 
       {/* Reader Header */}
       <div className="sticky top-0 lg:top-0 z-30 border-b border-white/10 bg-dark-950/95 backdrop-blur-xl flex-shrink-0">
-        <div className="flex items-center justify-between px-3 md:px-6 h-12">
+        <div className="flex items-center justify-between px-3 md:px-6 min-h-[var(--ch-shell-header-min-height)]">
           <button onClick={() => router.push("/recroom/story-weaver")}
             className="p-2.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft className="w-5 h-5" />
@@ -542,7 +543,7 @@ export default function StoryReaderPage() {
                   {/* Edit button on completed chapters */}
                   {currentMeta?.status === "complete" && (
                     <button onClick={() => openEditModal(currentChapter)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-mono text-white/40 hover:text-neon-purple hover:border-purple-500/30 transition-colors flex-shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-mono text-white/40 hover:text-neon-purple hover:border-neon-purple/30 transition-colors flex-shrink-0"
                       title="Edit this chapter">
                       <PenLine className="w-3 h-3" />
                       Edit
@@ -579,7 +580,7 @@ export default function StoryReaderPage() {
                     <RefreshCw className="w-3 h-3" /> Retry Chapter
                   </button>
                   <button onClick={() => openEditModal(currentChapter)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-500/30 text-xs text-neon-purple bg-purple-500/10 hover:bg-purple-500/20">
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-neon-purple/30 text-xs text-neon-purple bg-neon-purple/10 hover:bg-neon-purple/20">
                     <PenLine className="w-3 h-3" /> Rewrite with Prompt
                   </button>
                 </div>
@@ -637,6 +638,6 @@ export default function StoryReaderPage() {
           </div>
         </div>
       )}
-    </div>
+    </AppPageShell>
   );
 }
