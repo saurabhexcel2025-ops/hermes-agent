@@ -17,6 +17,22 @@ import {
 } from "@/lib/story-repository";
 import type { StoryArc as StoryArcType, ChapterOutline } from "@/types/recroom";
 
+function safeArc(arc: unknown): StoryArcType | undefined {
+  if (!arc || typeof arc !== "object") return undefined;
+  const a = arc as Record<string, unknown>;
+  if (
+    typeof a.storyArc !== "string" ||
+    !Array.isArray(a.fixedPlotPoints) ||
+    !Array.isArray(a.characterArcs) ||
+    !Array.isArray(a.worldRules) ||
+    !Array.isArray(a.themes) ||
+    !Array.isArray(a.chapterOutlines)
+  )
+    return undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return a as any;
+}
+
 // ── Response Validation ────────────────────────────────────────
 
 function validateChapterOutput(raw: string): string {
@@ -232,7 +248,7 @@ async function handleCreate(body: Record<string, unknown>): Promise<NextResponse
 
     const story = updateStory(draft.id, {
       masterPrompt,
-      storyArc: storyArc as unknown as Record<string, unknown>,
+      storyArc: safeArc(storyArc) as Record<string, unknown> | undefined,
       rollingSummary,
       chapters,
       chapterContents: chapter1 ? { "1": chapter1 } : {},
@@ -281,10 +297,13 @@ async function handleGenerateChapter(body: Record<string, unknown>): Promise<Nex
 
   const prevChapter = nextNum > 1 ? story.chapterContents[String(nextNum - 1)] ?? null : null;
 
+  const arc = safeArc(story.storyArc);
+  if (!arc) return NextResponse.json({ error: "Story arc not found" }, { status: 400 });
+
   const system = getStoryPrompt("chapter");
   const userMessage = buildChapterPrompt(
     story.masterPrompt ?? "",
-    story.storyArc as unknown as StoryArcType,
+    arc,
     story.rollingSummary ?? null,
     prevChapter,
     chapterOutline
@@ -295,13 +314,27 @@ async function handleGenerateChapter(body: Record<string, unknown>): Promise<Nex
     const content = validateChapterOutput(raw);
 
     // Extract a descriptive chapter title from the generated content
-    let generatedTitle = chapterOutline.title;
+    let generatedTitle = chapterOutline.title ?? `Chapter ${nextNum}`;
+    const firstMeaningfulLine = (content: string): string => {
+      const lines = content.split("\n").map(l => l.trim()).filter(Boolean);
+      // Find first line that looks like a narrative sentence (not a dialogue, not a blank line)
+      const narrative = lines.find(l => !l.startsWith('"') && !l.startsWith("'") && l.length > 15 && l.length < 80 && /[.!]$/.test(l) === false && /^(The |A |An |She |He |It |They |We |I |My |His |Her |Its |This |That )/.test(l));
+      return narrative || lines[0] || `Chapter ${nextNum}`;
+    };
     try {
       const titleSystem = "You are a story editor. Extract a short, evocative title (3-7 words) for this chapter. Return ONLY the title text, nothing else.";
       const titleRaw = (await callLLM([{ role: "system", content: titleSystem }, { role: "user", content: `Chapter content:\n${content.slice(0, 500)}` }], { temperature: 0.3, maxTokens: 32 })).content;
       const extracted = titleRaw.trim().replace(/^["']|["']$/g, "").slice(0, 80);
-      if (extracted.length > 5) generatedTitle = extracted;
-    } catch { /* keep outline title on failure */ }
+      if (extracted.length > 5) {
+        generatedTitle = extracted;
+      } else {
+        // Fallback: extract from chapter content itself
+        generatedTitle = firstMeaningfulLine(content);
+      }
+    } catch {
+      // Fallback: extract from chapter content itself
+      generatedTitle = firstMeaningfulLine(content);
+    }
 
     const updatedChapters = [...story.chapters];
     updatedChapters[nextIdx] = {
@@ -313,7 +346,7 @@ async function handleGenerateChapter(body: Record<string, unknown>): Promise<Nex
     };
 
     // Keep chapterOutlines in sync so future regenerate/edit uses the real title
-    const arc = { ...(story.storyArc as unknown as StoryArcType) };
+    const arc = { ...(safeArc(story.storyArc)) };
     if (arc.chapterOutlines) {
       arc.chapterOutlines = arc.chapterOutlines.map((o, i) =>
         i === nextIdx ? { ...o, title: generatedTitle } : o
@@ -448,8 +481,8 @@ async function handleEditChapter(body: Record<string, unknown>): Promise<NextRes
   }
 
   const existingChapter = story.chapterContents[String(chNum)] || "";
-  const arc = story.storyArc as unknown as StoryArcType;
-  const outline = arc.chapterOutlines?.[chIdx] ?? {
+  const arc = safeArc(story.storyArc);
+  const outline = arc?.chapterOutlines?.[chIdx] ?? {
     number: chNum, title: story.chapters[chIdx].title, purpose: "Continue", keyBeats: [], emotionalTone: "Engaging",
   };
 
