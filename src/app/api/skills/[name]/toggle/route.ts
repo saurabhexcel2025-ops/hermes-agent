@@ -45,13 +45,13 @@ export async function PUT(
       return NextResponse.json({ error: "Profile config not found" }, { status: 404 });
     }
 
-    // Update skills.disabled in YAML
+    // ── Read current skills.enabled from YAML ──────────────────────────────────
     const content = readFileSync(configPath, "utf-8");
     const lines = content.split("\n");
     let inSkills = false;
-    let inDisabled = false;
-    let disabledStart = -1;
-    let disabledEnd = -1;
+    let inEnabled = false;
+    let enabledStart = -1;
+    let enabledEnd = -1;
 
     for (let i = 0; i < lines.length; i++) {
       const trimmed = lines[i].trim();
@@ -63,45 +63,48 @@ export async function PUT(
       if (inSkills && !lines[i].startsWith(" ") && trimmed) {
         inSkills = false;
       }
-      if (inSkills && trimmed.startsWith("disabled:")) {
-        inDisabled = true;
-        disabledStart = i;
+      if (inSkills && trimmed.startsWith("enabled:")) {
+        inEnabled = true;
+        enabledStart = i;
         continue;
       }
-      if (inDisabled) {
+      if (inEnabled) {
         if (!lines[i].startsWith("  ") || (!trimmed.startsWith("-") && trimmed)) {
-          disabledEnd = i;
-          inDisabled = false;
+          enabledEnd = i;
+          inEnabled = false;
         }
       }
     }
-    if (inDisabled && disabledEnd === -1) disabledEnd = lines.length;
+    if (inEnabled && enabledEnd === -1) enabledEnd = lines.length;
 
-    // Parse current disabled list
-    const currentDisabled: string[] = [];
-    if (disabledStart >= 0 && disabledEnd > disabledStart) {
-      for (let i = disabledStart + 1; i < disabledEnd; i++) {
+    // Parse current enabled list
+    const currentEnabled: string[] = [];
+    if (enabledStart >= 0 && enabledEnd > enabledStart) {
+      for (let i = enabledStart + 1; i < enabledEnd; i++) {
         const match = lines[i].trim().match(/^-\s*(.+)$/);
-        if (match) currentDisabled.push(match[1].trim());
+        if (match) currentEnabled.push(match[1].trim());
       }
     }
 
-    // Update the list
-    const newDisabled = enabled
-      ? currentDisabled.filter((s) => s !== name)
-      : currentDisabled.includes(name)
-        ? currentDisabled
-        : [...currentDisabled, name].sort();
+    // ── Update the list ────────────────────────────────────────────────────────
+    // Toggle ON  → add skill to enabled list (if not already there)
+    // Toggle OFF → remove skill from enabled list
+    const newEnabled = enabled
+      ? currentEnabled.includes(name)
+        ? currentEnabled
+        : [...currentEnabled, name].sort()
+      : currentEnabled.filter((s) => s !== name);
 
-    // Write back
-    const newDisabledYaml = newDisabled.length > 0
-      ? "  disabled:\n" + newDisabled.map((s) => "    - " + s).join("\n") + "\n"
-      : "  disabled: []\n";
+    // Build YAML representation
+    const newEnabledYaml = newEnabled.length > 0
+      ? "  enabled:\n" + newEnabled.map((s) => "    - " + s).join("\n") + "\n"
+      : "";
 
-    if (disabledStart >= 0 && disabledEnd > disabledStart) {
-      lines.splice(disabledStart, disabledEnd - disabledStart, ...newDisabledYaml.trimEnd().split("\n"));
+    if (enabledStart >= 0 && enabledEnd > enabledStart) {
+      // Replace existing enabled block
+      lines.splice(enabledStart, enabledEnd - enabledStart, ...newEnabledYaml.trimEnd().split("\n"));
     } else {
-      // Find skills section and add disabled list
+      // No enabled block — find or create skills: section and insert
       let insertAt = lines.length;
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].trim().startsWith("skills:")) {
@@ -112,7 +115,9 @@ export async function PUT(
       if (insertAt === lines.length) {
         lines.push("skills:");
       }
-      lines.splice(insertAt, 0, ...newDisabledYaml.trimEnd().split("\n"));
+      if (newEnabledYaml) {
+        lines.splice(insertAt, 0, ...newEnabledYaml.trimEnd().split("\n"));
+      }
     }
 
     const { writeFileSync } = await import("fs");

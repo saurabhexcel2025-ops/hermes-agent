@@ -12,8 +12,13 @@ function findSkillFile(skillName: string, profile: string): string | null {
     searchDirs.push(getActiveHermesHome() + "/skills");
   } else {
     searchDirs.push(getActiveHermesHome() + "/profiles/" + profile + "/skills");
-    // Also check default skills directory
-    searchDirs.push(getActiveHermesHome() + "/skills");
+      // For non-default profiles: try profile-specific dir first, fall back to global
+      const profileSkillsDir = getActiveHermesHome() + "/profiles/" + profile + "/skills";
+      if (existsSync(profileSkillsDir)) {
+        searchDirs.push(profileSkillsDir);
+      }
+      // Always include global skills directory as fallback
+      searchDirs.push(getActiveHermesHome() + "/skills");
   }
 
   for (const baseDir of searchDirs) {

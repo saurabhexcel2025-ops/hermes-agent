@@ -14,15 +14,18 @@ interface Skill {
   lastModified: string;
 }
 
-/** Parse skills.disabled from config YAML */
-function getDisabledSkills(configPath: string): Set<string> {
+/** Parse skills.enabled from config YAML.
+ *  A skill is enabled iff it appears in skills.enabled[].
+ *  If the key is absent or empty, all skills are disabled (strict default).
+ */
+function getEnabledSkills(configPath: string): Set<string> {
   if (!existsSync(configPath)) return new Set();
   try {
     const content = readFileSync(configPath, "utf-8");
     const lines = content.split("\n");
     let inSkills = false;
-    let inDisabled = false;
-    const disabled = new Set<string>();
+    let inEnabled = false;
+    const enabled = new Set<string>();
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -32,27 +35,27 @@ function getDisabledSkills(configPath: string): Set<string> {
       }
       if (inSkills && !line.startsWith(" ") && trimmed) {
         inSkills = false;
-        inDisabled = false;
+        inEnabled = false;
       }
-      if (inSkills && trimmed.startsWith("disabled:")) {
-        inDisabled = true;
+      if (inSkills && trimmed.startsWith("enabled:")) {
+        inEnabled = true;
         continue;
       }
-      if (inDisabled) {
+      if (inEnabled) {
         const match = trimmed.match(/^-\s*(.+)$/);
-        if (match) disabled.add(match[1].trim());
+        if (match) enabled.add(match[1].trim());
         else if (!line.startsWith("  ") || (!trimmed.startsWith("-") && trimmed)) {
-          inDisabled = false;
+          inEnabled = false;
         }
       }
     }
-    return disabled;
+    return enabled;
   } catch {
     return new Set();
   }
 }
 
-function scanSkills(dir: string, category: string, disabled: Set<string>): Skill[] {
+function scanSkills(dir: string, category: string, enabledSkills: Set<string>, hasExplicitEnabledList: boolean): Skill[] {
   const skills: Skill[] = [];
   if (!existsSync(dir)) return skills;
 
@@ -69,7 +72,7 @@ function scanSkills(dir: string, category: string, disabled: Set<string>): Skill
             const content = readFileSync(skillPath, "utf-8");
             const stats = statSync(skillPath);
             let description = "";
-            const descMatch = content.match(/description:\s*[\"'](.+?)[\"']/);
+            const descMatch = content.match(/description:\s*["'](.+?)["']/);
             if (descMatch) description = descMatch[1];
             else {
               const lines = content.split("\n");
@@ -82,12 +85,15 @@ function scanSkills(dir: string, category: string, disabled: Set<string>): Skill
               }
             }
 
+            // enabled = skill is in the enabled list, OR no explicit list exists (all enabled)
+            const enabled = !hasExplicitEnabledList || enabledSkills.has(item.name);
+
             skills.push({
               name: item.name,
               category: category || "uncategorized",
               path: skillPath,
               description,
-              enabled: !disabled.has(item.name),
+              enabled,
               size: stats.size,
               lastModified: stats.mtime.toISOString(),
             });
@@ -96,44 +102,10 @@ function scanSkills(dir: string, category: string, disabled: Set<string>): Skill
           }
         }
 
-        // Check for DESCRIPTION.md (category description)
-        if (!existsSync(fullPath + "/SKILL.md") && existsSync(fullPath + "/DESCRIPTION.md")) {
-          // This is a category directory
-          skills.push(...scanSkills(fullPath, item.name, disabled));
-        } else if (existsSync(fullPath + "/SKILL.md")) {
-          // Check subdirectories within skill dirs (e.g., mlops/training/axolotl)
-          try {
-            const subItems = readdirSync(fullPath, { withFileTypes: true });
-            for (const sub of subItems) {
-              if (sub.isDirectory()) {
-                const subSkillPath = fullPath + "/" + sub.name + "/SKILL.md";
-                if (existsSync(subSkillPath)) {
-              try {
-                const content = readFileSync(subSkillPath, "utf-8");
-                const stats = statSync(subSkillPath);
-                let description = "";
-                const descMatch = content.match(/description:\s*[\"'](.+?)[\"']/);
-                if (descMatch) description = descMatch[1];
-
-                skills.push({
-                  name: sub.name,
-                  category: category ? category + "/" + item.name : item.name,
-                  path: subSkillPath,
-                  description,
-                  enabled: !disabled.has(sub.name),
-                  size: stats.size,
-                  lastModified: stats.mtime.toISOString(),
-                });
-              } catch (error) {
-                logApiError("GET /api/skills", `reading sub-skill ${subSkillPath}`, error);
-              }
-                }
-              }
-            }
-          } catch (error) {
-            logApiError("GET /api/skills", `reading sub-skills in ${fullPath}`, error);
-          }
-        }
+        // Always recurse into subdirectories — they may contain skill dirs at any depth.
+        // If this dir itself has a SKILL.md it was already handled above.
+        // If not, recurse to find nested skills (e.g. devops/agent-backup).
+        skills.push(...scanSkills(fullPath, item.name, enabledSkills, hasExplicitEnabledList));
       }
     }
   } catch (error) {
@@ -146,20 +118,32 @@ export async function GET(request: NextRequest) {
   const profile = request.nextUrl.searchParams.get("profile") || "default";
 
   try {
-    // Determine skills directory and config path
-    let skillsDir: string;
+    // Determine config path
     let configPath: string;
-
     if (profile === "default") {
-      skillsDir = getActiveHermesHome() + "/skills";
       configPath = getActiveHermesHome() + "/config.yaml";
     } else {
-      skillsDir = getActiveHermesHome() + "/profiles/" + profile + "/skills";
       configPath = getActiveHermesHome() + "/profiles/" + profile + "/config.yaml";
     }
 
-    const disabled = getDisabledSkills(configPath);
-    const skills = scanSkills(skillsDir, "", disabled);
+    // Determine skills directory — fall back to global when profile-specific dir is absent
+    let skillsDir: string;
+    if (profile === "default") {
+      skillsDir = getActiveHermesHome() + "/skills";
+    } else {
+      const profileSkillsDir = getActiveHermesHome() + "/profiles/" + profile + "/skills";
+      if (existsSync(profileSkillsDir)) {
+        skillsDir = profileSkillsDir;
+      } else {
+        // Profile skill mirror deleted — use global skills directory
+        skillsDir = getActiveHermesHome() + "/skills";
+      }
+    }
+
+    const enabledSkills = getEnabledSkills(configPath);
+    // If enabled list is empty (key absent), treat as "all skills enabled" (backward-compatible default)
+    const hasExplicitEnabledList = enabledSkills.size > 0;
+    const skills = scanSkills(skillsDir, "", enabledSkills, hasExplicitEnabledList);
 
     // Build categories
     const categories: Record<string, Skill[]> = {};

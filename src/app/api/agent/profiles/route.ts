@@ -56,6 +56,45 @@ export interface AgentProfile {
 
 
 
+/** Strip the skills.enabled{} block from a config so new profiles start locked down. */
+function stripSkillsEnabled(content: string): string {
+  const lines = content.split("\n");
+  const output: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+    if (trimmed === "skills:") {
+      output.push(lines[i]);
+      i++;
+      let hitEnabled = false;
+      let enabledEnd = i;
+      while (enabledEnd < lines.length) {
+        const t = lines[enabledEnd].trim();
+        if (t === "enabled:") { hitEnabled = true; enabledEnd++; continue; }
+        if (hitEnabled) {
+          if (t.startsWith("#")) { enabledEnd++; continue; }
+          if (!lines[enabledEnd].startsWith("  ") || (!t.startsWith("-") && t)) break;
+          enabledEnd++;
+        } else {
+          if (!lines[enabledEnd].startsWith(" ") && t) break;
+          if (t) break;
+          enabledEnd++;
+        }
+      }
+      if (hitEnabled) {
+        while (i < enabledEnd) i++;
+        output.push("  enabled: []");
+      }
+    } else {
+      output.push(lines[i]);
+      i++;
+    }
+  }
+  return output.join("\n");
+}
+
+
 function loadYamlPersonality(content: string): string {
 
   const lines = content.split("\n");
@@ -293,7 +332,7 @@ export async function GET() {
 
           isBundled: BUNDLED_PROFILES.has(entry),
 
-          skillsCount: countProfileSkills(profileDir),
+          skillsCount: countProfileSkills(getActiveHermesHome()),
 
           toolsCount: 0,
 
@@ -393,6 +432,10 @@ export async function POST(request: NextRequest) {
         profileDir + "/config.yaml",
         readFileSync(sourceDir + "/config.yaml", "utf-8")
       );
+      // Strip skills.enabled from the new profile's config so it starts locked down
+      const newCfg = readFileSync(profileDir + "/config.yaml", "utf-8");
+      const stripped = stripSkillsEnabled(newCfg);
+      writeFileSync(profileDir + "/config.yaml", stripped, "utf-8");
     }
     if (existsSync(sourceDir + "/.env")) {
       writeFileSync(
