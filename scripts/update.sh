@@ -7,6 +7,12 @@
 # Usage:
 #   bash scripts/update.sh [--restart-only]
 #
+# Environment (.env.local keys CH_* / HERMES_HOME / INSTALL_HERMES_* are loaded when present):
+#   CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=yes — overwrite bundled Hermes profile SOUL.md/AGENTS.md from repo (no prompt)
+#   CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no  — skip Hermes profile sync entirely
+#   unset + interactive TTY — prompt before syncing bundled profiles; decline skips sync only (deploy continues)
+#   unset + non-TTY (e.g. API deploy) — sync bundled profiles (backward compatible)
+#
 # This script is designed to be called by the update API endpoint.
 # It handles: git pull, npm install, build, and restart.
 #
@@ -20,6 +26,12 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load CH_UPDATE_GIT_BRANCH / HERMES_HOME / profile sync flags from .env.local before parsing args.
+# shellcheck source=lib/ch-dotenv-local.sh
+source "$SCRIPT_DIR/lib/ch-dotenv-local.sh"
+ch_load_control_hub_env_local "$APP_DIR"
+
 LOCK_FILE="${TMPDIR:-/tmp}/ch-deploy.lock"
 LOG_FILE="$HOME/.hermes/logs/ch-update.log"
 
@@ -108,38 +120,48 @@ if [ "$RESTART_ONLY" = false ]; then
     fi
     log "Build successful"
 
-    # ── Update Agent Profiles ─────────────────────────────────────
-    log "Updating agent profiles..."
-    HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-    PROFILE_TEMPLATES="$APP_DIR/scripts/profiles"
-    PROFILES=("qa-engineer" "devops-engineer" "swe-engineer" "data-engineer" "data-scientist" "ops-director" "creative-lead" "support-agent")
+    # ── Bundled Hermes profile templates (optional / gated) ─────
+    # shellcheck source=lib/ch-hermes-profile-templates.sh
+    source "$SCRIPT_DIR/lib/ch-hermes-profile-templates.sh"
 
-    for profile in "${PROFILES[@]}"; do
-        PROFILE_DIR="$HERMES_HOME/profiles/$profile"
-        if [ ! -d "$PROFILE_DIR" ]; then
-            log "Creating missing profile: $profile"
-            if command -v hermes &>/dev/null; then
-                hermes profile create "$profile" --clone --no-alias 2>/dev/null || true
+    sync_profiles=false
+    case "${CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES:-}" in
+        no|NO|0|false|False)
+            log "Skipping Hermes bundled profile sync (CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no)"
+            ;;
+        yes|YES|1|true|True)
+            sync_profiles=true
+            ;;
+        *)
+            if [ -t 0 ]; then
+                echo ""
+                echo "Control Hub update: refresh bundled Hermes profiles?" >&2
+                echo "" >&2
+                echo "  This replaces SOUL.md and AGENTS.md only for Control Hub's bundled profiles" >&2
+                echo "  (e.g. qa-engineer, devops-engineer, swe-engineer, and related defaults)." >&2
+                echo "  Any other profiles you created yourself are not touched." >&2
+                echo "" >&2
+                echo "  If you edited those bundled files, save or commit your changes first — they will be overwritten." >&2
+                echo "" >&2
+                read -r -p "Sync bundled profile templates now? [y/N]: " REPLY_SYNC_PROFILES
+                echo ""
+                if [[ "$REPLY_SYNC_PROFILES" =~ ^[Yy]$ ]]; then
+                    sync_profiles=true
+                else
+                    log "Skipping Hermes bundled profile sync (declined at prompt)"
+                fi
             else
-                mkdir -p "$PROFILE_DIR"/{memories,sessions,skills,skins,logs,plans,workspace,cron}
-                [ -f "$HERMES_HOME/config.yaml" ] && cp "$HERMES_HOME/config.yaml" "$PROFILE_DIR/config.yaml"
-                [ -f "$HERMES_HOME/.env" ] && cp "$HERMES_HOME/.env" "$PROFILE_DIR/.env"
+                sync_profiles=true
             fi
-        fi
-        # Update SOUL.md and AGENTS.md from templates (overwrite specialist versions)
-        if [ -f "$PROFILE_TEMPLATES/$profile/SOUL.md" ]; then
-            cp "$PROFILE_TEMPLATES/$profile/SOUL.md" "$PROFILE_DIR/SOUL.md"
-        fi
-        if [ -f "$PROFILE_TEMPLATES/$profile/AGENTS.md" ]; then
-            cp "$PROFILE_TEMPLATES/$profile/AGENTS.md" "$PROFILE_DIR/AGENTS.md"
-        fi
-        # Sync auth.json if missing
-        if [ ! -f "$PROFILE_DIR/auth.json" ] && [ -f "$HERMES_HOME/auth.json" ]; then
-            cp "$HERMES_HOME/auth.json" "$PROFILE_DIR/auth.json"
-            chmod 600 "$PROFILE_DIR/auth.json"
-        fi
-    done
-    log "Agent profiles updated"
+            ;;
+    esac
+
+    if [ "$sync_profiles" = true ]; then
+        ch_profiles_log() { log "$*"; }
+        log "Updating bundled Hermes agent profiles from templates..."
+        ch_bundled_profiles_sync "$APP_DIR"
+        log "Bundled Hermes agent profiles updated"
+    fi
 fi
 
 # ── Ensure Hermes Gateway API Server is enabled ─────────────────

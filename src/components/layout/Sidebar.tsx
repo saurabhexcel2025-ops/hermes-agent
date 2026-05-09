@@ -603,9 +603,9 @@ export default function Sidebar() {
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
-      {/* Logo — h-12 to match mobile top bar */}
+      {/* Logo — min-height matches main app chrome (see --ch-shell-header-min-height) */}
 
-      <div className="px-4 h-12 flex items-center border-b border-white/10">
+      <div className="px-4 min-h-[var(--ch-shell-header-min-height)] flex items-center border-b border-white/10">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg animated-border p-[1.5px]">
             <div className="w-full h-full bg-dark-900 rounded-[5px] flex items-center justify-center">
@@ -616,7 +616,7 @@ export default function Sidebar() {
           {!collapsed && (
             <div>
               <div className="text-sm font-bold tracking-tight">
-                <span className="text-neon-cyan">CH</span>
+                <span className="text-neon-cyan">PT</span>
 
                 <span className="text-white/40 mx-0.5">/</span>
 

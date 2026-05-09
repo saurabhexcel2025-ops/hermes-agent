@@ -20,6 +20,11 @@
 #     INSTALL_HERMES=no    — continue without Hermes CLI (limited profile/gateway steps)
 #   INSTALL_HERMES_SKIP_RECONFIRM=1 — with INSTALL_HERMES=yes, skip second confirmation (automation only)
 #
+# Bundled Hermes profile templates (SOUL.md / AGENTS.md under HERMES_HOME/profiles/, default ~/.hermes):
+#   INSTALL_HERMES_PROFILE_TEMPLATES=yes — install missing template files (never overwrites existing)
+#   unset / no — skip in CI/non-interactive; interactive prompts [y/N] when unset
+#   HERMES_HOME — override Hermes root (default $HOME/.hermes); optional Hermes profile step requires config.yaml there
+#
 # Hermes two-pass: if you choose to install Hermes when prompted, this script runs the official
 # installer and `hermes setup`, then exits — run install.sh again to finish Control Hub setup.
 #
@@ -77,7 +82,54 @@ if [ "$IN_REPO" = true ]; then
     info "Running in-repo setup from $SCRIPT_REPO_ROOT"
     cd "$SCRIPT_REPO_ROOT"
     bash scripts/setup.sh
-    exit $?
+
+    # shellcheck source=lib/ch-dotenv-local.sh
+    source "$SCRIPT_REPO_ROOT/scripts/lib/ch-dotenv-local.sh"
+    ch_load_control_hub_env_local "$SCRIPT_REPO_ROOT"
+    # shellcheck source=lib/ch-hermes-profile-templates.sh
+    source "$SCRIPT_REPO_ROOT/scripts/lib/ch-hermes-profile-templates.sh"
+    ch_resolve_hermes_home
+
+    if ! ch_hermes_config_present; then
+        info "Skipping optional Hermes profile templates (no $HERMES_HOME/config.yaml). Run Hermes setup, then re-run install or apply templates from scripts/profiles/."
+    else
+        run_profile_templates=false
+        if noninteractive; then
+            case "${INSTALL_HERMES_PROFILE_TEMPLATES:-}" in
+                yes|YES|1|true|True)
+                    run_profile_templates=true
+                    ;;
+                *)
+                    info "Skipping bundled Hermes profile templates (non-interactive; set INSTALL_HERMES_PROFILE_TEMPLATES=yes to install)."
+                    ;;
+            esac
+        else
+            case "${INSTALL_HERMES_PROFILE_TEMPLATES:-}" in
+                yes|YES|1|true|True)
+                    run_profile_templates=true
+                    ;;
+                no|NO|0|false|False)
+                    info "Skipping bundled Hermes profile templates (INSTALL_HERMES_PROFILE_TEMPLATES=no)."
+                    ;;
+                *)
+                    echo ""
+                    info "Optional: install Control Hub bundled Hermes profile templates under $HERMES_HOME/profiles/"
+                    echo "  Existing SOUL.md and AGENTS.md files are never overwritten."
+                    read -r -p "Install bundled profile templates now? [y/N]: " REPLY_PROFILES
+                    echo ""
+                    if [[ "$REPLY_PROFILES" =~ ^[Yy]$ ]]; then
+                        run_profile_templates=true
+                    fi
+                    ;;
+            esac
+        fi
+        if [ "$run_profile_templates" = true ]; then
+            ch_profiles_log() { info "$*"; }
+            ch_bundled_profiles_install "$SCRIPT_REPO_ROOT"
+            ok "Bundled Hermes profile templates installed (missing files only)."
+        fi
+    fi
+    exit 0
 fi
 
 if ! command -v node &>/dev/null; then
@@ -235,35 +287,52 @@ if [ ! -f "scripts/setup.sh" ]; then
 fi
 bash scripts/setup.sh
 
-# ── Create agent profiles (Hermes) ───────────────────────────
-if hermes_cli_ok && [ -f "$HERMES_HOME/config.yaml" ]; then
-    echo ""
-    info "Setting up Control Hub agent profiles..."
-    PROFILE_TEMPLATES="$INSTALL_DIR/scripts/profiles"
-    PROFILES=("qa-engineer" "devops-engineer" "swe-engineer")
-    for profile in "${PROFILES[@]}"; do
-        PROFILE_DIR="$HERMES_HOME/profiles/$profile"
-        if [ -d "$PROFILE_DIR" ]; then
-            ok "Profile '$profile' already exists"
-        else
-            info "Creating profile: $profile"
-            hermes profile create "$profile" --clone --no-alias 2>/dev/null || true
-            if [ -f "$PROFILE_TEMPLATES/$profile/SOUL.md" ]; then
-                cp "$PROFILE_TEMPLATES/$profile/SOUL.md" "$PROFILE_DIR/SOUL.md"
-            fi
-            if [ -f "$HERMES_HOME/auth.json" ]; then
-                cp "$HERMES_HOME/auth.json" "$PROFILE_DIR/auth.json"
-                chmod 600 "$PROFILE_DIR/auth.json"
-            fi
-            if [ -f "$PROFILE_TEMPLATES/$profile/AGENTS.md" ]; then
-                cp "$PROFILE_TEMPLATES/$profile/AGENTS.md" "$PROFILE_DIR/AGENTS.md"
-            fi
-            ok "Profile '$profile' created"
-        fi
-    done
-    ok "All agent profiles ready"
+# shellcheck source=lib/ch-dotenv-local.sh
+source "$INSTALL_DIR/scripts/lib/ch-dotenv-local.sh"
+ch_load_control_hub_env_local "$INSTALL_DIR"
+# shellcheck source=lib/ch-hermes-profile-templates.sh
+source "$INSTALL_DIR/scripts/lib/ch-hermes-profile-templates.sh"
+ch_resolve_hermes_home
+
+# ── Optional: bundled Hermes profile templates ───────────────
+if ! ch_hermes_config_present; then
+    info "Skipping optional Hermes profile templates (no $HERMES_HOME/config.yaml). Re-run install after Hermes setup, or set HERMES_HOME in .env.local if Hermes lives elsewhere."
 else
-    info "Skipping Hermes profile bootstrap (no Hermes CLI or config). Re-run install.sh after Hermes is ready."
+    run_profile_templates=false
+    if noninteractive; then
+        case "${INSTALL_HERMES_PROFILE_TEMPLATES:-}" in
+            yes|YES|1|true|True)
+                run_profile_templates=true
+                ;;
+            *)
+                info "Skipping bundled Hermes profile templates (non-interactive; set INSTALL_HERMES_PROFILE_TEMPLATES=yes to install)."
+                ;;
+        esac
+    else
+        case "${INSTALL_HERMES_PROFILE_TEMPLATES:-}" in
+            yes|YES|1|true|True)
+                run_profile_templates=true
+                ;;
+            no|NO|0|false|False)
+                info "Skipping bundled Hermes profile templates (INSTALL_HERMES_PROFILE_TEMPLATES=no)."
+                ;;
+            *)
+                echo ""
+                info "Optional: install Control Hub bundled Hermes profile templates under $HERMES_HOME/profiles/"
+                echo "  Existing SOUL.md and AGENTS.md files are never overwritten."
+                read -r -p "Install bundled profile templates now? [y/N]: " REPLY_PROFILES
+                echo ""
+                if [[ "$REPLY_PROFILES" =~ ^[Yy]$ ]]; then
+                    run_profile_templates=true
+                fi
+                ;;
+        esac
+    fi
+    if [ "$run_profile_templates" = true ]; then
+        ch_profiles_log() { info "$*"; }
+        ch_bundled_profiles_install "$INSTALL_DIR"
+        ok "Bundled Hermes profile templates installed (missing files only)."
+    fi
 fi
 
 # ── Optional: Hindsight Memory Setup ─────────────────────────

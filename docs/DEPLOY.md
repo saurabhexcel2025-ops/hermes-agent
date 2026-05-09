@@ -32,6 +32,17 @@ The image defaults to **`PORT=42069`** (override with `-e PORT=...` or Compose `
 
 Mount `CH_DATA_DIR` (and optionally `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR` if you keep hardware cron scripts outside the data tree) so the active Hermes install and Control Hub state match the host.
 
+## Hermes bundled profile templates
+
+Control Hub can copy **shipped** Hermes profile markdown from `scripts/profiles/` into **`HERMES_HOME/profiles/`** (see [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh)).
+
+| Variable | When | Behaviour |
+|----------|------|-----------|
+| `INSTALL_HERMES_PROFILE_TEMPLATES` | `install.sh`, non-interactive | Set to `yes` to install missing template files; omit/`no` skips (interactive defaults to a prompt when Hermes `config.yaml` exists). |
+| `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES` | `update.sh` | `yes`: overwrite bundled `SOUL.md`/`AGENTS.md` from the repo. `no`: skip profile sync. Unset + interactive TTY: prompt. Unset + non-TTY (e.g. deploy API): sync (backward compatible). |
+
+`update.sh` loads **`HERMES_HOME`** and the variables above from **`.env.local`** when present (same keys as Next.js). For **systemd** or Docker **without** `.env.local**, export these in the unit file or Compose `environment` block.
+
 ## TLS
 
 Use a reverse proxy with automatic certificates (Let’s Encrypt). Do not commit TLS material into the repo.

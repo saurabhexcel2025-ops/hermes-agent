@@ -3,9 +3,9 @@ import { test, expect } from "@playwright/test";
 test.describe("Smoke", () => {
   test("dashboard loads", async ({ page }) => {
     await page.goto("/");
-    const title = page.locator("h1").filter({ hasText: "MISSION" });
+    const title = page.locator("h1").filter({ hasText: "CONTROL" });
     await expect(title).toBeVisible();
-    await expect(title.getByText("CONTROL", { exact: true })).toBeVisible();
+    await expect(title.getByText("HUB", { exact: true })).toBeVisible();
   });
 
   test("cron page loads", async ({ page }) => {

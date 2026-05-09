@@ -301,12 +301,11 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
       {/* Top Bar */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-3 flex items-center justify-between">
+      <div className="border-b border-white/10 bg-dark-900/50 backdrop-blur-xl px-6 py-4 min-h-[var(--ch-shell-header-min-height)] flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            <span className="text-neon-cyan text-glow-cyan">MISSION</span>
-            <span className="text-white/40 mx-1">/</span>
-            <span className="text-white/70">CONTROL</span>
+            <span className="text-neon-cyan text-glow-cyan">CONTROL</span>{" "}
+            <span className="text-white/70">HUB</span>
           </h1>
           <p className="text-xs text-white/40 font-mono">
             {currentModel}{currentProvider ? ` · ${currentProvider}` : ""}

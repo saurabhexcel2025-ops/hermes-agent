@@ -312,11 +312,13 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-3000}
 
 - `scripts/restart.sh` — Stop and restart the server (no git/build)
 
-- `scripts/update.sh` — Pull from **CH_UPDATE_GIT_BRANCH** (default **dev**), build, restart
+- `scripts/update.sh` — Pull from **CH_UPDATE_GIT_BRANCH** (default **dev**), build, restart; reads **`CH_*` / `HERMES_HOME` / `INSTALL_HERMES_*`** from `.env.local`; bundled Hermes profile sync gated by **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES`** (see script header)
 
-- `scripts/install.sh` — Bootstrap clone + setup, or **`--in-repo`**
+- `scripts/install.sh` — Bootstrap clone + setup, or **`--in-repo`**; optional **`INSTALL_HERMES_PROFILE_TEMPLATES`** for bundled Hermes templates (see script header)
 
 - `scripts/setup.sh` — Post-clone setup (PORT + `.env.local`, npm install, build)
+
+- `scripts/lib/ch-hermes-profile-templates.sh` — Shared bundled Hermes profile install/sync (used by install/update)
 
 
 

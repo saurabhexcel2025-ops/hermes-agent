@@ -74,9 +74,9 @@ Mission and template Zod schemas live in **`src/lib/schema/`**; regenerate JSON 
 
 | Script | Role |
 |--------|------|
-| `scripts/install.sh` | Clone + `setup.sh`, or `--in-repo` |
+| `scripts/install.sh` | Clone + `setup.sh`, or `--in-repo`. Optional Hermes templates: `INSTALL_HERMES_PROFILE_TEMPLATES=yes` or interactive prompt when `HERMES_HOME/config.yaml` exists |
 | `scripts/setup.sh` | `.env.local`, PORT, optional Hermes/Hindsight, `npm install`, build |
-| `scripts/update.sh` | Pull `CH_UPDATE_GIT_BRANCH` (default `dev`), install, build, restart |
+| `scripts/update.sh` | Pull `CH_UPDATE_GIT_BRANCH` (default `dev`), install, build, restart; bundled Hermes templates gated by `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES` or TTY prompt (see script header) |
 | `scripts/restart.sh` / `stop.sh` | Restart or stop `next start` on PORT |
 | `scripts/build.sh` / `release.sh` | Build / release helpers (see file headers) |
 | `scripts/prebuild-db.mjs` | Invoked via `npm run prebuild` |
@@ -103,9 +103,14 @@ Control Hub reads and writes Hermes **`config.yaml`** (and related files) throug
 
 ---
 
-## Default profiles (setup)
+## Bundled Hermes profile templates
 
-Setup can install three specialist **profiles** (QA, DevOps, SWE) with distinct skills, tools, and markdown context files under `scripts/profiles/`. They share the main agent’s API keys unless you configure otherwise.
+Markdown templates live under [`scripts/profiles/`](scripts/profiles/) (QA, DevOps, SWE, plus reserved names for future packs). They install under **`HERMES_HOME/profiles/<name>/`** (default **`~/.hermes`**).
+
+- **Install** (`install.sh` after `setup.sh`): optional. Requires **`HERMES_HOME/config.yaml`**. Copies **only missing** `SOUL.md` / `AGENTS.md` / `auth.json`. Non-interactive installs need **`INSTALL_HERMES_PROFILE_TEMPLATES=yes`**.
+- **Update** (`update.sh`): refreshes those bundled files from the repo when enabled. Interactive runs prompt before overwriting; API/non-TTY deploys sync by default unless **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no`**. Custom profiles you created are untouched.
+
+Shared logic: [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-hermes-profile-templates.sh). Keys **`HERMES_HOME`** / **`CH_*`** / **`INSTALL_HERMES_*`** in `.env.local` are read by `update.sh` (and install after setup) where documented.
 
 ---
 

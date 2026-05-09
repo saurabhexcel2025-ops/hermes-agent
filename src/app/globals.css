@@ -17,6 +17,11 @@
   --color-dark-600: #2a3a4a;
 }
 
+/* Desktop shell: sidebar brand row aligns with main-column sticky headers */
+:root {
+  --ch-shell-header-min-height: 5rem;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
