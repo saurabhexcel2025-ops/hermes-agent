@@ -30,7 +30,7 @@ ch_resolve_port_interactive() {
   while true; do
     echo ""
     echo "Control Hub will listen on a TCP port (Next.js PORT)."
-    echo "  • Press Enter for auto: first free port in 42069–42100 (recommended)."
+    echo "  • Press Enter for auto: first free port in 42069–42100 (auto-selected if no input)."
     echo "  • Or type a port 1–65535 (1024–65535 suggested; <1024 may need root)."
     read -r -p "Port [Enter = auto]: " reply
     echo ""

@@ -62,7 +62,7 @@ ch_deploy_cmd_restart() {
   if [ -z "${PORT:-}" ] && [ -f "$APP_DIR/.env.local" ]; then
     CH_PORT_FILE="$(grep -E '^PORT=' "$APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
   fi
-  local PORT="${PORT:-${CH_PORT_FILE:-3000}}"
+  local PORT="${PORT:-${CH_PORT_FILE:-42069}}"
   local HOST="${HOST:-0.0.0.0}"
 
   export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
