@@ -66,26 +66,7 @@ ch_deploy_cmd_restart() {
 
   cd "$APP_DIR"
 
-  local NODE_BIN
-  NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
-  local NPM_BIN
-  NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
-
-  if [ ! -x "$NODE_BIN" ]; then
-    log "ERROR: node not found at $NODE_BIN — cannot start server"
-    exit 1
-  fi
-
-  export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
-
-  # In supervisor mode, run the full keep-alive loop (used by systemd service).
-  # Without it, do one restart and exit (used by direct CLI invocation).
-  if [ "${CH_SUPERVISOR_MODE:-}" = "1" ]; then
-    ch_deploy_supervisor_loop
-    return
-  fi
-
-  # One-shot restart (CLI path)
+  # One-shot restart: kill zombie on 3000, stop old relay, restart server + socat.
   ch_deploy_restart_once
 }
 
@@ -353,19 +334,23 @@ ch_deploy_restart_once() {
     fi
   fi
 
-  # ── 5. Free the target port ────────────────────────────────────────────────
-  log "Freeing port $PORT..."
-  if command -v fuser &>/dev/null; then
-    fuser -k "${PORT}/tcp" 2>/dev/null || true
-  elif command -v lsof &>/dev/null; then
-    for pid in $(lsof -ti:"$PORT" 2>/dev/null); do
-      kill -9 "$pid" 2>/dev/null || true
-    done
+  # ── 5. Kill any existing next-server on this port ──────────────────────────
+  # (socat is stopped above — next-server and socat share the port so we kill
+  # next-server first, then the port is free for the new server to bind)
+  if [ -f "$PID_FILE" ]; then
+    local OLD_SERVER_PID
+    OLD_SERVER_PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [ -n "$OLD_SERVER_PID" ] && kill -0 "$OLD_SERVER_PID" 2>/dev/null; then
+      log "Stopping old next-server (PID $OLD_SERVER_PID)..."
+      kill -9 "$OLD_SERVER_PID" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+    sleep 1
   fi
-  sleep 1
 
-  # ── 6. Start next-server ───────────────────────────────────────────────────
-  local HOST="0.0.0.0"
+  # ── 6. Start next-server on localhost only ─────────────────────────────────
+  # Binds to 127.0.0.1 so it doesn't conflict with socat on the LAN address.
+  local HOST="127.0.0.1"
   export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
   log "Starting next-server on $HOST:$PORT..."
