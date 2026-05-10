@@ -8,6 +8,12 @@ import { listModels, getModelDefaults } from "@/lib/models-repository";
 
 // ── Template definition (prompt-building blocks) ───────────────
 
+/**
+ * Sentinel value for TemplateDef.defaultModel that opts out of any template
+ * default and forces resolution through the models registry (agent default).
+ */
+export const USE_REGISTRY_DEFAULT = "__use_registry_default__";
+
 export interface TemplateDef {
   id: string;
   name: string;
@@ -21,9 +27,11 @@ export interface TemplateDef {
   goals: string[];
   suggestedSkills: string[];
   /**
-   * Hermes model id picked when this template is selected (mission form
-   * pre-fills from this). User can override per-mission. Resolves through
-   * the models registry — see src/lib/models-repository.ts.
+   * Hermes model id hint for the mission form. Set to USE_REGISTRY_DEFAULT
+   * to explicitly defer to the agent default from the models registry.
+   * Omit or use a blank string to also fall through to the registry.
+   * User can override per-mission. Resolves through the models registry —
+   * see src/lib/models-repository.ts.
    */
   defaultModel?: string;
   /**
@@ -39,20 +47,24 @@ export interface TemplateDef {
  * Resolve the best modelId + provider for a template.
  *
  * Strategy:
- *   1. If the template's `defaultModel` is registered in the models registry,
+ *   1. If the template's `defaultModel` is USE_REGISTRY_DEFAULT or falsy,
+ *      fall through to the registry agent default.
+ *   2. If the template's `defaultModel` is registered in the models registry,
  *      use it (respects user's configured base_url, credentials, etc.).
- *   2. Fall back to the `agent` default slot from the registry.
- *   3. Fall back to the raw template values (bare IDs used directly).
+ *   3. Fall back to the `agent` default slot from the registry.
+ *   4. Last resort: return empty strings (registry unavailable).
  *
- * This ensures that imported Hermes config models are always preferred over
- * bare IDs, and that templates always have a valid model to dispatch with.
+ * This ensures templates always defer to the user's configured agent default
+ * unless they explicitly opt into a specific model through the registry.
  */
 export function resolveTemplateModel(template: TemplateDef): { modelId: string; provider: string } {
   try {
     const models = listModels();
     const defaults = getModelDefaults();
 
-    if (template.defaultModel) {
+    // Only attempt a registry lookup if defaultModel is a concrete value
+    // (USE_REGISTRY_DEFAULT and falsy both skip directly to agent default)
+    if (template.defaultModel && template.defaultModel !== USE_REGISTRY_DEFAULT) {
       // Try to find a registry entry matching the template's bare model ID.
       // Match by (model_id === defaultModel) — the registry stores full IDs.
       const tm = template.defaultModel;
@@ -75,15 +87,11 @@ export function resolveTemplateModel(template: TemplateDef): { modelId: string; 
       }
     }
   } catch {
-    // Registry unavailable — fall through to template raw values
+    // Registry unavailable — fall through to last resort
   }
 
-  // Last resort: use template's raw values (bare IDs used as-is)
-  const tm2 = template.defaultModel ?? "";
-  return {
-    modelId: tm2,
-    provider: template.defaultProvider ?? "",
-  };
+  // Last resort: empty strings (caller should handle gracefully)
+  return { modelId: "", provider: "" };
 }
 
 // ── Scope Labels ──────────────────────────────────────────────
@@ -220,9 +228,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Describe the bug (error message, steps to reproduce, expected vs actual):\n",
     goals: ["Reproduce the issue", "Diagnose root cause", "Implement fix", "Test & verify"],
     suggestedSkills: ["systematic-debugging"],
-    // QA bug-fix benefits from strong reasoning + tooling fidelity.
-    defaultModel: "anthropic/claude-sonnet-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "qa-acceptance",
@@ -247,8 +252,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Feature or component to write acceptance tests for:\n",
     goals: ["Understand feature", "Define acceptance criteria", "Write tests", "Run & verify"],
     suggestedSkills: ["test-driven-development"],
-    defaultModel: "anthropic/claude-sonnet-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "qa-unit-tests",
@@ -274,8 +277,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Module or file to increase test coverage for:\n",
     goals: ["Understand module", "Plan test cases", "Write tests", "Run & verify"],
     suggestedSkills: ["test-driven-development"],
-    defaultModel: "anthropic/claude-sonnet-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "eng-refactor",
@@ -303,9 +304,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Code to refactor:\n",
     goals: ["Read & understand code", "Plan refactor", "Execute refactor", "Run tests"],
     suggestedSkills: ["refactoring-patterns"],
-    // Refactor needs careful reasoning — Opus tier.
-    defaultModel: "anthropic/claude-opus-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "eng-bugfix",
@@ -328,8 +326,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Bug description (error, steps to reproduce):\n",
     goals: ["Reproduce bug", "Find root cause", "Implement fix", "Verify & build"],
     suggestedSkills: ["systematic-debugging"],
-    defaultModel: "anthropic/claude-sonnet-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "eng-feature",
@@ -353,9 +349,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Feature to implement:\n",
     goals: ["Clarify requirements", "Plan approach", "Implement feature", "Test & document"],
     suggestedSkills: ["test-driven-development"],
-    // New features benefit from the larger model's planning depth.
-    defaultModel: "anthropic/claude-opus-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "eng-code-review",
@@ -377,9 +370,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "PR or code changes to review:\n",
     goals: ["Understand changes", "Analyse code", "Test if possible", "Write review"],
     suggestedSkills: ["security-code-review", "systematic-debugging"],
-    // Code review prizes critical reasoning — Opus tier.
-    defaultModel: "anthropic/claude-opus-4",
-    defaultProvider: "anthropic",
   },
   {
     id: "devops-infra",
@@ -402,9 +392,6 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Infrastructure task:\n",
     goals: ["Assess current state", "Plan changes", "Implement", "Verify & document"],
     suggestedSkills: ["infrastructure-as-code"],
-    // DevOps tooling work pairs well with GPT-class context handling.
-    defaultModel: "openai/gpt-5.5-medium",
-    defaultProvider: "openai",
   },
   {
     id: "devops-deploy",
@@ -431,7 +418,5 @@ export const TEMPLATES: TemplateDef[] = [
     context: "Application and target environment:\n",
     goals: ["Prepare deployment", "Execute deploy", "Verify health", "Report status"],
     suggestedSkills: ["ci-test-workflow"],
-    defaultModel: "openai/gpt-5.5-medium",
-    defaultProvider: "openai",
   },
 ];

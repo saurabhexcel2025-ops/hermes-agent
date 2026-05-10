@@ -1,26 +1,30 @@
 /**
- * Asserts every built-in mission template now ships with a defaultModel
- * + defaultProvider, and that the v1 template-pack schema accepts a
- * template entry where these fields are optional or set.
+ * Asserts built-in mission templates defer to the models registry agent default
+ * when no explicit defaultModel is set, and that the v1 template-pack schema
+ * accepts entries where these fields are optional.
  */
 
-import { TEMPLATES } from "@/lib/mission-helpers";
+import { TEMPLATES, USE_REGISTRY_DEFAULT } from "@/lib/mission-helpers";
 import {
   templatePackEntrySchema,
   parseTemplatePackManifestV1,
   TEMPLATE_PACK_SCHEMA_VERSION,
 } from "@/lib/schema/template-pack-v1";
-import { isHermesProvider } from "@/lib/hermes-providers";
 
 describe("template defaults", () => {
-  it("every built-in template defines defaultModel and defaultProvider", () => {
+  it("every built-in template omits explicit defaultModel (defers to registry agent default)", () => {
     expect(TEMPLATES.length).toBeGreaterThanOrEqual(9);
     for (const t of TEMPLATES) {
-      expect(typeof t.defaultModel).toBe("string");
-      expect(t.defaultModel?.length).toBeGreaterThan(0);
-      expect(typeof t.defaultProvider).toBe("string");
-      expect(t.defaultProvider?.length).toBeGreaterThan(0);
-      expect(isHermesProvider(t.defaultProvider)).toBe(true);
+      // Templates must not hardcode a specific model — they defer to the registry agent default.
+      // defaultModel may be undefined, null, or USE_REGISTRY_DEFAULT.
+      const hasNoHardcodedModel =
+        t.defaultModel == null || t.defaultModel === USE_REGISTRY_DEFAULT;
+      expect(hasNoHardcodedModel).toBe(true);
+      // defaultProvider must similarly be absent when defaultModel is absent.
+      const hasNoProvider =
+        (t.defaultModel == null && t.defaultProvider == null) ||
+        (t.defaultModel === USE_REGISTRY_DEFAULT && t.defaultProvider == null);
+      expect(hasNoProvider).toBe(true);
     }
   });
 });
@@ -83,8 +87,9 @@ describe("template-pack-v1 schema", () => {
           prompt: sample.instruction,
           goals: sample.goals,
           suggestedSkills: sample.suggestedSkills,
-          defaultModel: sample.defaultModel,
-          defaultProvider: sample.defaultProvider,
+          // Built-in templates no longer carry defaultModel/defaultProvider.
+          defaultModel: undefined,
+          defaultProvider: undefined,
           timeoutMinutes: 30,
         },
       ],

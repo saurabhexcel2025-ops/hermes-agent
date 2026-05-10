@@ -46,16 +46,23 @@ ch_build_allowed_dev_origins() {
 }
 
 # True if something is listening on TCP port (this host).
+# Always returns 0 (in-use / true) or 1 (free / false) regardless of
+# whether the underlying command (ss/lsof) succeeds or fails.
 ch_tcp_port_in_use() {
   local p="$1"
   if command -v ss &>/dev/null; then
-    ss -ltn "sport = :$p" 2>/dev/null | grep -q LISTEN
-    return $?
+    if ss -ltn "sport = :$p" 2>/dev/null | grep -q LISTEN; then
+      return 0   # port is in use
+    fi
+    return 1     # port is free (grep found nothing — ss command itself succeeded)
   fi
   if command -v lsof &>/dev/null; then
-    lsof -iTCP:"$p" -sTCP:LISTEN &>/dev/null
-    return $?
+    if lsof -iTCP:"$p" -sTCP:LISTEN &>/dev/null; then
+      return 0   # port is in use
+    fi
+    return 1     # port is free
   fi
+  # Fallback: try a TCP probe
   if (echo >/dev/tcp/127.0.0.1/"$p") &>/dev/null; then
     return 0
   fi
