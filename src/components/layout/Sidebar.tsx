@@ -499,6 +499,16 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         </div>
       )}
 
+      {/* Status message — visible inline when operation is in progress */}
+      {message && (
+        <div className="min-h-[1.25rem] px-1 text-[10px] font-mono text-white/50 text-center leading-tight">
+          {updating && "Updating..."}
+          {restarting && "Restarting server..."}
+          {rebuilding && "Building..."}
+          {!updating && !restarting && !rebuilding && message}
+        </div>
+      )}
+
       {/* Button rows */}
       <div className="space-y-1.5">
         {/* Check — full width on its own row */}
