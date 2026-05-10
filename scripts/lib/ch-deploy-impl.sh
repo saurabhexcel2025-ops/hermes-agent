@@ -52,6 +52,8 @@ ch_deploy_acquire_lock() {
 }
 
 ch_deploy_cmd_restart() {
+  ch_deploy_acquire_lock
+
   local APP_DIR="$CH_APP_DIR"
   local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
   local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
@@ -303,27 +305,33 @@ ch_deploy_restart_once() {
   fi
 
   # ── 3. Find available port ─────────────────────────────────────────────────
-  local PORT=""
-  if [ -z "${PORT:-}" ] && [ -f "$CH_APP_DIR/.env.local" ]; then
-    PORT="$(grep -E '^PORT=' "$CH_APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r ')"
-  fi
-  if [ -z "$PORT" ]; then
-    PORT="$(ch_auto_pick_port)" || {
-      log "ERROR: No free port in 42069–42100"
-      exit 1
-    }
-  fi
-
-  local PREFERRED_PORT="$PORT"
+  # Always prefer 42069 — kill whatever is on it first (stale socat orphans from
+  # failed restarts must not block us, and we must not trust a stale PORT= in
+  # .env.local that was written by a previous failed attempt).
+  local PORT="42069"
   while ch_tcp_port_in_use "$PORT" 2>/dev/null; do
-    log "Port $PORT in use — trying next port..."
-    PORT=$((PORT + 1))
-    if [ "$PORT" -gt 42100 ]; then
-      log "ERROR: No free port in 42069–42100"
-      exit 1
+    local BLOCKER_PIDS
+    BLOCKER_PIDS=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
+    if [ -n "$BLOCKER_PIDS" ]; then
+      for p in $BLOCKER_PIDS; do
+        if kill -0 "$p" 2>/dev/null; then
+          log "Port $PORT held by PID $p — killing..."
+          kill -9 "$p" 2>/dev/null || true
+        fi
+      done
+      sleep 2
+    fi
+    # After killing, re-check — if still in use, walk forward
+    if ch_tcp_port_in_use "$PORT" 2>/dev/null; then
+      log "Port $PORT still in use — trying next port..."
+      PORT=$((PORT + 1))
+      if [ "$PORT" -gt 42100 ]; then
+        log "ERROR: No free port in 42069–42100"
+        exit 1
+      fi
     fi
   done
-  [ "$PORT" != "$PREFERRED_PORT" ] && log "Port $PREFERRED_PORT unavailable — using $PORT"
+  [ "$PORT" != "42069" ] && log "Port 42069 unavailable — using $PORT"
 
   # ── 4. Write port to .env.local ───────────────────────────────────────────
   if [ -f "$CH_APP_DIR/.env.local" ]; then
@@ -393,6 +401,8 @@ ch_deploy_restart_once() {
 }
 
 ch_deploy_cmd_rebuild() {
+  ch_deploy_acquire_lock
+
   local CH_BRANCH="${CH_DEPLOY_BRANCH:-${CH_UPDATE_GIT_BRANCH:-dev}}"
   local APP_DIR="$CH_APP_DIR"
   local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
@@ -438,7 +448,7 @@ ch_deploy_cmd_rebuild() {
   "$NPM_BIN" run build >>"$BUILD_LOG" 2>&1
   log "Build complete."
   log "Restarting server..."
-  ch_deploy_cmd_restart
+  ch_deploy_restart_once
 }
 
 ch_deploy_run_update() {
