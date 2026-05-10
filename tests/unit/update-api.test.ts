@@ -106,6 +106,32 @@ describe("GET /api/update", () => {
   });
 });
 
+function mockGitForDeploy(
+  execFileSyncImpl: typeof mockExecFileSync,
+): void {
+  execFileSyncImpl.mockImplementation((cmd: string, args: string[]) => {
+    if (cmd === "bash" && args[0] === "-n") return undefined as unknown as string;
+    if (cmd === "git") {
+      const [a0, ...rest] = args;
+      if (a0 === "fetch") return "";
+      if (a0 === "rev-parse") {
+        const originRef = rest.find((x) => String(x).startsWith("origin/"));
+        if (originRef === "origin/bad-branch") {
+          throw new Error("unknown revision");
+        }
+        if (typeof originRef === "string" && originRef.startsWith("origin/")) {
+          return "a".repeat(40);
+        }
+        if (rest.includes("--abbrev-ref")) return "dev";
+        if (rest.includes("HEAD")) return "a".repeat(40);
+      }
+      if (a0 === "log") return "msg";
+      if (a0 === "rev-list") return "0";
+    }
+    return "";
+  });
+}
+
 describe("POST /api/update", () => {
   beforeEach(() => {
     mockExecSync.mockReset();
@@ -113,10 +139,7 @@ describe("POST /api/update", () => {
     mockSpawn.mockReset();
     deployApiEnabled = true;
     readOnlyGate = null;
-    mockExecFileSync.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === "bash" && args[0] === "-n") return "" as unknown as void;
-      return "" as unknown as void;
-    });
+    mockGitForDeploy(mockExecFileSync);
     mockSpawn.mockReturnValue({ pid: 4242, unref: jest.fn() });
   });
 
@@ -158,6 +181,20 @@ describe("POST /api/update", () => {
   it("returns 400 for unknown action", async () => {
     const { POST } = await import("@/app/api/update/route");
     const res = await POST(postReq({ action: "nope" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when update branch missing on origin", async () => {
+    const { POST } = await import("@/app/api/update/route");
+    const res = await POST(postReq({ action: "update", branch: "bad-branch" }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(String(body.error)).toContain("origin");
+  });
+
+  it("returns 400 when rebuild branch missing on origin", async () => {
+    const { POST } = await import("@/app/api/update/route");
+    const res = await POST(postReq({ action: "rebuild", branch: "bad-branch" }));
     expect(res.status).toBe(400);
   });
 });

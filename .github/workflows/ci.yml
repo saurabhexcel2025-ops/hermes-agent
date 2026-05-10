@@ -36,12 +36,7 @@ jobs:
         run: npm run prebuild
       - name: ESLint
         run: npm run lint
-      - name: Forbid HERMES_PATHS in API routes (use getActiveHermesPaths)
-        run: |
-          if grep -rE "HERMES_PATHS|HERMES_HOME" src/app/api --include="*.ts" -q 2>/dev/null; then
-            echo "Use @/lib/hermes-agent-runtime instead of HERMES_PATHS/HERMES_HOME in API routes"
-            exit 1
-          fi
+      - uses: ./.github/actions/forbid-hermes-paths-in-api
       - name: TypeScript (tsc --noEmit)
         run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
@@ -71,12 +66,7 @@ jobs:
         run: npm run prebuild
       - name: ESLint
         run: npm run lint
-      - name: Forbid HERMES_PATHS in API routes (use getActiveHermesPaths)
-        run: |
-          if grep -rE "HERMES_PATHS|HERMES_HOME" src/app/api --include="*.ts" -q 2>/dev/null; then
-            echo "Use @/lib/hermes-agent-runtime instead of HERMES_PATHS/HERMES_HOME in API routes"
-            exit 1
-          fi
+      - uses: ./.github/actions/forbid-hermes-paths-in-api
       - name: TypeScript (tsc --noEmit)
         run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage

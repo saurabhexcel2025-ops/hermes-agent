@@ -12,6 +12,7 @@ import {
   requireSignedRequest,
 } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
+import { sanitizeGitBranch } from "@/lib/git-branch";
 
 // ═══════════════════════════════════════════════════════════════
 // Update API — Version Check + Update + Restart
@@ -61,17 +62,12 @@ function listRemoteBranches(): string[] {
       if (seen.has(clean)) continue;
       seen.add(clean);
       out.push(clean);
-      if (out.length >= MAX_REMOTE_BRANCHES) break;
     }
-    return out.sort((a, b) => a.localeCompare(b));
+    out.sort((a, b) => a.localeCompare(b));
+    return out.slice(0, MAX_REMOTE_BRANCHES);
   } catch {
     return [];
   }
-}
-
-function sanitizeGitBranch(raw: string): string {
-  const s = raw.replace(/[^a-zA-Z0-9._/-]/g, "").slice(0, 200);
-  return s || "dev";
 }
 
 interface VersionCache {
@@ -94,6 +90,21 @@ function runGit(args: string[]): string {
     encoding: "utf-8",
     timeout: 30000,
   }).trim();
+}
+
+/** Resolves `origin/<branch>` after fetch; returns an error message or null if OK. */
+function verifyDeployBranchOnOrigin(branch: string): string | null {
+  const name = sanitizeGitBranch(branch);
+  try {
+    runGit(["fetch", "origin", name, "--quiet"]);
+    const full = runGit(["rev-parse", "origin/" + name]);
+    if (!/^[0-9a-f]{40}$/i.test(full)) {
+      return "Branch not found on origin: " + name;
+    }
+    return null;
+  } catch {
+    return "Branch not found on origin: " + name;
+  }
 }
 
 function getCachedVersion(): VersionCache | null {
@@ -244,6 +255,10 @@ export async function POST(request: NextRequest) {
       const rebuildBranch = body.branch
         ? sanitizeGitBranch(String(body.branch))
         : sanitizeGitBranch(process.env.CH_UPDATE_GIT_BRANCH || "dev");
+      const branchErr = verifyDeployBranchOnOrigin(rebuildBranch);
+      if (branchErr) {
+        return NextResponse.json({ error: branchErr }, { status: 400 });
+      }
       // Run build as a detached background process so the server's memory
       // context is not consumed by npm/build child processes (avoids OOM
       // kills on memory-constrained systems). Uses systemd-run like restart.
@@ -281,6 +296,10 @@ export async function POST(request: NextRequest) {
       const updateBranch = body.branch
         ? sanitizeGitBranch(String(body.branch))
         : UPDATE_BRANCH;
+      const updateBranchErr = verifyDeployBranchOnOrigin(updateBranch);
+      if (updateBranchErr) {
+        return NextResponse.json({ error: updateBranchErr }, { status: 400 });
+      }
       const missing = deployScriptMissingResponse();
       if (missing) return missing;
       const spawnedUpdate = spawnChDeploy("ch-update", ["update", "--branch", updateBranch]);

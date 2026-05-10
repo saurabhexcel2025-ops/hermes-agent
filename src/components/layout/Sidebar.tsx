@@ -37,6 +37,8 @@ import {
 
 import type { SidebarLink, ConfigGroup } from "./sidebar-config";
 
+import { sanitizeGitBranch } from "@/lib/git-branch";
+
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
 
@@ -45,11 +47,6 @@ function isActive(pathname: string, href: string): boolean {
 
 // ── Branch Dropdown ─────────────────────────────────────────────
 // Inline dropdown anchored above the footer buttons, not a modal overlay.
-
-function sanitizeDeployBranchClient(raw: string): string {
-  const s = raw.replace(/[^a-zA-Z0-9._/-]/g, "").slice(0, 200);
-  return s || "dev";
-}
 
 function BranchDropdown({
   branches,
@@ -133,7 +130,7 @@ function BranchDropdown({
           onClick={() =>
             onConfirm(
               customBranch.trim()
-                ? sanitizeDeployBranchClient(customBranch)
+                ? sanitizeGitBranch(customBranch)
                 : selected,
             )
           }
@@ -299,6 +296,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const doRebuild = async (branch: string) => {
     if (rebuilding) return;
     setRebuilding(true);
+    setDeployBranch(branch);
     setMessage("Rebuilding...");
     try {
       const res = await fetch("/api/update", {

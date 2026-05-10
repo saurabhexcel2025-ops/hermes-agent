@@ -1,21 +1,16 @@
-// Mirrors Sidebar `sanitizeDeployBranchClient` — keep rules aligned with POST /api/update sanitization.
+import { MAX_DEPLOY_GIT_BRANCH_LEN, sanitizeGitBranch } from "@/lib/git-branch";
 
-function sanitizeDeployBranchClient(raw: string): string {
-  const s = raw.replace(/[^a-zA-Z0-9._/-]/g, "").slice(0, 200);
-  return s || "dev";
-}
-
-describe("deploy branch client sanitization", () => {
+describe("sanitizeGitBranch (shared with POST /api/update + Sidebar)", () => {
   it("strips unsafe characters", () => {
-    expect(sanitizeDeployBranchClient("feat;rm")).toBe("featrm");
+    expect(sanitizeGitBranch("feat;rm")).toBe("featrm");
   });
 
   it("truncates length", () => {
     const long = "a".repeat(300);
-    expect(sanitizeDeployBranchClient(long).length).toBe(200);
+    expect(sanitizeGitBranch(long).length).toBe(MAX_DEPLOY_GIT_BRANCH_LEN);
   });
 
   it("falls back to dev when empty after strip", () => {
-    expect(sanitizeDeployBranchClient(";;;")).toBe("dev");
+    expect(sanitizeGitBranch(";;;")).toBe("dev");
   });
 });
