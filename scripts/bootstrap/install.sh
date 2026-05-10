@@ -350,7 +350,7 @@ echo ""
 
 HINDSIGHT_ALREADY=false
 if [ -f "$HERMES_HOME/hindsight/config.json" ]; then
-    if curl -s --max-time 3 http://127.0.0.1:8888/health 2>/dev/null | grep -q healthy; then
+    if curl -s --max-time 3 http://127.0.0.1:9177/health 2>/dev/null | grep -q healthy; then
         ok "Hindsight already configured and running"
         HINDSIGHT_ALREADY=true
     fi

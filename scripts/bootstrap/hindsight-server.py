@@ -35,7 +35,7 @@ def main():
         llm_model="xiaomi/mimo-v2-pro",
         llm_base_url="http://localhost:8642/v1",
         host="127.0.0.1",
-        port=8888,
+        port=9177,
         log_level="info",
         timeout=120,
     )

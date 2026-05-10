@@ -42,7 +42,7 @@ echo ""
 
 # ── Check if already configured ──────────────────────────────
 if [ -f "$HERMES_HOME/hindsight/config.json" ]; then
-    if curl -s --max-time 3 http://127.0.0.1:8888/health 2>/dev/null | grep -q healthy; then
+    if curl -s --max-time 3 http://127.0.0.1:9177/health 2>/dev/null | grep -q healthy; then
         ok "Hindsight is already running and healthy"
         echo ""
         echo "To reconfigure, remove $HERMES_HOME/hindsight/config.json and run again."
@@ -175,7 +175,7 @@ def main():
         llm_api_key=api_key,
         llm_model="xiaomi/mimo-v2-pro",
         llm_base_url="http://localhost:8642/v1",
-        host="127.0.0.1", port=8888,
+        host="127.0.0.1", port=9177,
         log_level="info", timeout=120,
     )
     print(f"Hindsight running at {server.url}")
@@ -206,7 +206,7 @@ fi
 cat > "$HERMES_HOME/hindsight/config.json" << EOF
 {
     "mode": "local_external",
-    "api_url": "http://localhost:8888",
+    "api_url": "http://localhost:9177",
     "llm_provider": "openai",
     "llm_base_url": "http://localhost:8642/v1",
     "llm_model": "xiaomi/mimo-v2-pro",
@@ -232,7 +232,7 @@ config['plugins']['hindsight'].update({
     'auto_retain': True,
     'auto_recall': True,
     'mode': 'local_external',
-    'api_url': 'http://localhost:8888',
+    'api_url': 'http://localhost:9177',
     'llm_provider': 'openai',
 })
 with open(path, 'w') as f:
@@ -277,7 +277,7 @@ ok "Systemd service created and started"
 step "Step 8: Verification"
 info "Waiting for server to start..."
 for i in $(seq 1 20); do
-    if curl -s --max-time 3 http://127.0.0.1:8888/health 2>/dev/null | grep -q healthy; then
+    if curl -s --max-time 3 http://127.0.0.1:9177/health 2>/dev/null | grep -q healthy; then
         ok "Hindsight server is healthy"
         break
     fi
@@ -290,13 +290,13 @@ for i in $(seq 1 20); do
 done
 
 # Test store + retrieve
-if curl -s --max-time 3 http://127.0.0.1:8888/health 2>/dev/null | grep -q healthy; then
+if curl -s --max-time 3 http://127.0.0.1:9177/health 2>/dev/null | grep -q healthy; then
     info "Testing memory store + retrieve..."
-    curl -s --max-time 15 -X POST http://127.0.0.1:8888/v1/default/banks/hermes/memories \
+    curl -s --max-time 15 -X POST http://127.0.0.1:9177/v1/default/banks/hermes/memories \
         -H "Content-Type: application/json" \
         -d '{"items":[{"content":"Hindsight setup test memory","tags":["test"]}]}' >/dev/null 2>&1
     sleep 3
-    COUNT=$(curl -s --max-time 10 "http://127.0.0.1:8888/v1/default/banks/hermes/memories/list?limit=1" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('total',0))" 2>/dev/null || echo "?")
+    COUNT=$(curl -s --max-time 10 "http://127.0.0.1:9177/v1/default/banks/hermes/memories/list?limit=1" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('total',0))" 2>/dev/null || echo "?")
     ok "Test memory stored ($COUNT memories in bank)"
 fi
 
@@ -321,5 +321,5 @@ echo ""
 echo "Useful commands:"
 echo "  sudo systemctl restart hindsight    # Restart server"
 echo "  sudo journalctl -u hindsight -f     # View logs"
-echo "  curl http://localhost:8888/health    # Check health"
+echo "  curl http://localhost:9177/health    # Check health"
 echo ""

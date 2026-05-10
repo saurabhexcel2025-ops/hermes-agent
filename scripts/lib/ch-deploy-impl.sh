@@ -208,6 +208,15 @@ ch_deploy_restart_once() {
   fi
 
   log "Restart complete."
+
+  # Wait for children to fully daemonize before we exit.
+  # This prevents systemd transient units from seeing exit-code 1 when the
+  # shell exits while backgrounded children are still forking.
+  sleep 2
+
+  # Signal success explicitly — we don't want any trailing subshell result
+  # (e.g. from `|| true` or the log function) leaking into the exit code.
+  exit 0
 }
 
 ch_deploy_cmd_rebuild() {
@@ -256,9 +265,16 @@ ch_deploy_cmd_rebuild() {
 
   log "Build started (npm=$(which npm), node=$(which node))..."
   "$NPM_BIN" run build >>"$BUILD_LOG" 2>&1
+  if [ $? -ne 0 ]; then
+    log "ERROR: Build failed — check $BUILD_LOG"
+    exit 1
+  fi
   log "Build complete."
   log "Restarting server..."
   ch_deploy_restart_once
+  # ch_deploy_restart_once exits; if we reach here something went wrong
+  log "ERROR: restart returned unexpectedly"
+  exit 1
 }
 
 ch_deploy_run_update() {

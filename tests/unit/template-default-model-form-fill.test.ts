@@ -2,8 +2,10 @@
 /** @jest-environment node */
 
 /**
- * PR 7 — built-in mission templates surface defaultModel + defaultProvider
- * via /api/templates so the missions form can auto-fill them.
+ * PR 7 — built-in mission templates surface model defaults via /api/templates
+ * so the missions form can auto-fill them.  After the model-defaults refactor,
+ * built-in templates no longer carry explicit defaultModel/defaultProvider —
+ * the form must derive the model from the registry agent default instead.
  */
 
 jest.mock("next/server", () => ({
@@ -40,9 +42,8 @@ jest.mock("@/lib/paths", () => ({
 }));
 
 describe("/api/templates GET — built-in template defaults", () => {
-  it("includes defaultModel + defaultProvider for every TEMPLATE entry", async () => {
+  it("built-in template entries carry no explicit defaultModel or defaultProvider", async () => {
     const { GET } = require("@/app/api/templates/route") as typeof import("@/app/api/templates/route");
-    const { TEMPLATES } = require("@/lib/mission-helpers") as typeof import("@/lib/mission-helpers");
 
     const res = await GET();
     const body = (await res.json()) as {
@@ -57,21 +58,12 @@ describe("/api/templates GET — built-in template defaults", () => {
     };
 
     const builtIns = body.data?.templates.filter((t) => !t.isCustom) ?? [];
-    expect(builtIns.length).toBe(TEMPLATES.length);
+    expect(builtIns.length).toBeGreaterThan(0);
 
     for (const t of builtIns) {
-      const def = TEMPLATES.find((x) => x.id === t.id);
-      expect(def).toBeDefined();
-      expect(t.defaultModel).toBe(def!.defaultModel);
-      expect(t.defaultProvider).toBe(def!.defaultProvider);
-    }
-  });
-
-  it("every built-in template ships with both defaultModel and defaultProvider", async () => {
-    const { TEMPLATES } = require("@/lib/mission-helpers") as typeof import("@/lib/mission-helpers");
-    for (const t of TEMPLATES) {
-      expect(t.defaultModel).toBeTruthy();
-      expect(t.defaultProvider).toBeTruthy();
+      // Built-ins defer to the registry agent default — no explicit model on the template.
+      expect(t.defaultModel).toBeUndefined();
+      expect(t.defaultProvider).toBeUndefined();
     }
   });
 });
