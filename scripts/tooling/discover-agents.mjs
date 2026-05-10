@@ -3,7 +3,7 @@
  * Discover local Hermes installs and write CH_DATA_DIR/agents.discovery.json
  * Schema version 1 — extend with more detectors later.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join, resolve } from "path";
 

@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import { spawn } from "child_process";
 import * as yaml from "js-yaml";
 import { PATHS } from "../paths";
@@ -428,7 +428,7 @@ export class HermesAgentBackend implements AgentBackend {
     }));
   }
 
-  async configureTool(pluginId: string, enabled: boolean): Promise<void> {
+  async configureTool(_pluginId: string, _enabled: boolean): Promise<void> {
     // Tool registry handles persistence; Hermes has no in-memory toggle
     // so this is a no-op for the Hermes backend.
   }

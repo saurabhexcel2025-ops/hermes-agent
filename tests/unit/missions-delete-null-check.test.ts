@@ -86,7 +86,6 @@ jest.mock("@/lib/mission-repository", () => {
 });
 
 const repo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
-const mockLoadMission = repo.__loadMission;
 const mockDeleteMission = repo.__deleteMission;
 
 beforeEach(() => {

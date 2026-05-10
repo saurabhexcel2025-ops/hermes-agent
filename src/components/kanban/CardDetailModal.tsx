@@ -7,7 +7,6 @@
 import { useState, useLayoutEffect } from "react";
 import {
   X,
-  Plus,
   Trash2,
   Zap,
   Rocket,
@@ -20,7 +19,6 @@ import type {
   KanbanCard,
   KanbanCardStatus,
   GoalSession,
-  AccentColor,
 } from "@/types/hermes";
 import ProfileSelector from "@/components/ui/ProfileSelector";
 
@@ -46,12 +44,10 @@ const STATUS_OPTIONS: { value: KanbanCardStatus; label: string }[] = [
   { value: "blocked", label: "Blocked" },
 ];
 
-const ACCENT_OPTIONS: AccentColor[] = ["cyan", "purple", "pink", "green", "orange"];
-
 export default function CardDetailModal({
   card,
-  boardId,
-  columnId,
+  boardId: _boardId,
+  columnId: _columnId,
   goalSession,
   open,
   onClose,

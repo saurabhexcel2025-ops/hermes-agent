@@ -65,8 +65,6 @@ jest.mock("@/lib/mission-repository", () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockGoalsRepo = require("@/lib/goal-session-repository") as Record<string, jest.Mock>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const mockMissionRepo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ApiRes = { status: number; ok: boolean; json(): Promise<Record<string, unknown>> };

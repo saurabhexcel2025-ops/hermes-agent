@@ -30,7 +30,6 @@ import {
   type HermesProvider,
   type TaskType,
 } from "./hermes-providers";
-import { getCredentialWithKey } from "./credentials-repository";
 import { getModelDefaults, getModel } from "./models-repository";
 
 // ── Internal helpers ───────────────────────────────────────────

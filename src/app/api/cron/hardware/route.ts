@@ -115,7 +115,6 @@ function serialiseLine(
   command: string,
   logFile: string
 ): string {
-  const home = process.env.HOME || "$HOME";
   // Preserve the original command with any env vars
   const logRedirect = logFile ? ` >> ${logFile} 2>&1` : "";
   return `${schedule} ${command}${logRedirect}`;
@@ -148,13 +147,6 @@ function writeCrontab(content: string): { ok: boolean; error?: string } {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
   }
-}
-
-function getManagedLines(crontab: string): string[] {
-  return crontab.split("\n").filter((l) => {
-    const parsed = parseCrontabLine(l);
-    return parsed !== null;
-  });
 }
 
 // ── API handlers ───────────────────────────────────────────────

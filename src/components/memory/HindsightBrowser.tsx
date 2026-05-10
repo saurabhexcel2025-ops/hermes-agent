@@ -33,9 +33,11 @@ function parseMemoryContent(raw: string): { text: string; type: string; tags: st
   // {'id': '...', 'text': 'Memory content here.', 'context': '', 'fact_type': 'observation', 'tags': [], ...}
   // Keys use colon + space separator: 'text': '...'
   const textMatch = raw.match(/'text':\s*'((?:[^'\\]|\\.)*)'/);
-  const typeMatch = raw.match(/'fact_type':\s*'([^']*)'/);
-  // Tags appear as a Python list e.g. "tags=['ai','coding']" or "tags=[]"
-  const tagsMatch = raw.match(/tags=\[(.*?)\]/);
+  const typeMatch =
+    raw.match(/'fact_type':\s*'([^']*)'/) || raw.match(/(?:^|[^'])type='([^']*)'/);
+  // Tags: `tags=[...]` (legacy repr) or `'tags': [...]` (PostgreSQL dict)
+  const tagsMatch =
+    raw.match(/tags=\[(.*?)\]/) || raw.match(/'tags':\s*\[(.*?)\]/);
   const text = textMatch ? textMatch[1] : raw;
   const type = typeMatch ? typeMatch[1] : "unknown";
   const tags = tagsMatch

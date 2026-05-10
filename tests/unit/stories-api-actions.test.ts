@@ -75,7 +75,6 @@ jest.mock("@/lib/story-repository", () => {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const storyRepo = require("@/lib/story-repository") as Record<string, unknown>;
 const mockGetStory = storyRepo.__getStory as jest.Mock;
-const mockCreateStory = storyRepo.__createStory as jest.Mock;
 const mockUpdateStory = storyRepo.__updateStory as jest.Mock;
 const mockDeleteStory = storyRepo.__deleteStory as jest.Mock;
 const mockListStories = storyRepo.__listStories as jest.Mock;

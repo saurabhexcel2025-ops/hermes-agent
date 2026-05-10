@@ -27,7 +27,6 @@ function loadRealBetterSqlite3(): typeof import("better-sqlite3") {
 
 function freshDb(): import("better-sqlite3").Database {
   const Database = loadRealBetterSqlite3();
-  // eslint-disable-next-line new-cap
   const db = new (Database as unknown as new (path: string) => import("better-sqlite3").Database)(
     ":memory:"
   );

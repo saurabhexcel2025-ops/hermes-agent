@@ -10,10 +10,8 @@ import {
   Zap,
   User,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   Trash2,
-  Edit3,
   Play,
 } from "lucide-react";
 import type { KanbanCard as KanbanCardType, KanbanCardStatus, GoalSession } from "@/types/hermes";

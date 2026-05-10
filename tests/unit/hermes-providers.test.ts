@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-
 /**
  * Asserts that:
  *   - every provider in HERMES_PROVIDERS has a mapped env var name;

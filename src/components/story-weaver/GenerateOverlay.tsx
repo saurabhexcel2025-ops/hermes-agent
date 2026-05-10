@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect -- overlay resets and completion snap are driven by props (visible/done) */
 // GenerateOverlay — Loading overlay with smooth progress bar and fun messages
 "use client";
 import { useState, useEffect, useRef } from "react";

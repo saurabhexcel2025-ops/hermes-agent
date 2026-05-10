@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         goals,
         context,
         dispatchMode,
-        schedule,
+        schedule: _schedule,
       } = body as {
         name?: string;
         instruction?: string;

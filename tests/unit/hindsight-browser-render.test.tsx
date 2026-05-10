@@ -90,13 +90,14 @@ describe("HindsightBrowser", () => {
         {
           id: "m1",
           content:
-            "id='m1' text='Alpha note' type='observation' tags=['org:acme','team:eng']",
+            "{'id': 'm1', 'text': 'Alpha note', 'fact_type': 'observation', 'tags': ['org:acme', 'team:eng']}",
           created_at: threeMinAgo,
           score: 2,
         },
         {
           id: "m2",
-          content: "id='m2' text='World fact' type='world' tags=[]",
+          content:
+            "{'id': 'm2', 'text': 'World fact', 'fact_type': 'world', 'tags': []}",
           created_at: threeMinAgo,
           score: 0.5,
         },

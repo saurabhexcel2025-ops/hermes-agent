@@ -92,7 +92,6 @@ type ApiRes = { status: number; ok: boolean; json(): Promise<Record<string, unkn
 type BoardsRes = { data: { boards: unknown[] } };
 type BoardRes = { data: { board: unknown; columns: unknown } };
 type CardRes = { data: { card: unknown } };
-type ColsRes = { data: { columns: Record<string, { cardIds: string[] }> } };
 type ErrRes = { error: string };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

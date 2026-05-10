@@ -18,7 +18,6 @@ import {
   Pause,
   ChevronDown,
   ChevronUp,
-  AlertCircle,
   Terminal,
 } from "lucide-react";
 import { describeSchedule } from "@/components/cron/CronScheduleInput";

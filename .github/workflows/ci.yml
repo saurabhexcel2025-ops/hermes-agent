@@ -16,15 +16,15 @@ jobs:
   shell-custom-scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Hermes profile helpers + dotenv (isolated /tmp HERMES_HOME)
         run: bash tests/scripts/run-shell-custom-tests.sh
 
   build-test-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -34,17 +34,20 @@ jobs:
           npm ci || (npm cache clean --force && npm ci)
       - name: Run database migrations
         run: npm run prebuild
-      - run: npm run lint
+      - name: ESLint
+        run: npm run lint
       - name: Forbid HERMES_PATHS in API routes (use getActiveHermesPaths)
         run: |
           if grep -rE "HERMES_PATHS|HERMES_HOME" src/app/api --include="*.ts" -q 2>/dev/null; then
             echo "Use @/lib/hermes-agent-runtime instead of HERMES_PATHS/HERMES_HOME in API routes"
             exit 1
           fi
-      - run: npx tsc --noEmit -p tsconfig.json
+      - name: TypeScript (tsc --noEmit)
+        run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
         run: npm run test:coverage
-      - run: npm run build
+      - name: Next.js production build
+        run: npm run build
       - name: Upload coverage HTML
         uses: actions/upload-artifact@v4
         with:
@@ -55,8 +58,8 @@ jobs:
   build-test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -66,23 +69,26 @@ jobs:
           npm ci || (npm cache clean --force && npm ci)
       - name: Run database migrations
         run: npm run prebuild
-      - run: npm run lint
+      - name: ESLint
+        run: npm run lint
       - name: Forbid HERMES_PATHS in API routes (use getActiveHermesPaths)
         run: |
           if grep -rE "HERMES_PATHS|HERMES_HOME" src/app/api --include="*.ts" -q 2>/dev/null; then
             echo "Use @/lib/hermes-agent-runtime instead of HERMES_PATHS/HERMES_HOME in API routes"
             exit 1
           fi
-      - run: npx tsc --noEmit -p tsconfig.json
+      - name: TypeScript (tsc --noEmit)
+        run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
         run: npm run test:coverage
-      - run: npm run build
+      - name: Next.js production build
+        run: npm run build
 
   e2e-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -101,7 +107,8 @@ jobs:
         run: npx playwright install chromium
       - name: Run database migrations
         run: npm run prebuild
-      - run: npm run build
+      - name: Next.js production build
+        run: npm run build
       - name: E2E smoke
         run: npm run test:e2e
         env:

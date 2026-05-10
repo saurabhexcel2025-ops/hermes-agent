@@ -56,7 +56,6 @@ export const PATHS = {
 
 // ── YAML config reader (generic; used on arbitrary YAML content) ─
 
-import { readFileSync } from "fs";
 import * as yaml from "js-yaml";
 
 export function getConfigValue(content: string, dottedKey: string): string {

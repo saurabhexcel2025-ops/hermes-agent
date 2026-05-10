@@ -8,9 +8,9 @@ import {
   Terminal, FileText, Database, Clock, Shield, Zap,
   Cpu, Activity, Layers, HardDrive, Wrench, ListTodo, Globe, Globe2,
   ScrollText, Sparkles, Rocket, Volume2, Mic, GitBranch,
-  RotateCcw, ShieldCheck, MessageSquare, Lock, Code,
-  BookOpen, Users, Layout, Kanban, Bot, MessageCircle,
-  AudioLines, Calendar, Settings2, Network, Monitor,
+  RotateCcw, ShieldCheck, Lock, Code,
+  BookOpen, Users, Kanban, Bot, MessageCircle,
+  AudioLines, Settings2, Network,
 } from "lucide-react";
 
 import type { AccentColor } from "@/types/hermes";

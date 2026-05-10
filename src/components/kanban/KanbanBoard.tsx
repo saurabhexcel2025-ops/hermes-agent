@@ -6,8 +6,6 @@
 
 import { useCallback } from "react";
 import KanbanColumn from "./KanbanColumn";
-import CardDetailModal from "./CardDetailModal";
-import GoalLoopPanel from "./GoalLoopPanel";
 import type {
   KanbanBoard as KanbanBoardType,
   KanbanColumn as KanbanColumnType,
@@ -39,7 +37,7 @@ export default function KanbanBoard({
   cards,
   goalSessions = {},
   onBoardChange,
-  onDispatchMission,
+  onDispatchMission: _onDispatchMission,
   onStartGoalLoop,
   teamName,
 }: Props) {
@@ -152,46 +150,6 @@ export default function KanbanBoard({
             : ({ id: columnId, title: "", color: "cyan", position: 0, wipLimit: null, cardIds: newColCardIds } as KanbanColumnType),
         },
         cards: { ...cards, [cardId]: newCard },
-      });
-    },
-    [board, columns, cards, onBoardChange]
-  );
-
-  const handleMoveCard = useCallback(
-    (cardId: string, toColumnId: string, toPosition: number) => {
-      const card = cards[cardId];
-      if (!card) return;
-
-      const fromColumnId = card.columnId;
-
-      // Remove from source column
-      const fromCol = columns[fromColumnId];
-      const newFromCardIds = fromCol
-        ? fromCol.cardIds.filter((id) => id !== cardId)
-        : [];
-
-      // Insert into target column
-      const toCol = columns[toColumnId];
-      const toCardIds = toCol
-        ? [...toCol.cardIds.filter((id) => id !== cardId)]
-        : [];
-
-      const insertAt = Math.min(toPosition, toCardIds.length);
-      toCardIds.splice(insertAt, 0, cardId);
-
-      const newCards = {
-        ...cards,
-        [cardId]: { ...card, columnId: toColumnId, position: insertAt, updatedAt: new Date().toISOString() },
-      };
-
-      onBoardChange({
-        board,
-        columns: {
-          ...columns,
-          ...(fromCol ? { [fromColumnId]: { ...fromCol, cardIds: newFromCardIds } } : {}),
-          ...(toCol ? { [toColumnId]: { ...toCol, cardIds: toCardIds } } : {}),
-        },
-        cards: newCards,
       });
     },
     [board, columns, cards, onBoardChange]

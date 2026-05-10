@@ -161,7 +161,6 @@ async function handleCreate(body: Record<string, unknown>): Promise<NextResponse
 
   const cfg = config as Record<string, unknown>;
   const masterPrompt = buildMasterPrompt({ ...cfg, title });
-  const storyId = "story_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
   const storyTitle = (title as string) || "Untitled Story";
 
   // Create draft in SQLite first

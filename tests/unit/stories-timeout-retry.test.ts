@@ -73,7 +73,6 @@ jest.mock("@/lib/story-repository", () => {
 const storyRepo = require("@/lib/story-repository") as Record<string, unknown>;
 const mockGetStory = storyRepo.__getStory as jest.Mock;
 const mockSaveStory = storyRepo.__saveStory as jest.Mock;
-const mockListStories = storyRepo.__listStories as jest.Mock;
 
 describe("callLLM timeout retry", () => {
   beforeEach(() => {

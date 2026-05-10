@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Zap, CheckCircle2, Circle, XCircle, AlertCircle, Pause, Play, X } from "lucide-react";
 import type { GoalSession } from "@/types/hermes";
 

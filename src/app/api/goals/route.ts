@@ -16,7 +16,7 @@ import {
   listGoalSessionsByCard,
 } from "@/lib/goal-session-repository";
 import { getMission } from "@/lib/mission-repository";
-import type { GoalSession, GoalStep } from "@/types/hermes";
+import type { GoalStep } from "@/types/hermes";
 
 // ── GET ───────────────────────────────────────────────────────
 

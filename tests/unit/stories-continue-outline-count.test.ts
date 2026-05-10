@@ -74,7 +74,6 @@ const storyRepo = require("@/lib/story-repository") as Record<string, unknown>;
 const mockGetStory = storyRepo.__getStory as jest.Mock;
 const mockSaveStory = storyRepo.__saveStory as jest.Mock;
 const mockUpdateStory = storyRepo.__updateStory as jest.Mock;
-const mockListStories = storyRepo.__listStories as jest.Mock;
 
 const mockOutlines = [
   { number: 2, title: "Chapter 2", purpose: "Development A", keyBeats: ["Event A"], emotionalTone: "Tense" },
