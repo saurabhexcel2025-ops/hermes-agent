@@ -240,6 +240,8 @@ for f in \
 done
 
 echo ""
+# Note: full ch-deploy restart / port-free / fixture-git smoke is not in this harness
+# (see docs/TESTING.md — CI docker-image job + manual staging checks).
 echo "All shell custom checks passed."
 if ! report; then
   exit 1

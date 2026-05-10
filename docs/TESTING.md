@@ -69,7 +69,9 @@ npm: `npm run test:full-install` (smoke + `--skip-http`), `npm run test:full-ins
 
 ## Continuous integration
 
-Primary pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Ubuntu (`shell-custom-scripts`, install, `prebuild`, ESLint with **`--max-warnings 0`**, Hermes-path grep gate, `tsc`, Jest coverage, build, Playwright smoke with `PLAYWRIGHT_SMOKE=1`) plus macOS build/test, and E2E smoke on Ubuntu. The **`build-test-*`** jobs use separate named steps (ESLint, TypeScript, unit tests, build) so the first failing step is obvious in the Actions UI. Actions use **`actions/checkout@v5`** and **`actions/setup-node@v5`** (action runtime on Node 24 per upstream; app build still uses `node-version: "20"` in the workflow).
+Primary pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Ubuntu (`shell-custom-scripts`, install, `prebuild`, ESLint with **`--max-warnings 0`**, Hermes-path grep gate, `tsc`, Jest coverage, build, Playwright smoke with `PLAYWRIGHT_SMOKE=1`) plus macOS build/test, E2E smoke on Ubuntu, and a **`docker-image`** job that runs **`docker build -f Dockerfile .`** so the repo-root production image does not silently rot. The **`build-test-*`** jobs use separate named steps (ESLint, TypeScript, unit tests, build) so the first failing step is obvious in the Actions UI. Actions use **`actions/checkout@v5`** and **`actions/setup-node@v5`** (action runtime on Node 24 per upstream; app build still uses `node-version: "20"` in the workflow).
+
+[`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) covers dotenv, profile sync gates, and **`bash -n`** on key scripts. **End-to-end exercise of `ch-deploy.sh` restart/stop loops** (fixture git tree, stubbed `npm`, etc.) is **not** in that harness yet; run manual **`ch-deploy`** checks on a staging host or extend the script when you need regression coverage there.
 
 Other workflows: **gitleaks** (secret scan).
 

@@ -31,6 +31,11 @@ bash scripts/application/ch-deploy.sh restart
 bash scripts/application/ch-deploy.sh rebuild --branch dev
 ```
 
+### Destructive git and `PORT`
+
+- **`ch-deploy.sh update`** and **`rebuild`** (after aligning rebuild with update) run **`git reset --hard origin/<branch>`** when a remote tip exists. That **discards local commits** on the checked-out branch. Use only on machines where the app directory is a throwaway deploy checkout.
+- **`ch-deploy.sh restart`** stops whatever is listening on **`PORT`** (from the environment or the last `PORT=` line in `.env.local`, default **42069**) using **`fuser`** / **`lsof`**. A wrong **`PORT`** can kill an unrelated process; set it deliberately. If you migrated from an old install on **3000**, do a **one-time manual** cleanup of stale listeners; the script does not clear arbitrary ports by default.
+
 ## Required environment
 
 | Variable | Purpose |

@@ -46,6 +46,11 @@ function isActive(pathname: string, href: string): boolean {
 // ── Branch Dropdown ─────────────────────────────────────────────
 // Inline dropdown anchored above the footer buttons, not a modal overlay.
 
+function sanitizeDeployBranchClient(raw: string): string {
+  const s = raw.replace(/[^a-zA-Z0-9._/-]/g, "").slice(0, 200);
+  return s || "dev";
+}
+
 function BranchDropdown({
   branches,
   defaultBranch,
@@ -60,6 +65,7 @@ function BranchDropdown({
   loading?: boolean;
 }) {
   const [selected, setSelected] = useState(defaultBranch);
+  const [customBranch, setCustomBranch] = useState("");
 
   // Close on outside click
   const ref = useRef<HTMLDivElement>(null);
@@ -102,6 +108,16 @@ function BranchDropdown({
             </option>
           ))}
         </select>
+        <label className="block mt-2 text-[10px] font-mono text-white/40 uppercase tracking-wide">
+          Other branch
+        </label>
+        <input
+          type="text"
+          value={customBranch}
+          onChange={(e) => setCustomBranch(e.target.value)}
+          placeholder="e.g. feature/my-branch"
+          className="w-full mt-0.5 px-2 py-1.5 rounded-md bg-dark-900 border border-white/10 text-white text-xs placeholder:text-white/25 focus:outline-none focus:border-neon-cyan/50"
+        />
       </div>
 
       {/* Footer */}
@@ -114,8 +130,14 @@ function BranchDropdown({
           Cancel
         </button>
         <button
-          onClick={() => onConfirm(selected)}
-          disabled={loading || !selected}
+          onClick={() =>
+            onConfirm(
+              customBranch.trim()
+                ? sanitizeDeployBranchClient(customBranch)
+                : selected,
+            )
+          }
+          disabled={loading || (!customBranch.trim() && !selected)}
           className="px-3 py-1 rounded text-xs font-medium bg-neon-cyan text-dark-900 hover:brightness-110 transition disabled:opacity-50"
         >
           {loading ? "..." : "Confirm"}
@@ -134,6 +156,9 @@ interface VersionInfo {
   commitMessage: string;
   behind: number;
   branch: string;
+  /** Remote ref used for compare (when present). */
+  comparedBranch?: string;
+  checkoutBranch?: string;
   lastChecked: string;
 }
 
@@ -237,7 +262,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         setUpdating(false);
         return;
       }
-      setMessage("Restarting...");
+      setMessage("Update running in background (~/.hermes/logs/ch-update.log)…");
       pollForReturn();
     } catch {
       setMessage("Update failed");
@@ -248,7 +273,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const handleRestart = async () => {
     if (restarting) return;
     setRestarting(true);
-    setMessage("Restarting...");
+    setMessage("Restart requested (~/.hermes/logs/ch-restart.log)…");
     try {
       const res = await fetch("/api/update", {
         method: "POST",
@@ -289,7 +314,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
-      setMessage("Build complete — restarting...");
+      setMessage("Rebuild started in background (~/.hermes/logs/ch-build.log, ch-restart.log)…");
       pollForReturn();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Rebuild failed";
@@ -308,7 +333,11 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const res = await fetch("/api/update", {
+        const branchQs =
+          deployBranch != null
+            ? `?branch=${encodeURIComponent(deployBranch)}`
+            : "";
+        const res = await fetch(`/api/update${branchQs}`, {
           signal: AbortSignal.timeout(3000),
         });
         if (res.ok) {

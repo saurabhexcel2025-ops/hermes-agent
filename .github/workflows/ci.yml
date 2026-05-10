@@ -97,7 +97,7 @@ jobs:
         run: |
           npm ci || (npm cache clean --force && npm ci)
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -115,3 +115,10 @@ jobs:
           CI: true
           PORT: "3000"
           PLAYWRIGHT_SMOKE: "1"
+
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build production Docker image
+        run: docker build -f Dockerfile -t control-hub:ci .

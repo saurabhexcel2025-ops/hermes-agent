@@ -93,8 +93,38 @@ ch_deploy_cmd_restart() {
       log "WARNING: install psmisc (fuser) or lsof to free port $p"
     fi
   }
+
+  port_in_use() {
+    local p="$1"
+    if command -v lsof &>/dev/null; then
+      if lsof -ti:"$p" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    if command -v fuser &>/dev/null; then
+      if fuser "$p/tcp" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    return 1
+  }
+
   stop_port "$PORT"
   sleep 2
+
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if ! port_in_use "$PORT"; then
+      break
+    fi
+    log "WARNING: port $PORT still in use after stop (attempt $attempt) — retrying..."
+    stop_port "$PORT"
+    sleep 2
+  done
+  if port_in_use "$PORT"; then
+    log "ERROR: port $PORT still in use — aborting start (check proxies or stale listeners)"
+    exit 1
+  fi
 
   rm -f "$PID_FILE"
 
@@ -137,6 +167,16 @@ ch_deploy_cmd_rebuild() {
     log "Checking out branch: $CH_BRANCH"
     git fetch origin "$CH_BRANCH" --quiet 2>>"$LOG_FILE_RESTART" || true
     git checkout "$CH_BRANCH" --quiet 2>>"$LOG_FILE_RESTART" || true
+    if git rev-parse "origin/${CH_BRANCH}" >/dev/null 2>&1; then
+      log "Resetting to origin/${CH_BRANCH}..."
+      git reset --hard "origin/${CH_BRANCH}" --quiet 2>>"$LOG_FILE_RESTART" || {
+        log "ERROR: git reset --hard origin/${CH_BRANCH} failed"
+        exit 1
+      }
+    else
+      log "ERROR: origin/${CH_BRANCH} not found after fetch — cannot rebuild to remote tip"
+      exit 1
+    fi
   fi
 
   local NODE_BIN

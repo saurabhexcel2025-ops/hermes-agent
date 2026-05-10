@@ -278,6 +278,11 @@ export default function HindsightBrowser() {
       setShowAddModal(false);
       setNewContent("");
       setNewTags("");
+      if (search.trim()) {
+        void runRecall();
+      } else {
+        void loadRecentMemories();
+      }
     } catch {
       showToast("Failed to store memory", "error");
     } finally {
@@ -290,20 +295,33 @@ export default function HindsightBrowser() {
     setLoadingDirectives(true);
     try {
       const res = await fetch("/api/memory/hindsight?action=directives");
-      const body = await res.json();
+      const body = (await res.json()) as {
+        data?: { directives?: Directive[]; error?: string };
+        error?: string;
+      };
+      if (!res.ok) {
+        const msg =
+          (typeof body.error === "string" && body.error) ||
+          (typeof body.data?.error === "string" && body.data.error) ||
+          `Failed to load directives (${res.status})`;
+        showToast(msg, "error");
+        setDirectives([]);
+        return;
+      }
       setDirectives(body.data?.directives || []);
     } catch {
       showToast("Failed to load directives", "error");
+      setDirectives([]);
     } finally {
       setLoadingDirectives(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    if (activeTab === "directives" && directives.length === 0 && !loadingDirectives) {
+    if (activeTab === "directives") {
       void loadDirectives();
     }
-  }, [activeTab, directives.length, loadingDirectives, loadDirectives]);
+  }, [activeTab, loadDirectives]);
 
   const handleCreateDirective = async () => {
     if (!newDirName.trim() || !newDirContent.trim()) return;
@@ -375,20 +393,33 @@ export default function HindsightBrowser() {
     setLoadingModels(true);
     try {
       const res = await fetch("/api/memory/hindsight?action=mental-models");
-      const body = await res.json();
+      const body = (await res.json()) as {
+        data?: { models?: MentalModel[]; error?: string };
+        error?: string;
+      };
+      if (!res.ok) {
+        const msg =
+          (typeof body.error === "string" && body.error) ||
+          (typeof body.data?.error === "string" && body.data.error) ||
+          `Failed to load mental models (${res.status})`;
+        showToast(msg, "error");
+        setMentalModels([]);
+        return;
+      }
       setMentalModels(body.data?.models || []);
     } catch {
       showToast("Failed to load mental models", "error");
+      setMentalModels([]);
     } finally {
       setLoadingModels(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    if (activeTab === "mental-models" && mentalModels.length === 0 && !loadingModels) {
+    if (activeTab === "mental-models") {
       void loadModels();
     }
-  }, [activeTab, mentalModels.length, loadingModels, loadModels]);
+  }, [activeTab, loadModels]);
 
   const handleCreateModel = async () => {
     if (!newModelName.trim() || !newModelQuery.trim()) return;
@@ -704,7 +735,7 @@ export default function HindsightBrowser() {
             <EmptyState
               icon={FileText}
               title="No directives yet"
-              description="Directives are hard rules injected into agent prompts."
+              description="Hindsight returned no directives for this bank. Directives are hard rules injected into agent prompts when you add them."
               action={
                 <Button
                   variant="primary"
@@ -798,7 +829,7 @@ export default function HindsightBrowser() {
             <EmptyState
               icon={Settings}
               title="No mental models yet"
-              description="Mental models are cached reflect analyses. Create one with a source query and Hindsight will generate and maintain the content."
+              description="Hindsight returned no mental models for this bank. Models are cached reflect analyses—create one with a source query to generate content."
               action={
                 <Button
                   variant="primary"
