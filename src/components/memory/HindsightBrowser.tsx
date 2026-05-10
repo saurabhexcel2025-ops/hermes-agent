@@ -29,11 +29,11 @@ interface Memory {
 
 /** Parse the raw Python repr string from the Hindsight API into clean fields */
 function parseMemoryContent(raw: string): { text: string; type: string; tags: string[] } {
-  // The content is a Python repr string like:
-  // "id='...' text='...' type='observation' entities=... tags=[] ..."
-  // Extract the `text='...'` value
-  const textMatch = raw.match(/text='((?:[^'\\]|\\.)*)'/);
-  const typeMatch = raw.match(/type='([^']*)'/);
+  // The content is a Python dict string from PostgreSQL, e.g.:
+  // {'id': '...', 'text': 'Memory content here.', 'context': '', 'fact_type': 'observation', 'tags': [], ...}
+  // Keys use colon + space separator: 'text': '...'
+  const textMatch = raw.match(/'text':\s*'((?:[^'\\]|\\.)*)'/);
+  const typeMatch = raw.match(/'fact_type':\s*'([^']*)'/);
   // Tags appear as a Python list e.g. "tags=['ai','coding']" or "tags=[]"
   const tagsMatch = raw.match(/tags=\[(.*?)\]/);
   const text = textMatch ? textMatch[1] : raw;
