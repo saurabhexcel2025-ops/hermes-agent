@@ -14,6 +14,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Next.js expects `public/`; repo may ship only static assets later — dir must exist for runner COPY.
+RUN mkdir -p public
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
