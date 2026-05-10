@@ -5,7 +5,32 @@ import * as path from "path";
 
 import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
+import { getDefaultModel, getModelWithKey } from "@/lib/models-repository";
 import type { ApiResponse } from "@/types/hermes";
+
+/**
+ * Resolve a model override for the Hindsight bridge subprocess.
+ *
+ * Looks up the registered default for the `hindsight` task slot. If a row
+ * exists, returns the env vars the bridge reads (HINDSIGHT_LLM_MODEL /
+ * HINDSIGHT_LLM_BASE_URL / HINDSIGHT_LLM_API_KEY). Returns null when no
+ * default is registered — the bridge then falls back to its own config.
+ */
+function getHindsightBridgeOverrideEnv(): Record<string, string> | null {
+  try {
+    const def = getDefaultModel("hindsight");
+    if (!def) return null;
+    const env: Record<string, string> = {
+      HINDSIGHT_LLM_MODEL: def.modelId,
+    };
+    if (def.baseUrl) env.HINDSIGHT_LLM_BASE_URL = def.baseUrl;
+    const withKey = getModelWithKey(def.id);
+    if (withKey?.apiKey) env.HINDSIGHT_LLM_API_KEY = withKey.apiKey;
+    return env;
+  } catch {
+    return null;
+  }
+}
 
 // Resolve python3 from the hermes-agent venv — try common locations
 function resolvePython(hermesHome: string): string {
@@ -23,11 +48,20 @@ function resolvePython(hermesHome: string): string {
   return "python3"; // fallback to PATH
 }
 
-/** Run bridge command asynchronously with timeout */
+/**
+ * Run a bridge command asynchronously with a timeout.
+ *
+ * When `applyHindsightModelOverride` is true (default for recall/reflect/
+ * mental-model commands), the registry's `hindsight` default is injected as
+ * HINDSIGHT_LLM_* env vars before spawning the bridge. The bridge itself
+ * already reads HINDSIGHT_API_KEY from env (see hindsight_bridge.py) — we
+ * just have to set the right vars.
+ */
 function runBridgeAsync(
   command: string,
   args: Record<string, string | number | undefined> = {},
-  timeoutMs = 15000
+  timeoutMs = 15000,
+  applyHindsightModelOverride = true
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const hermesHome = getActiveHermesHome();
@@ -40,23 +74,26 @@ function runBridgeAsync(
     const python = resolvePython(hermesHome);
     const cmd = `${python} ${bridgeScript} ${command} ${argStr}`;
 
-    // Inject HINDSIGHT_API_KEY from config if present
     const apiKey = (() => {
       try {
         const cfgPath = path.join(hermesHome, "hindsight", "config.json");
         if (existsSync(cfgPath)) {
           const cfg = JSON.parse(readFileSync(cfgPath, "utf-8"));
-          // local_external uses llm_api_key, cloud uses top-level HINDSIGHT_API_KEY env
           return cfg.llm_api_key || process.env.HINDSIGHT_API_KEY || "";
         }
       } catch { /* ignore */ }
       return process.env.HINDSIGHT_API_KEY || "";
     })();
 
+    const overrideEnv = applyHindsightModelOverride
+      ? getHindsightBridgeOverrideEnv() ?? {}
+      : {};
+
     const execEnv = {
       ...process.env,
       PYTHONPATH: path.join(hermesHome, "hermes-agent"),
       ...(apiKey ? { HINDSIGHT_API_KEY: apiKey } : {}),
+      ...overrideEnv,
     };
 
     exec(cmd, { timeout: timeoutMs, env: execEnv, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {

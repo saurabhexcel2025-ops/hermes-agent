@@ -34,12 +34,6 @@ const testHermesPaths = {
 jest.mock("@/lib/hermes-agent-runtime", () => ({
   getActiveHermesPaths: jest.fn(() => testHermesPaths),
   getActiveHermesHome: jest.fn(() => testHermesRoot),
-  getDefaultModelConfig: jest.fn(() => ({
-    model: "",
-    provider: "",
-    base_url: "",
-    api_key: "",
-  })),
   getAgentLlmEndpoints: jest.fn(() => ({
     apiUrl: "http://127.0.0.1:9/v1/chat/completions",
     gatewayBase: "http://127.0.0.1:9",

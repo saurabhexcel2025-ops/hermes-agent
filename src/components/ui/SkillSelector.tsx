@@ -30,7 +30,6 @@ export default function SkillSelector({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
     const controller = new AbortController();
     setLoading(true);
     fetch(
@@ -39,12 +38,13 @@ export default function SkillSelector({
     )
       .then((r) => r.json())
       .then((d) => {
-        setSkills(d.data?.skills ?? []);
+        const raw = (d.data?.skills ?? []) as Skill[];
+        setSkills(raw.filter((s) => s.enabled));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [open, profileId]);
+  }, [profileId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -81,7 +81,7 @@ export default function SkillSelector({
         <Cpu className="w-4 h-4 text-neon-purple flex-shrink-0" />
         {value.length === 0 ? (
           <span className="text-white/40 text-xs font-mono">
-            Attach skills (max {max})...
+            Attach skills (enabled for profile, max {max})...
           </span>
         ) : (
           <span className="text-xs font-mono text-neon-purple">
@@ -94,6 +94,10 @@ export default function SkillSelector({
           }`}
         />
       </button>
+
+      <p className="text-[10px] text-white/25 font-mono mt-1 px-0.5">
+        Showing only skills enabled for this profile.
+      </p>
 
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">

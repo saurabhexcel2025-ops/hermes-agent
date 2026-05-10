@@ -14,13 +14,14 @@ interface ModalProps {
   iconColor?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 const sizeMap = {
   sm: "max-w-md",
   md: "max-w-lg",
   lg: "max-w-2xl",
+  xl: "max-w-3xl",
 };
 
 export default function Modal({
@@ -38,7 +39,7 @@ export default function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div
-        className={`w-full ${sizeMap[size]} mx-4 rounded-xl border border-white/10 bg-dark-950 shadow-2xl max-h-[90vh] flex flex-col`}
+        className={`w-full ${sizeMap[size]} mx-4 rounded-xl border border-white/10 bg-dark-950 shadow-2xl max-h-[85vh] flex flex-col`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 flex-shrink-0">
@@ -55,7 +56,7 @@ export default function Modal({
         </div>
 
         {/* Body */}
-        <div className="p-5 overflow-y-auto flex-1">{children}</div>
+        <div className="p-5 overflow-y-auto flex-1 min-h-0">{children}</div>
 
         {/* Footer */}
         {footer && (

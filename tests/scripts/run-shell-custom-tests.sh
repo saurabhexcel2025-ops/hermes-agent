@@ -187,6 +187,45 @@ grep -q "subject matter expert" "$HERMES_HOME/profiles/qa-engineer/SOUL.md" || f
 [[ "$(cat "$HERMES_HOME/profiles/qa-engineer/SOUL.md")" == STALE ]] && fail "sync left stale SOUL"
 pass "sync overwrites SOUL.md from repo templates"
 
+# ── ch-backup.sh (mock hindsight_bridge.py) ───────────────────
+echo ""
+echo "== ch-backup.sh (mock bridge)"
+
+BKROOT="$(mktemp -d)"
+mkdir -p "$BKROOT/scripts" "$BKROOT/hermes-agent" "$BKROOT/out"
+cat >"$BKROOT/scripts/hindsight_bridge.py" <<'PY'
+#!/usr/bin/env python3
+import json
+import sys
+
+cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+if cmd == "list":
+    print(json.dumps({"memories": [{"id": "m1", "content": "x"}], "count": 1, "total": 99}))
+elif cmd == "directives":
+    print(json.dumps({"directives": [{"id": "d1", "name": "n"}]}))
+elif cmd == "mental-models":
+    print(json.dumps({"models": [{"id": "mm1", "name": "M"}]}))
+else:
+    print(json.dumps({"error": "bad cmd", "cmd": cmd}))
+    sys.exit(1)
+PY
+chmod +x "$BKROOT/scripts/hindsight_bridge.py"
+
+HERMES_HOME="$BKROOT" \
+  HINDSIGHT_BACKUP_DIR="$BKROOT/out" \
+  HINDSIGHT_BACKUP_BANK="testbank" \
+  HINDSIGHT_BACKUP_RETENTION_DAYS="365" \
+  HINDSIGHT_BACKUP_LIMIT="10" \
+  bash "$REPO_ROOT/scripts/hardware/ch-backup.sh" || fail "ch-backup.sh exited non-zero"
+
+latest=""
+latest=$(ls -t "$BKROOT/out"/testbank-*.json 2>/dev/null | head -1)
+[[ -n "$latest" ]] || fail "expected testbank-*.json in backup dir"
+jq -e '.bank == "testbank" and (.memories | length) == 1 and (.directives | length) == 1 and (.mental_models | length) == 1' "$latest" >/dev/null 2>&1 || fail "merged json shape unexpected: $latest"
+pass "ch-backup.sh wrote valid merged snapshot"
+
+rm -rf "$BKROOT"
+
 # bash -n on touched scripts
 echo ""
 echo "== bash -n on scripts"
@@ -194,7 +233,8 @@ for f in \
   "$REPO_ROOT/scripts/bootstrap/install.sh" \
   "$REPO_ROOT/scripts/application/ch-deploy.sh" \
   "$REPO_ROOT/scripts/lib/ch-hermes-profile-templates.sh" \
-  "$REPO_ROOT/scripts/lib/ch-dotenv-local.sh"; do
+  "$REPO_ROOT/scripts/lib/ch-dotenv-local.sh" \
+  "$REPO_ROOT/scripts/hardware/ch-backup.sh"; do
   bash -n "$f" || fail "bash -n $f"
   pass "bash -n $(basename "$f")"
 done

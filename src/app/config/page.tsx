@@ -24,8 +24,8 @@ interface CategoryDef {
 const CATEGORIES: CategoryDef[] = [
   {
     label: "Core",
-    description: "Most commonly changed settings — agent behavior, model, display, and memory",
-    sectionIds: ["agent", "model", "display", "memory"],
+    description: "Most commonly changed settings — agent behavior, display, and memory",
+    sectionIds: ["agent", "display", "memory"],
   },
   {
     label: "Infrastructure",
@@ -50,7 +50,7 @@ const CATEGORIES: CategoryDef[] = [
   {
     label: "Integrations",
     description: "Platform connections, streaming, web backends, and auxiliary models",
-    sectionIds: ["discord", "streaming", "web", "auxiliary", "platform_toolsets", "smart_model_routing", "human_delay"],
+    sectionIds: ["discord", "streaming", "web", "platform_toolsets", "smart_model_routing", "human_delay"],
   },
 ];
 

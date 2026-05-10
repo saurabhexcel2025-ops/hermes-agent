@@ -13,7 +13,7 @@ import type { MemoryProviderType } from "@/types/hermes";
 // Lazy load provider-specific components
 import HindsightBrowser from "@/components/memory/HindsightBrowser";
 
-// Holographic browser (inline for backward compat)
+// Holographic browser (inline for holographic provider)
 function HolographicBrowser() {
   const [data, setData] = useState<{
     facts: Array<{

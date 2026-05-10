@@ -54,7 +54,10 @@ import CategoryAccordion from "@/components/ui/CategoryAccordion";
 import TemplateCard from "@/components/ui/TemplateCard";
 import { timeAgo, titleCase } from "@/lib/utils";
 import { useMissionsApi } from "@/hooks/useMissionsApi";
-import type { Mission } from "@/types/hermes";
+import type { LocalDirEntry, Mission } from "@/types/hermes";
+import { formatLocalDirEntryLine, normalizeLocalDirsInput } from "@/lib/local-dir-entry";
+import ModelPicker from "@/components/missions/ModelPicker";
+import LocalDirRow from "@/components/missions/LocalDirRow";
 
 // Available icons for templates
 const TEMPLATE_ICONS = [
@@ -100,11 +103,16 @@ interface MissionTemplate {
   context: string;
   goals: string[];
   suggestedSkills: string[];
-  localDirs?: string[];
+  localDirs?: LocalDirEntry[];
   references?: string[];
   isCustom?: boolean;
   dispatchMode?: string;
   schedule?: string;
+  /** Per-template default model id (e.g. anthropic/claude-sonnet-4). */
+  defaultModel?: string;
+  /** Per-template default provider (matches Hermes CLI --provider choices). */
+  defaultProvider?: string;
+  timeoutMinutes?: number;
 }
 
 interface MissionDetail {
@@ -202,6 +210,94 @@ const defaultStatusColor = {
   text: "text-white/40",
 };
 
+interface AgentRuntimeDefaultsCardProps {
+  profileId: string;
+  onProfileChange: (id: string) => void;
+  missionTimeMinutes: number;
+  onMissionTimeChange: (v: number) => void;
+  timeoutMinutes: number;
+  onTimeoutChange: (v: number) => void;
+  modelId: string;
+  provider: string;
+  onModelChange: (mid: string, prov: string) => void;
+  modelPickerId?: string;
+  timeoutHeading: string;
+}
+
+function AgentRuntimeDefaultsCard({
+  profileId,
+  onProfileChange,
+  missionTimeMinutes,
+  onMissionTimeChange,
+  timeoutMinutes,
+  onTimeoutChange,
+  modelId,
+  provider,
+  onModelChange,
+  modelPickerId,
+  timeoutHeading,
+}: AgentRuntimeDefaultsCardProps) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-dark-800/30 p-3 sm:p-4 space-y-4">
+      <div className="space-y-1">
+        <h3 className="text-[11px] font-mono text-white/50 uppercase tracking-wider">
+          {"Agent & runtime defaults"}
+        </h3>
+        <p className="text-[10px] text-white/25 font-mono leading-relaxed">
+          These fields feed the mission prompt and dispatch configuration.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs text-white/40 font-mono block">Agent profile</label>
+        <ProfileSelector
+          value={profileId}
+          onChange={onProfileChange}
+          subtitle="tooltip"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
+        <div className="flex flex-col gap-1.5 min-h-[3.25rem]">
+          <label className="text-xs text-white/40 font-mono block">Mission scope</label>
+          <div className="flex-1 flex flex-col justify-center">
+            <MissionTimeSelector
+              value={missionTimeMinutes}
+              onChange={onMissionTimeChange}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5 min-h-[3.25rem]">
+          <label className="text-xs text-white/40 font-mono block">
+            {timeoutHeading}{" "}
+            <span className="text-white/25 font-normal normal-case">
+              — Inactivity kill switch
+            </span>
+          </label>
+          <div className="flex-1 flex flex-col justify-center">
+            <TimeoutSelector
+              value={timeoutMinutes}
+              onChange={onTimeoutChange}
+              showSubtitle={false}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs text-white/40 font-mono block">Model</label>
+        <ModelPicker
+          id={modelPickerId}
+          modelId={modelId}
+          provider={provider}
+          onChange={onModelChange}
+          helperPlacement="tooltip"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function MissionsPage() {
   const { fetchMissions, fetchTemplates, fetchMissionDetail } =
     useMissionsApi();
@@ -243,15 +339,18 @@ export default function MissionsPage() {
   const [newMissionTime, setNewMissionTime] = useState(15);
   const [newTimeout, setNewTimeout] = useState(10);
   const [newProfile, setNewProfile] = useState("");
-  const [newLocalDirs, setNewLocalDirs] = useState<string[]>([]);
+  const [newModel, setNewModel] = useState("");
+  const [newProvider, setNewProvider] = useState("");
+  const [newLocalDirs, setNewLocalDirs] = useState<LocalDirEntry[]>([]);
+  const [localDirDraft, setLocalDirDraft] = useState<LocalDirEntry>({
+    path: "",
+    branch: null,
+  });
   const [newReferences, setNewReferences] = useState<string[]>([]);
   const [newSkills, setNewSkills] = useState<string[]>([]);
-  const [localDirInput, setLocalDirInput] = useState("");
   const [referenceInput, setReferenceInput] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
-  // newLocalDir is the text input value for the Local Directory field
-  const [newLocalDir, setNewLocalDir] = useState("");
 
   const fetchData = useCallback(() => {
     fetchMissions()
@@ -276,6 +375,19 @@ export default function MissionsPage() {
               setNewInstruction(t.instruction);
               setNewContext(t.context);
               setNewGoals(t.goals.join("\n"));
+              if (t.profile) setNewProfile(t.profile);
+              if (t.defaultModel) setNewModel(t.defaultModel);
+              if (t.defaultProvider) setNewProvider(t.defaultProvider);
+              setNewLocalDirs(
+                normalizeLocalDirsInput(
+                  (t as MissionTemplate & { localDirs?: unknown }).localDirs,
+                ),
+              );
+              setNewReferences(
+                (t as MissionTemplate & { references?: string[] }).references ??
+                  [],
+              );
+              setNewSkills(t.suggestedSkills || []);
               setShowCreate(true);
               templateApplied.current = true;
               window.history.replaceState({}, "", "/missions");
@@ -335,11 +447,12 @@ export default function MissionsPage() {
     const parts: string[] = [];
 
     // 1. WORKING DIRECTORIES — highest priority
-    if (newLocalDirs.length > 0) {
+    const dirsNorm = normalizeLocalDirsInput(newLocalDirs);
+    if (dirsNorm.length > 0) {
       parts.push(
         "## Working Directories\n" +
         "Focus all work within the following directories:\n" +
-        newLocalDirs.map((d) => `  - ${d}`).join("\n") +
+        dirsNorm.map((d) => formatLocalDirEntryLine(d)).join("\n") +
         "\n"
       );
     }
@@ -409,6 +522,9 @@ export default function MissionsPage() {
               instruction: fullPrompt,
               goals: newGoals.split("\n").filter((g) => g.trim()),
               profile: newProfile || undefined,
+              profileName: newProfile || undefined,
+              modelId: newModel || undefined,
+              provider: newProvider || undefined,
               missionTimeMinutes: newMissionTime,
               timeoutMinutes: newTimeout,
               schedule: newDispatch === "cron" ? newSchedule : undefined,
@@ -443,6 +559,9 @@ export default function MissionsPage() {
             goals: newGoals.split("\n").filter((g) => g.trim()),
             dispatchMode: "now",
             profile: newProfile || undefined,
+            profileName: newProfile || undefined,
+            modelId: newModel || undefined,
+            provider: newProvider || undefined,
             missionTimeMinutes: newMissionTime,
             timeoutMinutes: newTimeout,
             localDirs: newLocalDirs,
@@ -479,6 +598,9 @@ export default function MissionsPage() {
           dispatchMode: newDispatch,
           schedule: newDispatch === "cron" ? newSchedule : undefined,
           profile: newProfile || undefined,
+          profileName: newProfile || undefined,
+          modelId: newModel || undefined,
+          provider: newProvider || undefined,
           missionTimeMinutes: newMissionTime,
           timeoutMinutes: newTimeout,
           localDirs: newLocalDirs,
@@ -495,10 +617,12 @@ export default function MissionsPage() {
           setNewInstruction("");
           setNewContext("");
           setNewGoals("");
+          setNewModel("");
+          setNewProvider("");
           setNewLocalDirs([]);
+          setLocalDirDraft({ path: "", branch: null });
           setNewReferences([]);
           setNewSkills([]);
-          setNewLocalDir("");
           setShowCreate(false);
           fetchData();
           setDispatching(false);
@@ -570,8 +694,8 @@ export default function MissionsPage() {
         : "",
     );
     setNewGoals(m.goals?.join("\n") ?? "");
-    setNewLocalDirs(m.localDirs ?? []);
-    setNewLocalDir("");
+    setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
+    setLocalDirDraft({ path: "", branch: null });
     setNewReferences(m.references ?? []);
     setNewSkills(m.skills ?? []);
     // Auto-set dispatch mode to "now" for completed/failed missions (re-dispatch)
@@ -609,7 +733,17 @@ export default function MissionsPage() {
       payload.goals = newGoals.split("\n").filter((g) => g.trim());
       payload.localDirs = newLocalDirs;
       payload.references = newReferences;
-      payload.skills = newSkills;
+      payload.suggestedSkills = newSkills;
+      payload.profile = newProfile;
+      payload.defaultModel =
+        typeof newModel === "string" && newModel.trim() !== ""
+          ? newModel.trim()
+          : undefined;
+      payload.defaultProvider =
+        typeof newProvider === "string" && newProvider.trim() !== ""
+          ? newProvider.trim()
+          : undefined;
+      payload.timeoutMinutes = newTimeout;
       if (!editingTemplateId) {
         payload.dispatchMode = newDispatch;
         payload.schedule = newSchedule;
@@ -658,6 +792,23 @@ export default function MissionsPage() {
     if (t.dispatchMode)
       setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
     if (t.schedule) setNewSchedule(t.schedule);
+    setNewProfile(t.profile || "");
+    setNewModel(t.defaultModel || "");
+    setNewProvider(t.defaultProvider || "");
+    setNewLocalDirs(
+      normalizeLocalDirsInput(
+        (t as MissionTemplate & { localDirs?: unknown }).localDirs,
+      ),
+    );
+    setLocalDirDraft({ path: "", branch: null });
+    setNewReferences(
+      (t as MissionTemplate & { references?: string[] }).references ?? [],
+    );
+    setNewSkills(t.suggestedSkills || []);
+    const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
+    if (typeof tm === "number" && Number.isFinite(tm)) {
+      setNewTimeout(tm);
+    }
     setShowTemplateManager(false);
     setShowTemplateEditor(true);
   };
@@ -684,9 +835,22 @@ export default function MissionsPage() {
     setNewContext(t.context || "");
     setNewGoals((t.goals || []).join("\n"));
     setNewProfile(t.profile || "");
-    setNewLocalDirs((t as MissionTemplate & { localDirs?: string[] }).localDirs ?? []);
-    setNewReferences((t as MissionTemplate & { references?: string[] }).references ?? []);
+    setNewModel(t.defaultModel || "");
+    setNewProvider(t.defaultProvider || "");
+    setNewLocalDirs(
+      normalizeLocalDirsInput(
+        (t as MissionTemplate & { localDirs?: unknown }).localDirs,
+      ),
+    );
+    setLocalDirDraft({ path: "", branch: null });
+    setNewReferences(
+      (t as MissionTemplate & { references?: string[] }).references ?? [],
+    );
     setNewSkills(t.suggestedSkills || []);
+    const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
+    if (typeof tm === "number" && Number.isFinite(tm)) {
+      setNewTimeout(tm);
+    }
     if (t.dispatchMode)
       setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
     if (t.schedule) setNewSchedule(t.schedule);
@@ -1026,71 +1190,60 @@ export default function MissionsPage() {
                 </p>
               </div>
 
-              {/* Working Directories */}
+              {/* Local Directories */}
               <div>
                 <label className="text-xs text-white/40 font-mono block mb-1">
-                  Working Directories{" "}
+                  Local Directories{" "}
                   <span className="text-white/20">(optional)</span>
                 </label>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
+                  <LocalDirRow
+                    mode="draft"
+                    entry={localDirDraft}
+                    onChange={setLocalDirDraft}
+                    onAdd={() => {
+                      const p = localDirDraft.path.trim();
+                      if (!p) return;
+                      if (newLocalDirs.some((d) => d.path === p)) return;
+                      setNewLocalDirs((d) => [
+                        ...d,
+                        {
+                          path: p,
+                          branch: localDirDraft.branch || null,
+                        },
+                      ]);
+                      setLocalDirDraft({ path: "", branch: null });
+                    }}
+                  />
+                  {newLocalDirs.length > 0 && (
+                    <div className="text-[10px] text-white/30 font-mono uppercase tracking-wider">
+                      Added directories
+                    </div>
+                  )}
                   {newLocalDirs.map((dir, i) => (
                     <div
-                      key={i}
-                      className="flex items-center gap-2 bg-dark-800/50 border border-neon-cyan/20 rounded-lg px-3 py-1.5"
+                      key={`${dir.path}-${i}`}
+                      className="rounded-lg border border-neon-cyan/15 bg-dark-800/30 px-2 py-2"
                     >
-                      <span className="text-xs font-mono text-neon-cyan truncate flex-1">
-                        {dir}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
+                      <LocalDirRow
+                        mode="saved"
+                        entry={dir}
+                        onChange={(next) =>
+                          setNewLocalDirs((d) =>
+                            d.map((x, j) => (j === i ? next : x)),
+                          )
+                        }
+                        onDelete={() =>
                           setNewLocalDirs((d) => d.filter((_, j) => j !== i))
                         }
-                        className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      />
                     </div>
                   ))}
-                  <div className="flex gap-2">
-                    <input
-                      value={localDirInput}
-                      onChange={(e) => setLocalDirInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          if (localDirInput.trim()) {
-                            setNewLocalDirs((d) => [
-                              ...d,
-                              localDirInput.trim(),
-                            ]);
-                            setLocalDirInput("");
-                          }
-                        }
-                      }}
-                      placeholder="~/projects/my-app/"
-                      className="flex-1 bg-dark-800/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (localDirInput.trim()) {
-                          setNewLocalDirs((d) => [
-                            ...d,
-                            localDirInput.trim(),
-                          ]);
-                          setLocalDirInput("");
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 text-xs text-neon-cyan hover:bg-neon-cyan/20 font-mono transition-colors"
-                    >
-                      + Add
-                    </button>
-                  </div>
                 </div>
                 <p className="text-[10px] text-white/20 font-mono mt-0.5">
                   Directories the agent should focus work within. Injected as
-                  highest-priority section in the mission prompt.
+                  highest-priority section in the mission prompt. Use Browse to
+                  pick a path under allowed workspace roots.
                 </p>
               </div>
 
@@ -1164,69 +1317,6 @@ export default function MissionsPage() {
                 </p>
               </div>
 
-              {/* Local Directory */}
-              <div>
-                <label className="text-xs text-white/40 font-mono block mb-1">
-                  Local Directory{" "}
-                  <span className="text-white/20">(optional)</span>
-                </label>
-                <div className="space-y-2">
-                  {newLocalDirs.map((dir, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 bg-dark-800/50 border border-neon-cyan/20 rounded-lg px-3 py-1.5"
-                    >
-                      <span className="text-xs font-mono text-neon-cyan truncate flex-1">
-                        {dir}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNewLocalDirs((r) => r.filter((_, j) => j !== i))
-                        }
-                        className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  <div className="flex gap-2">
-                    <input
-                      value={newLocalDir}
-                      onChange={(e) => setNewLocalDir(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          if (newLocalDir.trim() && !newLocalDirs.includes(newLocalDir.trim())) {
-                            setNewLocalDirs((r) => [...r, newLocalDir.trim()]);
-                            setNewLocalDir("");
-                          }
-                        }
-                      }}
-                      placeholder="~/control-hub/, ~/projects/my-app/..."
-                      className="flex-1 bg-dark-800/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (newLocalDir.trim() && !newLocalDirs.includes(newLocalDir.trim())) {
-                          setNewLocalDirs((r) => [...r, newLocalDir.trim()]);
-                          setNewLocalDir("");
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 text-xs text-neon-cyan hover:bg-neon-cyan/20 font-mono transition-colors"
-                    >
-                      + Add
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-white/20 font-mono mt-0.5">
-                  Directories the agent should focus on. Added as &quot;Working
-                  Directories&quot; at the top of the prompt — takes priority
-                  over general descriptions.
-                </p>
-              </div>
-
               {/* Skills */}
               <div>
                 <label className="text-xs text-white/40 font-mono block mb-1">
@@ -1240,9 +1330,8 @@ export default function MissionsPage() {
                   max={10}
                 />
                 <p className="text-[10px] text-white/20 font-mono mt-0.5">
-                  Skills guide the agent&apos;s approach. Filtered by the
-                  selected profile. Added as &quot;Recommended Skills&quot; in
-                  the prompt.
+                  Showing only skills enabled for this profile. Added as
+                  &quot;Recommended Skills&quot; in the prompt.
                 </p>
               </div>
 
@@ -1258,36 +1347,22 @@ export default function MissionsPage() {
                   placeholder="Gather data&#10;Analyze findings&#10;Write report"
                 />
               </div>
-              {/* Mission Settings */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs text-white/40 font-mono mb-1 block">
-                    Mission Scope
-                  </label>
-                  <MissionTimeSelector
-                    value={newMissionTime}
-                    onChange={setNewMissionTime}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-white/40 font-mono mb-1 block">
-                    Agent Profile
-                  </label>
-                  <ProfileSelector
-                    value={newProfile}
-                    onChange={setNewProfile}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-white/40 font-mono mb-1 block">
-                    Timeout (Advanced)
-                  </label>
-                  <TimeoutSelector
-                    value={newTimeout}
-                    onChange={setNewTimeout}
-                  />
-                </div>
-              </div>
+              {/* Mission Settings — agent & runtime card */}
+              <AgentRuntimeDefaultsCard
+                profileId={newProfile}
+                onProfileChange={setNewProfile}
+                missionTimeMinutes={newMissionTime}
+                onMissionTimeChange={setNewMissionTime}
+                timeoutMinutes={newTimeout}
+                onTimeoutChange={setNewTimeout}
+                modelId={newModel}
+                provider={newProvider}
+                onModelChange={(mid, prov) => {
+                  setNewModel(mid);
+                  setNewProvider(prov);
+                }}
+                timeoutHeading="Timeout (Advanced)"
+              />
               <div className="flex items-center gap-3">
                 <label className="text-xs text-white/40 font-mono">
                   Dispatch:
@@ -1830,7 +1905,7 @@ export default function MissionsPage() {
           title={editingTemplateId ? "Edit Template" : "Save as Template"}
           icon={editingTemplateId ? Edit3 : Save}
           iconColor="text-neon-cyan"
-          size="lg"
+          size="xl"
           footer={
             <>
               <Button
@@ -1913,6 +1988,132 @@ export default function MissionsPage() {
                 minRows={2}
                 maxRows={6}
                 placeholder="Step 1&#10;Step 2&#10;Step 3"
+              />
+            </div>
+            <AgentRuntimeDefaultsCard
+              profileId={newProfile}
+              onProfileChange={setNewProfile}
+              missionTimeMinutes={newMissionTime}
+              onMissionTimeChange={setNewMissionTime}
+              timeoutMinutes={newTimeout}
+              onTimeoutChange={setNewTimeout}
+              modelId={newModel}
+              provider={newProvider}
+              onModelChange={(mid, prov) => {
+                setNewModel(mid);
+                setNewProvider(prov);
+              }}
+              modelPickerId="template-model-picker"
+              timeoutHeading="Timeout"
+            />
+            <div>
+              <label className="text-xs text-white/40 font-mono block mb-1">
+                Local Directories{" "}
+                <span className="text-white/20">(optional)</span>
+              </label>
+              <div className="space-y-2">
+                <LocalDirRow
+                  mode="draft"
+                  entry={localDirDraft}
+                  onChange={setLocalDirDraft}
+                  onAdd={() => {
+                    const p = localDirDraft.path.trim();
+                    if (!p) return;
+                    if (newLocalDirs.some((d) => d.path === p)) return;
+                    setNewLocalDirs((d) => [
+                      ...d,
+                      { path: p, branch: localDirDraft.branch || null },
+                    ]);
+                    setLocalDirDraft({ path: "", branch: null });
+                  }}
+                />
+                {newLocalDirs.map((dir, i) => (
+                  <div
+                    key={`tmpl-${dir.path}-${i}`}
+                    className="rounded-lg border border-neon-cyan/15 bg-dark-800/30 px-2 py-2"
+                  >
+                    <LocalDirRow
+                      mode="saved"
+                      entry={dir}
+                      onChange={(next) =>
+                        setNewLocalDirs((d) =>
+                          d.map((x, j) => (j === i ? next : x)),
+                        )
+                      }
+                      onDelete={() =>
+                        setNewLocalDirs((d) => d.filter((_, j) => j !== i))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-white/40 font-mono block mb-1">
+                Key References{" "}
+                <span className="text-white/20">(optional)</span>
+              </label>
+              <div className="space-y-1.5">
+                {newReferences.map((ref, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 bg-dark-800/50 border border-neon-pink/20 rounded-lg px-3 py-1.5"
+                  >
+                    <span className="text-xs font-mono text-neon-pink truncate flex-1">
+                      {ref}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewReferences((r) => r.filter((_, j) => j !== i))
+                      }
+                      className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <input
+                    value={referenceInput}
+                    onChange={(e) => setReferenceInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (referenceInput.trim()) {
+                          setNewReferences((r) => [...r, referenceInput.trim()]);
+                          setReferenceInput("");
+                        }
+                      }
+                    }}
+                    placeholder="URL or file path…"
+                    className="flex-1 bg-dark-800/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-pink/50 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (referenceInput.trim()) {
+                        setNewReferences((r) => [...r, referenceInput.trim()]);
+                        setReferenceInput("");
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-neon-pink/10 border border-neon-pink/30 text-xs text-neon-pink hover:bg-neon-pink/20 font-mono transition-colors"
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-white/40 font-mono block mb-1">
+                Attached Skills{" "}
+                <span className="text-white/20">(optional, max 10)</span>
+              </label>
+              <SkillSelector
+                value={newSkills}
+                onChange={setNewSkills}
+                profileId={newProfile}
+                max={10}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">

@@ -70,12 +70,6 @@ export function setupRouteMocks() {
   jest.mock("@/lib/hermes-agent-runtime", () => ({
     getActiveHermesPaths: () => hp,
     getActiveHermesHome: () => root,
-    getDefaultModelConfig: () => ({
-      provider: "nous",
-      model: "xiaomi/mimo-v2-pro",
-      base_url: "",
-      api_key: "",
-    }),
     getAgentLlmEndpoints: () => ({
       apiUrl: "http://127.0.0.1:9/v1/chat/completions",
       gatewayBase: "http://127.0.0.1:9",

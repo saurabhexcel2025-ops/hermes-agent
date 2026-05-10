@@ -26,6 +26,7 @@ import {
 } from "../agent-backend/types";
 import type { AgentBackend } from "../agent-backend";
 import { logApiError } from "../api-logger";
+import { getDefaultModel } from "../models-repository";
 import { randomUUID } from "crypto";
 
 // ── Hermes profile shape (what Hermes stores on disk) ───────────
@@ -36,6 +37,82 @@ interface HermesProfileDisk {
   role?: string;
   status?: string;
   config?: Record<string, unknown>;
+}
+
+// ── Hermes CLI dispatch helpers ─────────────────────────────────
+//
+// Builds the argv for `hermes [--profile X] chat -q <prompt> [--model M]
+// [--provider P] --quiet --source <tag> --pass-session-id`. The prompt is
+// passed via env var (CH_MISSION_PROMPT) when invoked through bash, so
+// these argv entries are deliberately prompt-free — see
+// spawnHermesChatWithStatusCallback below.
+
+interface BuildHermesChatArgvInput {
+  profileName?: string;
+  modelId?: string;
+  provider?: string;
+  source: string;
+}
+
+export function buildHermesChatArgv(input: BuildHermesChatArgvInput): string[] {
+  const argv: string[] = [];
+  if (input.profileName && input.profileName.trim().length > 0) {
+    argv.push("--profile", input.profileName);
+  }
+  argv.push("chat");
+  if (input.modelId && input.modelId.trim().length > 0) {
+    argv.push("--model", input.modelId);
+  }
+  if (input.provider && input.provider.trim().length > 0) {
+    argv.push("--provider", input.provider);
+  }
+  argv.push("--quiet", "--source", input.source, "--pass-session-id");
+  return argv;
+}
+
+function shellQuote(value: string): string {
+  if (value.length === 0) return "''";
+  if (/^[A-Za-z0-9_./:@%+=-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+interface SpawnHermesChatInput {
+  argv: string[];
+  prompt: string;
+  missionId: string;
+  statusFile: string;
+  outputFile: string;
+}
+
+/**
+ * Spawn `hermes chat` detached, wrapped in a bash one-liner that writes a
+ * `<missionId>.status.json` callback file when hermes exits. The callback
+ * file is what {@link HermesAgentBackend.getMissionStatus} polls.
+ *
+ * The prompt is passed via the `CH_MISSION_PROMPT` env var to avoid shell
+ * escaping pitfalls.
+ */
+export function spawnHermesChatWithStatusCallback(input: SpawnHermesChatInput): void {
+  const cliPrefix = ["hermes", ...input.argv]
+    .map((part) => shellQuote(part))
+    .join(" ");
+  const promptArg = `-q "$CH_MISSION_PROMPT"`;
+  const outputRedirect = `> ${shellQuote(input.outputFile)} 2>&1`;
+  const statusOk = `printf '{"status":"successful","exit_code":%s,"completed_at":"%s"}\\n' "$ec" "$(date -u +%FT%TZ)" > ${shellQuote(input.statusFile)}`;
+  const statusFail = `printf '{"status":"failed","exit_code":%s,"completed_at":"%s","error":"hermes chat exited %s"}\\n' "$ec" "$(date -u +%FT%TZ)" "$ec" > ${shellQuote(input.statusFile)}`;
+  const wrapper = `${cliPrefix} ${promptArg} ${outputRedirect}; ec=$?; if [ "$ec" -eq 0 ]; then ${statusOk}; else ${statusFail}; fi`;
+
+  const child = spawn("bash", ["-c", wrapper], {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      CH_MISSION_PROMPT: input.prompt,
+      CH_MISSION_ID: input.missionId,
+    },
+  });
+  child.unref();
 }
 
 // ── Tool seeds (what Hermes provides by default) ────────────────
@@ -244,50 +321,84 @@ export class HermesAgentBackend implements AgentBackend {
       name: input.name,
       prompt: input.prompt,
       profileId: input.profileId,
-      status: "pending",
+      status: "dispatched",
       createdAt: now,
       updatedAt: now,
     };
 
-    // Persist mission JSON to CH data dir (Hermes will pick it up from there)
     const missionsDir = PATHS.missions;
     if (!existsSync(missionsDir)) {
       mkdirSync(missionsDir, { recursive: true });
     }
-    writeFileSync(
-      join(missionsDir, `${id}.json`),
-      JSON.stringify(mission, null, 2)
-    );
 
-    // Spawn hermes run-mission in background
-    const args = [
-      "run-mission",
-      "--id", id,
-      "--name", input.name,
-      "--prompt", input.prompt,
-    ];
-    if (input.profileId) {
-      args.push("--profile", input.profileId);
+    const missionFile = join(missionsDir, `${id}.json`);
+    const statusFile = join(missionsDir, `${id}.status.json`);
+    const outputFile = join(missionsDir, `${id}.output.log`);
+
+    writeFileSync(missionFile, JSON.stringify(mission, null, 2));
+
+    // Resolve the agent default from the registry when the caller didn't pin
+    // a specific model. If nothing is registered, fall through to Hermes's
+    // own ~/.hermes/config.yaml (kept in sync with the registry by PR 5).
+    let modelId = input.modelId;
+    let provider = input.provider;
+    if (!modelId) {
+      try {
+        const def = getDefaultModel("agent");
+        if (def) {
+          modelId = def.modelId;
+          if (!provider) provider = def.provider;
+        }
+      } catch (err) {
+        logApiError(
+          "HermesAgentBackend.dispatchMission",
+          "registry default lookup",
+          err
+        );
+      }
     }
 
-    const child = spawn("hermes", args, {
-      cwd: process.cwd(),
-      detached: true,
-      stdio: "ignore",
+    const cliArgv = buildHermesChatArgv({
+      profileName: input.profileName,
+      modelId,
+      provider,
+      source: "control-hub-mission",
     });
-    child.unref();
+
+    spawnHermesChatWithStatusCallback({
+      argv: cliArgv,
+      prompt: input.prompt,
+      missionId: id,
+      statusFile,
+      outputFile,
+    });
 
     return mission;
   }
 
   async getMissionStatus(missionId: string): Promise<MissionStatus> {
     try {
-      const path = join(PATHS.missions, `${missionId}.json`);
-      if (!existsSync(path)) return "pending";
-      const mission = JSON.parse(readFileSync(path, "utf-8"));
-      return (mission.status as MissionStatus) ?? "pending";
+      const statusPath = join(PATHS.missions, `${missionId}.status.json`);
+      if (existsSync(statusPath)) {
+        const data = JSON.parse(readFileSync(statusPath, "utf-8"));
+        const status = data?.status as MissionStatus | undefined;
+        if (
+          status === "queued" ||
+          status === "dispatched" ||
+          status === "successful" ||
+          status === "failed"
+        ) {
+          return status;
+        }
+      }
+      // No callback file yet — mission record exists but hermes is still running.
+      const missionPath = join(PATHS.missions, `${missionId}.json`);
+      if (existsSync(missionPath)) {
+        return "dispatched";
+      }
+      return "queued";
     } catch {
-      return "pending";
+      return "queued";
     }
   }
 

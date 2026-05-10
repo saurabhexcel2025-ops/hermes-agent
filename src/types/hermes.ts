@@ -354,10 +354,6 @@ export interface CompressionConfig {
 
   target_ratio: number;
 
-  summary_model: string;
-
-  summary_provider: string;
-
   protect_last_n: number;
 
 }
@@ -560,6 +556,17 @@ export type DispatchMode = "save" | "now" | "cron";
 
 
 
+/** Working directory with optional git branch hint (prompt-only). */
+export interface LocalDirEntry {
+
+  path: string;
+
+  branch?: string | null;
+
+}
+
+
+
 export interface Mission {
 
   id: string;
@@ -572,7 +579,7 @@ export interface Mission {
 
   skills: string[];
 
-  localDirs?: string[];
+  localDirs?: LocalDirEntry[];
 
   references?: string[];
 

@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getAgentLlmEndpoints } from "./hermes-agent-runtime";
+import { getModelWithKey, type ModelWithKey } from "./models-repository";
 
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
@@ -13,7 +14,14 @@ export interface LLMMessage {
 export interface LLMOptions {
   temperature?: number;
   maxTokens?: number;
+  /** Free-form model string passed to the gateway when modelId is not set. */
   model?: string;
+  /**
+   * Registry model id. When provided, the model's `base_url` and joined
+   * credential decide whether to call the provider directly or fall through
+   * to the Hermes Gateway path.
+   */
+  modelId?: string;
 }
 
 export interface LLMResponse {
@@ -70,7 +78,14 @@ async function probeGatewayHealth(): Promise<void> {
 
 /**
  * Call the configured LLM endpoint with retry and timeout.
- * Performs a gateway health probe before attempting the call.
+ *
+ * Resolution order:
+ *   1. `opts.modelId` set + the registry row carries a `baseUrl` and joined
+ *      API key → call that provider directly with `Authorization: Bearer`.
+ *   2. `opts.modelId` set without `baseUrl` → use the registry's `modelId`
+ *      string as the gateway model name and fall through to the Hermes
+ *      Gateway path.
+ *   3. Otherwise → use `opts.model` (or "hermes") with the gateway.
  */
 export async function callLLM(
   messages: LLMMessage[],
@@ -79,13 +94,107 @@ export async function callLLM(
   const {
     temperature = 0.8,
     maxTokens = 4096,
-    model = "hermes",
+    model: optModel,
+    modelId,
   } = opts;
+
+  let resolved: ModelWithKey | null = null;
+  if (modelId) {
+    try {
+      resolved = getModelWithKey(modelId);
+    } catch {
+      resolved = null;
+    }
+  }
+
+  // ── Direct-provider path ──────────────────────────────────
+  if (resolved && resolved.baseUrl && resolved.apiKey) {
+    return callDirectProvider({
+      messages,
+      temperature,
+      maxTokens,
+      model: resolved.modelId,
+      baseUrl: resolved.baseUrl,
+      apiKey: resolved.apiKey,
+    });
+  }
+
+  // ── Gateway path ──────────────────────────────────────────
+  const gatewayModel =
+    resolved?.modelId ?? optModel ?? "hermes";
 
   const { apiUrl } = getAgentLlmEndpoints();
 
-  // Check gateway availability before attempting the call
   await probeGatewayHealth();
+  return callGateway({
+    messages,
+    temperature,
+    maxTokens,
+    model: gatewayModel,
+    apiUrl,
+  });
+}
+
+interface CallParams {
+  messages: LLMMessage[];
+  temperature: number;
+  maxTokens: number;
+  model: string;
+}
+
+interface CallGatewayInput extends CallParams {
+  apiUrl: string;
+}
+
+interface CallDirectInput extends CallParams {
+  baseUrl: string;
+  apiKey: string;
+}
+
+async function callDirectProvider(input: CallDirectInput): Promise<LLMResponse> {
+  const url = input.baseUrl.replace(/\/$/, "") + "/chat/completions";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300_000);
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${input.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: input.model,
+        messages: input.messages,
+        temperature: input.temperature,
+        max_tokens: input.maxTokens,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!resp.ok) {
+      throw new Error(
+        `LLM provider error ${resp.status}: ${resp.statusText}`
+      );
+    }
+
+    const data = await resp.json();
+    return {
+      content: data.choices?.[0]?.message?.content?.trim() ?? "",
+      model: data.model ?? input.model,
+      usage: data.usage,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callGateway(input: CallGatewayInput): Promise<LLMResponse> {
+  const apiUrl = input.apiUrl;
+  const model = input.model;
+  const temperature = input.temperature;
+  const maxTokens = input.maxTokens;
+  const messages = input.messages;
 
   const maxRetries = 3;
   let lastError: Error | null = null;

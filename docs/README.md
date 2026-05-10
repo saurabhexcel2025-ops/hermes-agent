@@ -7,6 +7,7 @@
 | [DEPLOY.md](DEPLOY.md) | Deploy, **`ch-deploy`**, TLS, Docker, ports, scripts layout |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [TESTING.md](TESTING.md) | Jest, Playwright, CI, and navigation-matrix upkeep |
+| [HARDWARE-CRON.md](HARDWARE-CRON.md) | Hardware cron presets (`scripts/hardware/`), including Hindsight backup |
 | [SUPPORT.md](SUPPORT.md) | Where to get help; upstream vs this repo |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |

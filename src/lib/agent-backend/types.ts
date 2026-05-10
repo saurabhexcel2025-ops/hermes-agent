@@ -2,6 +2,8 @@
 // agent-backend/types.ts — Shared types for all agent backends
 // ═══════════════════════════════════════════════════════════════
 
+import type { LocalDirEntry } from "@/types/hermes";
+
 // ── Agent Profile ──────────────────────────────────────────────
 
 export interface AgentProfile {
@@ -23,13 +25,13 @@ export interface CreateProfileInput {
 }
 
 // ── Mission ────────────────────────────────────────────────────
+//
+// Status enum is canonical from the V1 mission JSON schema. The legacy
+// "pending|running|completed|failed|cancelled" enum was deleted in PR 1
+// of the user-models-registry rollout — all mission consumers must use
+// the four-state V1 enum below.
 
-export type MissionStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type MissionStatus = "queued" | "dispatched" | "successful" | "failed";
 
 export interface Mission {
   id: string;
@@ -42,7 +44,7 @@ export interface Mission {
   sessionId?: string;
   createdAt: string;
   updatedAt: string;
-  localDirs?: string[];
+  localDirs?: LocalDirEntry[];
   references?: string[];
   skills?: string[];
   goals?: string[];
@@ -52,6 +54,15 @@ export interface DispatchMissionInput {
   name: string;
   prompt: string;
   profileId?: string;
+  /** Hermes profile name (passed to `hermes --profile <name>`). */
+  profileName?: string;
+  /** Concrete model id, e.g. `anthropic/claude-sonnet-4`. */
+  modelId?: string;
+  /**
+   * Inference provider for the chosen model. Must match Hermes CLI
+   * `--provider` choices (see src/lib/hermes-providers.ts once PR 3 lands).
+   */
+  provider?: string;
 }
 
 // ── Tool Definition ─────────────────────────────────────────────

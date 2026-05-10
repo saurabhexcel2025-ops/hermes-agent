@@ -132,7 +132,7 @@ export async function syncCardWithMissions(
 
   for (const link of links) {
     const status = await backend.getMissionStatus(link.missionId);
-    if (status !== "completed") {
+    if (status !== "successful") {
       allComplete = false;
       break;
     }

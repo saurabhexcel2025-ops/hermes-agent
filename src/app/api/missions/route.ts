@@ -12,6 +12,8 @@ import {
   deleteMission,
   buildMissionPrompt,
 } from "@/lib/mission-repository";
+import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
+import type { LocalDirEntry } from "@/types/hermes";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
@@ -59,6 +61,9 @@ export async function POST(request: NextRequest) {
         name,
         instruction,
         profileId,
+        profileName,
+        modelId,
+        provider,
         localDirs,
         references,
         skills,
@@ -70,7 +75,10 @@ export async function POST(request: NextRequest) {
         name?: string;
         instruction?: string;
         profileId?: string;
-        localDirs?: string[];
+        profileName?: string;
+        modelId?: string;
+        provider?: string;
+        localDirs?: unknown;
         references?: string[];
         skills?: string[];
         goals?: string[];
@@ -83,42 +91,44 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "instruction is required" }, { status: 400 });
       }
 
-      // Build the full prompt server-side using buildMissionPrompt
+      const dirsNorm = normalizeLocalDirsInput(localDirs);
+
       const prompt = buildMissionPrompt({
         instruction: instruction.trim(),
-        localDirs: localDirs ?? [],
+        localDirs: dirsNorm,
         references: references ?? [],
         skills: skills ?? [],
         goals: goals ?? [],
         context: context ?? "",
       });
 
-      // Create mission record
       const mission = createMission({
         name: (name as string)?.trim() || "Untitled Mission",
         prompt,
         profileId,
-        localDirs: localDirs ?? [],
+        localDirs: dirsNorm,
         references: references ?? [],
         skills: skills ?? [],
         goals: goals ?? [],
       });
 
-      // Only dispatch if not "save" mode
       const isSaveMode = dispatchMode === "save";
 
       if (!isSaveMode) {
-        updateMission(mission.id, { status: "running" });
+        updateMission(mission.id, { status: "dispatched" });
 
         try {
           const dispatched = await agentBackend.dispatchMission({
             name: mission.name,
             prompt: mission.prompt,
             profileId: mission.profileId,
+            profileName,
+            modelId,
+            provider,
           });
           updateMission(mission.id, {
             sessionId: dispatched.sessionId,
-            status: "running",
+            status: "dispatched",
           });
         } catch (err) {
           logApiError("POST /api/missions", "dispatch", err);
@@ -141,7 +151,7 @@ export async function POST(request: NextRequest) {
         status?: string;
         result?: string;
         instruction?: string;
-        localDirs?: string[];
+        localDirs?: unknown;
         references?: string[];
         skills?: string[];
         goals?: string[];
@@ -163,7 +173,7 @@ export async function POST(request: NextRequest) {
         status?: MissionStatus;
         result?: string;
         prompt?: string;
-        localDirs?: string[];
+        localDirs?: LocalDirEntry[];
         references?: string[];
         skills?: string[];
         goals?: string[];
@@ -171,7 +181,7 @@ export async function POST(request: NextRequest) {
       if (status) updates.status = status as MissionStatus;
       if (result !== undefined) updates.result = result;
       if (prompt !== undefined) updates.prompt = prompt;
-      if (localDirs !== undefined) updates.localDirs = localDirs;
+      if (localDirs !== undefined) updates.localDirs = normalizeLocalDirsInput(localDirs);
       if (references !== undefined) updates.references = references;
       if (skills !== undefined) updates.skills = skills;
       if (goals !== undefined) updates.goals = goals;
@@ -194,12 +204,17 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Cancel Mission ─────────────────────────────────────────
+    // The unified V1 status enum has no `cancelled` state — cancellations
+    // are recorded as `failed` with an explicit "Cancelled by user" result.
     if (action === "cancel") {
       const { id } = body as { id?: string };
       if (!id)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
-      const mission = updateMission(id, { status: "cancelled" });
+      const mission = updateMission(id, {
+        status: "failed",
+        result: "Cancelled by user",
+      });
       if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 

@@ -16,6 +16,7 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { LoadingSpinner, EmptyState, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
+import { timeAgo } from "@/lib/utils";
 
 interface Memory {
   id?: string;
@@ -44,6 +45,18 @@ function parseMemoryContent(raw: string): { text: string; type: string; tags: st
         .filter(Boolean)
     : [];
   return { text, type, tags };
+}
+
+/** Badge colour for Hindsight `fact_type` / parsed type (aligned with holographic memory styling). */
+function hindsightFactTypeBadgeColor(
+  t: string,
+): "cyan" | "purple" | "orange" | "green" | "gray" {
+  const n = t.toLowerCase();
+  if (n === "observation") return "cyan";
+  if (n === "world") return "purple";
+  if (n === "directive") return "orange";
+  if (n === "experience") return "green";
+  return "gray";
 }
 
 /** Parse the reflect response Python repr — extract text='...' from the repr string */
@@ -79,7 +92,7 @@ export default function HindsightBrowser() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
-  const [hasRecalled, setHasRecalled] = useState(false);
+  const [, setHasRecalled] = useState(false);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("memories");
   const [reflectResult, setReflectResult] = useState<string | null>(null);
@@ -615,7 +628,7 @@ export default function HindsightBrowser() {
             <EmptyState
               icon={Brain}
               title="No memories yet"
-              description="Store your first memory with Add Memory or ask the agent to retain one."
+              description="Hermes will start storing them as you converse. You can also add one with Add Memory above."
             />
           ) : (
             <div className="space-y-3">
@@ -628,17 +641,30 @@ export default function HindsightBrowser() {
                 >
                   <p className="text-sm text-white/70 leading-relaxed mb-2">{text}</p>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-white/30">
-                    {type && type !== "unknown" && <Badge color="gray" size="sm">{type}</Badge>}
-                    {tags.length > 0 && tags.map((tag) => (
-                      <span key={tag} className="bg-pink-500/10 text-pink-300 px-1.5 py-0.5 rounded">{tag}</span>
-                    ))}
+                    {type && type !== "unknown" && (
+                      <Badge color={hindsightFactTypeBadgeColor(type)} size="sm">
+                        {type}
+                      </Badge>
+                    )}
+                    {tags.length > 0 &&
+                      tags.map((tag) => (
+                        <Badge key={tag} color="pink" size="sm">
+                          {tag}
+                        </Badge>
+                      ))}
                     {memory.score !== undefined && (
-                      <span>Relevance: {(memory.score * 100).toFixed(0)}%</span>
+                      <span>
+                        {typeof memory.score === "number" &&
+                        memory.score > 0 &&
+                        memory.score <= 1
+                          ? `Relevance: ${(memory.score * 100).toFixed(0)}%`
+                          : `Proof count: ${memory.score}`}
+                      </span>
                     )}
                     {memory.created_at && (
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(memory.created_at).toLocaleDateString()}
+                        {timeAgo(memory.created_at)}
                       </span>
                     )}
                     {memory.metadata && Object.keys(memory.metadata).length > 0 && (
@@ -676,7 +702,18 @@ export default function HindsightBrowser() {
             <EmptyState
               icon={FileText}
               title="No directives yet"
-              description="Directives are hard rules injected into agent prompts. Create one to control agent behavior."
+              description="Directives are hard rules injected into agent prompts."
+              action={
+                <Button
+                  variant="primary"
+                  color="pink"
+                  size="sm"
+                  icon={Plus}
+                  onClick={() => setShowDirectiveModal(true)}
+                >
+                  Create your first directive
+                </Button>
+              }
             />
           ) : (
             <div className="space-y-3">
@@ -760,6 +797,17 @@ export default function HindsightBrowser() {
               icon={Settings}
               title="No mental models yet"
               description="Mental models are cached reflect analyses. Create one with a source query and Hindsight will generate and maintain the content."
+              action={
+                <Button
+                  variant="primary"
+                  color="pink"
+                  size="sm"
+                  icon={Plus}
+                  onClick={() => setShowModelModal(true)}
+                >
+                  Create your first mental model
+                </Button>
+              }
             />
           ) : (
             <div className="space-y-3">
@@ -783,7 +831,7 @@ export default function HindsightBrowser() {
                         {m.last_refreshed_at && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            Updated {new Date(m.last_refreshed_at).toLocaleDateString()}
+                            Updated {timeAgo(m.last_refreshed_at)}
                           </span>
                         )}
                         {m.tags.length > 0 && (

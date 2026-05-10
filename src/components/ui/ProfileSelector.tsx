@@ -15,6 +15,8 @@ interface ProfileSelectorProps {
   onChange: (profile: string) => void;
   compact?: boolean;
   placeholder?: string;
+  /** `inline` — name + description in trigger (default). `tooltip` — name only; description in native tooltip. */
+  subtitle?: "inline" | "tooltip";
 }
 
 export default function ProfileSelector({
@@ -22,6 +24,7 @@ export default function ProfileSelector({
   onChange,
   compact = false,
   placeholder,
+  subtitle = "inline",
 }: ProfileSelectorProps) {
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -117,30 +120,39 @@ export default function ProfileSelector({
     );
   }
 
+  const triggerTitle =
+    subtitle === "tooltip" && selected?.description
+      ? `${selected.name}\n\n${selected.description}`
+      : subtitle === "tooltip" && selected
+        ? selected.name
+        : undefined;
+
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
+        title={triggerTitle}
         className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white hover:border-white/30 transition-colors"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {loading && !fetched ? (
-            <Loader2 className="w-4 h-4 text-neon-purple animate-spin" />
+            <Loader2 className="w-4 h-4 text-neon-purple animate-spin flex-shrink-0" />
           ) : (
-            <User className="w-4 h-4 text-neon-purple" />
+            <User className="w-4 h-4 text-neon-purple flex-shrink-0" />
           )}
           {selected ? (
-            <div className="text-left">
-              <div className="font-medium">{selected.name}</div>
-              {selected.description && (
-                <div className="text-[10px] text-white/40">
+            <div className="text-left min-w-0">
+              <div className="font-medium truncate">{selected.name}</div>
+              {subtitle === "inline" && selected.description && (
+                <div className="text-[10px] text-white/40 line-clamp-2">
                   {selected.description}
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-left">
-              <div className="font-medium text-white/40">
+            <div className="text-left min-w-0">
+              <div className="font-medium text-white/40 truncate">
                 {placeholder ?? "Select profile"}
               </div>
             </div>

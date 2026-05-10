@@ -2,9 +2,7 @@
 // hermes-agent-runtime.ts — Active Hermes install + paths (single façade)
 // ═══════════════════════════════════════════════════════════════
 
-import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
-import * as yaml from "js-yaml";
 import {
   readAgentRegistry,
   getActiveAgentEntry,
@@ -40,47 +38,6 @@ export function getActiveAgentEntryOrThrow(): AgentRegistryEntry {
     throw new Error("No agents in registry");
   }
   return first;
-}
-
-export interface DefaultModelConfig {
-  model: string;
-  provider: string;
-  base_url: string;
-  api_key: string;
-}
-
-export function getDefaultModelConfig(): DefaultModelConfig {
-  try {
-    const paths = getActiveHermesPaths();
-    if (!existsSync(paths.config)) {
-      return { model: "", provider: "", base_url: "", api_key: "" };
-    }
-    const content = readFileSync(paths.config, "utf-8");
-    const parsed = yaml.load(content) as Record<string, unknown>;
-    const modelSection = parsed?.model;
-
-    if (typeof modelSection === "string") {
-      return { model: modelSection, provider: "", base_url: "", api_key: "" };
-    }
-    if (typeof modelSection === "object" && modelSection !== null) {
-      const ch = modelSection as Record<string, unknown>;
-      const defaultModel =
-        typeof ch.default === "string"
-          ? ch.default
-          : typeof ch.model === "string"
-            ? ch.model
-            : "";
-      return {
-        model: defaultModel,
-        provider: typeof ch.provider === "string" ? ch.provider : "",
-        base_url: typeof ch.base_url === "string" ? ch.base_url : "",
-        api_key: typeof ch.api_key === "string" ? ch.api_key : "",
-      };
-    }
-    return { model: "", provider: "", base_url: "", api_key: "" };
-  } catch {
-    return { model: "", provider: "", base_url: "", api_key: "" };
-  }
 }
 
 const DEFAULT_GATEWAY = "http://127.0.0.1:8642";

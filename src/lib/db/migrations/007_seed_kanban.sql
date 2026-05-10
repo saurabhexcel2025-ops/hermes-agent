@@ -1,11 +1,17 @@
 -- ============================================================
--- control-hub.db — Migration 004: Default Kanban Board Seed
+-- control-hub.db — Migration 007: Default Kanban Board Seed
 -- ============================================================
 -- Creates a useful default "Operations Board" with example cards
 -- spanning engineering, research, and operations workstreams.
+--
+-- Renamed from 004_seed_kanban.sql to 007_seed_kanban.sql to fix the
+-- pre-existing collision with 004_mission_extensions.sql (the migration
+-- runner sorts by filename and only applies migrations whose numeric
+-- prefix is greater than the recorded schema_version, so the seed
+-- previously never ran on systems where mission_extensions ran first).
 
-CREATE TABLE IF NOT EXISTS _mg4b_guard (x INTEGER);
-DROP TABLE IF EXISTS _mg4b_guard;
+CREATE TABLE IF NOT EXISTS _mg7_guard (x INTEGER);
+DROP TABLE IF EXISTS _mg7_guard;
 
 -- Default: PatterTech Operations Board
 INSERT OR IGNORE INTO kanban_boards (id, name, description, created_at, updated_at) VALUES

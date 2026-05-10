@@ -128,11 +128,11 @@ async function postRoute(body: Record<string, unknown>) {
 
 describe("POST /api/missions — update action", () => {
   it("updates mission status", async () => {
-    mockUpdateMission.mockReturnValue({ ...mockMissionData, status: "running" });
+    mockUpdateMission.mockReturnValue({ ...mockMissionData, status: "dispatched" });
 
-    const res = await postRoute({ action: "update", id: "m_test123", status: "running" });
+    const res = await postRoute({ action: "update", id: "m_test123", status: "dispatched" });
     expect(res.status).toBe(200);
-    expect(mockUpdateMission).toHaveBeenCalledWith("m_test123", { status: "running" });
+    expect(mockUpdateMission).toHaveBeenCalledWith("m_test123", { status: "dispatched" });
   });
 
   it("updates mission result", async () => {
@@ -144,23 +144,20 @@ describe("POST /api/missions — update action", () => {
   });
 
   it("returns 400 when mission id is missing", async () => {
-    const res = await postRoute({ action: "update", status: "running" });
+    const res = await postRoute({ action: "update", status: "dispatched" });
     expect(res.status).toBe(400);
   });
 
   it("returns 404 when mission not found", async () => {
     mockUpdateMission.mockReturnValue(null);
 
-    const res = await postRoute({ action: "update", id: "nonexistent", status: "running" });
+    const res = await postRoute({ action: "update", id: "nonexistent", status: "dispatched" });
     expect(res.status).toBe(404);
   });
 
   it("does NOT call withJobsFileLock for status-only updates (no cron sync)", async () => {
-    // Note: the update action does NOT sync skills/profile to cron jobs.
-    // This test documents the current behavior.
-    const res = await postRoute({ action: "update", id: "m_test123", status: "running" });
+    const res = await postRoute({ action: "update", id: "m_test123", status: "dispatched" });
     expect(res.status).toBe(200);
-    // The route does not call withJobsFileLock for update action
   });
 
   it("updates both status and result in one call", async () => {

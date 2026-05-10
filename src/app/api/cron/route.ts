@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 
-import { getActiveHermesPaths, getDefaultModelConfig } from "@/lib/hermes-agent-runtime";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
+
+import { getDefaultModel } from "@/lib/models-repository";
 
 import { logApiError } from "@/lib/api-logger";
 
@@ -271,7 +273,13 @@ export async function POST(request: NextRequest) {
 
 
 
-    const defaults = getDefaultModelConfig();
+    const registryDefault = (() => {
+      try {
+        return getDefaultModel("agent");
+      } catch {
+        return null;
+      }
+    })();
 
     const sched = parseSchedule(schedule);
 
@@ -293,9 +301,9 @@ export async function POST(request: NextRequest) {
 
       skills: skills || [],
 
-      model: model || defaults.model,
+      model: model || registryDefault?.modelId || "",
 
-      provider: defaults.provider,
+      provider: registryDefault?.provider || "",
 
       schedule: sched,
 

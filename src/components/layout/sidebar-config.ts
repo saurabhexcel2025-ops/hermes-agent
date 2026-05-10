@@ -97,7 +97,7 @@ export const configGroups: ConfigGroup[] = [
     defaultOpen: false,
     links: [
       { icon: Cpu, label: "Agent", href: "/config/agent", color: "cyan" },
-      { icon: Globe, label: "Model", href: "/config/model", color: "purple" },
+      { icon: Globe, label: "Models", href: "/config/models", color: "purple" },
       { icon: Activity, label: "Display", href: "/config/display", color: "green" },
       { icon: Layers, label: "Memory", href: "/config/memory", color: "pink" },
     ],
@@ -143,7 +143,6 @@ export const configGroups: ConfigGroup[] = [
     links: [
       { icon: MessageCircle, label: "Discord", href: "/config/discord", color: "purple" },
       { icon: Network, label: "Web", href: "/config/web", color: "green" },
-      { icon: Cpu, label: "Auxiliary Models", href: "/config/auxiliary", color: "cyan" },
       { icon: Settings2, label: "Platform Toolsets", href: "/config/platform_toolsets", color: "purple" },
       { icon: GitBranch, label: "Smart Routing", href: "/config/smart_model_routing", color: "purple" },
       { icon: Clock, label: "Human Delay", href: "/config/human_delay", color: "orange" },

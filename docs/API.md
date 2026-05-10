@@ -20,7 +20,11 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/agent/profiles` | `GET` | List available Hermes profiles. |
 | `/api/agents` | `GET` | Inspect running Hermes agent processes (implementation uses host process listing; behaviour differs by OS). |
 | `/api/config` | `GET`, `PUT` | Read/update parsed config content. |
-| `/api/config/model` | `GET`, `PUT` | Read/update model settings. |
+| `/api/models` | `GET`, `POST` | Models registry (SQLite); list / create. |
+| `/api/models/[id]` | `GET`, `PUT`, `DELETE` | One model row. |
+| `/api/models/defaults` | `GET`, `PUT` | Default model per task slot (`agent`, `hindsight`, …). |
+| `/api/credentials` | `GET`, `POST` | API key credentials (masked list). |
+| `/api/credentials/[id]` | `GET`, `PUT`, `DELETE` | One credential. |
 | `/api/cron` | `GET`, `POST`, `PUT`, `DELETE` | Manage **agent** cron jobs (Hermes `jobs.json` for the active install). |
 | `/api/cron/hardware` | `GET`, `POST`, `PUT`, `DELETE` | **Hardware** cron (system crontab): scripts/logs under `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR`; separate from agent `jobs.json`. |
 | `/api/cron/hardware/meta` | `GET` | `{ scriptsDir, logDir }` from [`getChScriptsDir()`](../src/lib/paths.ts) / [`getChHardwareLogDir()`](../src/lib/paths.ts). The Hardware Cron UI builds script paths only from `scriptsDir`. |
@@ -50,7 +54,7 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 
 ## Hardware cron notes
 
-Managed crontab lines must run a script **under** `scriptsDir` (default `CH_DATA_DIR/scripts`). `POST`/`PUT` reject any other command path. Preset scripts ship in repo **`scripts/hardware/`**; **`scripts/bootstrap/setup.sh`** copies any missing `*.sh` into `CH_DATA_DIR/scripts` during setup. Older crontab lines pointing elsewhere are ignored until edited or removed.
+Managed crontab lines must run a script **under** `scriptsDir` (default `CH_DATA_DIR/scripts`). `POST`/`PUT` reject any other command path. Preset scripts ship in repo **`scripts/hardware/`**; **`scripts/bootstrap/setup.sh`** copies any missing `*.sh` into `CH_DATA_DIR/scripts` during setup. Older crontab lines pointing elsewhere are ignored until edited or removed. See **[HARDWARE-CRON.md](HARDWARE-CRON.md)** for preset behaviour (including **`ch-backup.sh`** Hindsight snapshots via `hindsight_bridge.py`).
 
 ## Auth and Safety Notes
 

@@ -35,7 +35,7 @@ flowchart TB
 
 | Area | Role |
 |------|------|
-| Model / provider | `GET`/`PUT /api/config/model` — validated updates, masked keys, audit. |
+| Model / provider | SQLite registry + `/api/models`, `/api/credentials`, `/api/models/defaults`; UI at `/config/models`; write-through to Hermes `~/.hermes/.env` and `config.yaml`. |
 | Missions | CRUD, dispatch, templates (built-in set). |
 | Cron | CRUD against the active Hermes `jobs.json`; hardware cron under `CH_*` paths. |
 | Config / sessions / memory / gateway / logs / skills / personalities | Hermes-aligned surfaces as shipped in this repo. |
@@ -46,7 +46,7 @@ This document describes the product surface shipped in this repository.
 
 - Treat the UI and API as **same-trust**: run on a private network or behind your own access controls. Optional **`CH_REQUEST_SIGNING_SECRET`** can harden selected routes (see `src/lib/api-auth.ts`).
 
-- Config writes use whitelisted sections; model updates go through **`/api/config/model`**.
+- Config writes use whitelisted sections; model and credential updates go through **`/api/models`** and **`/api/credentials`** (see [API.md](API.md)).
 
 ## Related docs
 

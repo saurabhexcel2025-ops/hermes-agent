@@ -4,6 +4,8 @@
 
 import { db, inTransaction, uuid, now } from "./db";
 import type { Mission, MissionStatus } from "@/lib/agent-backend/types";
+import type { LocalDirEntry } from "@/types/hermes";
+import { formatLocalDirEntryLine, normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 
 // ── Row shape ─────────────────────────────────────────────────
 
@@ -44,7 +46,7 @@ function rowToMission(row: MissionRow | undefined): Mission | null {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     // Extended fields
-    localDirs: safeJsonParse(row.local_dirs, [] as string[]),
+    localDirs: normalizeLocalDirsInput(safeJsonParse(row.local_dirs, [] as unknown[])),
     references: safeJsonParse(row.references_, [] as string[]),
     skills: safeJsonParse(row.skills, [] as string[]),
     goals: safeJsonParse(row.goals, [] as string[]),
@@ -56,7 +58,7 @@ function rowToMission(row: MissionRow | undefined): Mission | null {
 
 export interface BuildPromptOptions {
   instruction: string;
-  localDirs?: string[];
+  localDirs?: LocalDirEntry[] | string[];
   references?: string[];
   skills?: string[];
   goals?: string[];
@@ -65,13 +67,15 @@ export interface BuildPromptOptions {
 
 export function buildMissionPrompt(opts: BuildPromptOptions): string {
   const parts: string[] = [];
+  const localDirsNorm = normalizeLocalDirsInput(opts.localDirs ?? []);
 
   // 1. WORKING DIRECTORIES — highest priority
-  if (opts.localDirs && opts.localDirs.length > 0) {
+  if (localDirsNorm.length > 0) {
     parts.push(
       "## Working Directories\n" +
       "Focus all work within the following directories:\n" +
-      opts.localDirs.map(d => `  - ${d}`).join("\n") + "\n"
+      localDirsNorm.map((d) => formatLocalDirEntryLine(d)).join("\n") +
+      "\n"
     );
   }
 
@@ -126,14 +130,14 @@ export function createMission(data: {
   name: string;
   prompt: string;
   profileId?: string;
-  localDirs?: string[];
+  localDirs?: LocalDirEntry[] | string[];
   references?: string[];
   skills?: string[];
   goals?: string[];
 }): Mission {
   const id = uuid();
   const ts = now();
-  const localDirs = JSON.stringify(data.localDirs ?? []);
+  const localDirs = JSON.stringify(normalizeLocalDirsInput(data.localDirs ?? []));
   const references = JSON.stringify(data.references ?? []);
   const skills = JSON.stringify(data.skills ?? []);
   const goals = JSON.stringify(data.goals ?? []);
@@ -142,7 +146,7 @@ export function createMission(data: {
     db()
       .prepare(
         `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, goals)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)`
       )
       .run(id, data.name, data.prompt, data.profileId ?? null, ts, ts, localDirs, references, skills, goals);
   });
@@ -156,7 +160,8 @@ export function updateMission(
     status?: MissionStatus;
     result?: string;
     sessionId?: string;
-    localDirs?: string[];
+    prompt?: string;
+    localDirs?: LocalDirEntry[] | string[];
     references?: string[];
     skills?: string[];
     goals?: string[];
@@ -182,9 +187,13 @@ export function updateMission(
       sets.push("session_id = ?");
       vals.push(updates.sessionId);
     }
+    if (updates.prompt !== undefined) {
+      sets.push("prompt = ?");
+      vals.push(updates.prompt);
+    }
     if (updates.localDirs !== undefined) {
       sets.push("local_dirs = ?");
-      vals.push(JSON.stringify(updates.localDirs));
+      vals.push(JSON.stringify(normalizeLocalDirsInput(updates.localDirs)));
     }
     if (updates.references !== undefined) {
       sets.push("references_ = ?");

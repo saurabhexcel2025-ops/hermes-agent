@@ -7,7 +7,7 @@
 //
 // Supported providers:
 //   - holographic: SQLite direct access (memory_store.db)
-//   - hindsight: HTTP API to local/cloud Hindsight server
+//   - hindsight: Control Hub `/api/memory/hindsight` shells `hindsight_bridge.py` (Hermes agent) against the Hindsight HTTP server
 //   - none: Graceful degradation when no provider configured
 
 import { readFileSync, existsSync } from "fs";
@@ -202,7 +202,7 @@ export function getMemoryProviderType(): MemoryProviderType {
   return getConfiguredProvider();
 }
 
-/** Check if holographic DB exists (for backward compat) */
+/** Check if holographic DB exists on disk */
 export function hasHolographicDb(): boolean {
   const dbPath = getActiveHermesPaths().memoryDb;
   return existsSync(dbPath);

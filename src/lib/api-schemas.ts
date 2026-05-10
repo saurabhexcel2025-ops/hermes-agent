@@ -5,9 +5,82 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { HERMES_PROVIDERS, TASK_TYPES } from "./hermes-providers";
+
 // ── Zod schemas for API request bodies ─────────────────────────
 
 const nonEmpty = z.string().min(1);
+
+// ── Models registry ────────────────────────────────────────────
+
+/**
+ * Provider name validated against the canonical list in
+ * src/lib/hermes-providers.ts. Adding a new provider is a single edit
+ * to that file.
+ */
+export const providerSchema = z.enum(HERMES_PROVIDERS as readonly [string, ...string[]]);
+
+export const taskTypeSchema = z.enum(TASK_TYPES as readonly [string, ...string[]]);
+
+const modelDefaultsSchema = z
+  .object({
+    agent: z.boolean().optional(),
+    hindsight: z.boolean().optional(),
+    compression: z.boolean().optional(),
+    vision: z.boolean().optional(),
+    web_extract: z.boolean().optional(),
+    session_search: z.boolean().optional(),
+    title_generation: z.boolean().optional(),
+    skills_hub: z.boolean().optional(),
+    mcp: z.boolean().optional(),
+    triage_specifier: z.boolean().optional(),
+    approval: z.boolean().optional(),
+    delegation: z.boolean().optional(),
+  })
+  .strict();
+
+export const credentialPostSchema = z.object({
+  label: nonEmpty,
+  provider: providerSchema,
+  apiKey: nonEmpty,
+});
+
+export const credentialPutSchema = z
+  .object({
+    label: z.string().min(1).optional(),
+    provider: providerSchema.optional(),
+    apiKey: z.string().optional(),
+  })
+  .strict();
+
+export const modelPostSchema = z.object({
+  name: nonEmpty,
+  provider: providerSchema,
+  modelId: nonEmpty,
+  baseUrl: z.string().optional().nullable(),
+  contextLength: z.number().int().min(1000).max(2_000_000).optional().nullable(),
+  credentialsId: z.string().optional().nullable(),
+  defaults: modelDefaultsSchema.optional(),
+});
+
+export const modelPutSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    provider: providerSchema.optional(),
+    modelId: z.string().min(1).optional(),
+    baseUrl: z.string().optional().nullable(),
+    contextLength: z.number().int().min(1000).max(2_000_000).optional().nullable(),
+    credentialsId: z.string().optional().nullable(),
+    defaults: modelDefaultsSchema.optional(),
+  })
+  .strict();
+
+export const setDefaultPutSchema = z
+  .object({
+    taskType: taskTypeSchema,
+    modelId: z.string().nullable(),
+  })
+  .strict();
 
 /** Hermes-style schedule object (minimal contract for tests and validation). */
 export const hermesScheduleObjectSchema = z
