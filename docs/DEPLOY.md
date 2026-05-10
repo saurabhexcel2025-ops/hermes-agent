@@ -56,6 +56,12 @@ docker compose up -d
 
 The image defaults to **`PORT=42069`** (override with `-e PORT=...` or Compose `environment`). Map the same value on the host, e.g. `PORT=42069 docker compose up -d`.
 
+The production image includes the full **`scripts/`** tree (and `bash`, `git`, `curl`, `ss` via `iproute2`, `fuser` via `psmisc`, `socat`) so **`POST /api/update`** can spawn **`scripts/application/ch-deploy.sh`**. **`restart`** brings Next back on **`0.0.0.0:$PORT`** by default (same as `npm run start:network`). For a **public relay port** without picking a LAN IP, set **`CH_SOCAT_RELAY=yes`** and optional **`CH_SOCAT_RELAY_PORT`** (default **42069**): socat listens on **`0.0.0.0:$CH_SOCAT_RELAY_PORT`** → **`127.0.0.1:$PORT`**. Override **`CH_SOCAT_BIND`** only if you need the relay on a specific interface IP (see `.env.example`).
+
+**`update` / `rebuild` / GET branch list** need a **git working tree** at `process.cwd()` (`/app`). The default **`.dockerignore` excludes `.git`**, so a plain image build is not a checkout; mount a clone if you need those flows in a container.
+
+**CI / local smoke:** after `docker build`, run **`npm run test:docker-deploy-smoke`** (or `bash tests/scripts/docker-deploy-api-smoke.sh`) — waits for the app, **`GET /api/update?branch=dev`**, **`POST` restart**, then checks the server still answers **`/`**.
+
 Mount `CH_DATA_DIR` (and optionally `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR` if you keep hardware cron scripts outside the data tree) so the active Hermes install and Control Hub state match the host.
 
 ## Hermes bundled profile templates

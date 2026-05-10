@@ -69,7 +69,7 @@ ch_deploy_cmd_restart() {
   ch_deploy_restart_once
 }
 
-# One-shot restart: kill zombies, restart next-server + socat relay, exit.
+# One-shot restart: kill zombies, restart next-server, optional socat relay, exit.
 ch_deploy_restart_once() {
   local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
   local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
@@ -110,8 +110,9 @@ ch_deploy_restart_once() {
     kill -9 "$OLD_SOCAT_PID" 2>/dev/null || true
     sleep 1
   fi
-  log "Stopping all listeners on port 42069..."
-  ch_deploy_kill_tcp_listeners_on_port 42069
+  local RELAY_PORT="${CH_SOCAT_RELAY_PORT:-42069}"
+  log "Stopping all listeners on relay port ${RELAY_PORT}..."
+  ch_deploy_kill_tcp_listeners_on_port "$RELAY_PORT"
   sleep 1
 
   # ── 3. Find available port ─────────────────────────────────────────────────
@@ -166,15 +167,30 @@ ch_deploy_restart_once() {
     sleep 1
   fi
 
-  # ── 6. Start next-server on localhost only ─────────────────────────────────
-  # Binds to 127.0.0.1 so it doesn't conflict with socat on the LAN address.
-  local HOST="127.0.0.1"
+  # ── 6. Start next-server ─────────────────────────────────────────────────────
+  # Match `npm run start:network` (0.0.0.0) when no relay. With relay, Next stays on
+  # loopback so socat owns CH_SOCAT_RELAY_PORT (default 42069) on all interfaces (0.0.0.0)
+  # unless CH_SOCAT_BIND overrides the listen address.
+  local use_relay=0
+  local relay_listen
+  case "${CH_SOCAT_RELAY:-}" in 1 | yes | YES | true | True) use_relay=1 ;; esac
+  if [ -n "${CH_SOCAT_BIND:-}" ]; then
+    use_relay=1
+  fi
+  local HOST
+  if [ "$use_relay" -eq 1 ]; then
+    HOST="${CH_NEXT_BIND_HOST:-127.0.0.1}"
+    relay_listen="${CH_SOCAT_BIND:-0.0.0.0}"
+  else
+    HOST="${CH_NEXT_BIND_HOST:-0.0.0.0}"
+  fi
   export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
   log "Starting next-server on $HOST:$PORT..."
   rm -f "$PID_FILE"
-  "$NODE_BIN" node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
-    >>"$LOG_FILE_RESTART" 2>&1 &
+  # nohup + detached stdin: survive dashboard-spawned systemd-run/nohup transient shells exiting.
+  nohup "$NODE_BIN" node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
+    >>"$LOG_FILE_RESTART" 2>&1 </dev/null &
   local SERVER_PID=$!
   echo "$SERVER_PID" >"$PID_FILE"
   log "Server started (PID $SERVER_PID)"
@@ -192,19 +208,24 @@ ch_deploy_restart_once() {
     sleep 1
   done
 
-  # ── 7. Start socat relay ───────────────────────────────────────────────────
-  log "Starting socat relay on 192.168.1.169:42069 → 127.0.0.1:$PORT..."
-  /usr/bin/socat TCP-LISTEN:42069,fork,reuseaddr,bind=192.168.1.169 TCP:127.0.0.1:$PORT \
-    >>"$LOG_FILE_RESTART" 2>&1 &
-  local SOCAT_PID=$!
-  echo "$SOCAT_PID" >"$SOCAT_PID_FILE"
-  log "socat relay started (PID $SOCAT_PID)"
+  # ── 7. Optional socat relay (CH_SOCAT_RELAY_PORT → loopback:$PORT) ──────────
+  if [ "$use_relay" -eq 1 ]; then
+    log "Starting socat relay on ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT..."
+    nohup /usr/bin/socat TCP-LISTEN:"$RELAY_PORT",fork,reuseaddr,bind="${relay_listen}" TCP:127.0.0.1:"$PORT" \
+      >>"$LOG_FILE_RESTART" 2>&1 </dev/null &
+    local SOCAT_PID=$!
+    echo "$SOCAT_PID" >"$SOCAT_PID_FILE"
+    log "socat relay started (PID $SOCAT_PID)"
 
-  sleep 1
-  if ss -tlnp "sport = :42069" 2>/dev/null | grep -q LISTEN; then
-    log "Relay active: 192.168.1.169:42069 → 127.0.0.1:$PORT"
+    sleep 1
+    if ss -tlnp "sport = :$RELAY_PORT" 2>/dev/null | grep -q LISTEN; then
+      log "Relay active: ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT"
+    else
+      log "WARNING: socat relay may not have started correctly"
+    fi
   else
-    log "WARNING: socat relay may not have started correctly"
+    rm -f "$SOCAT_PID_FILE"
+    log "Skipping socat (set CH_SOCAT_RELAY=yes for relay on CH_SOCAT_RELAY_PORT, or CH_SOCAT_BIND=ip for legacy)"
   fi
 
   log "Restart complete."

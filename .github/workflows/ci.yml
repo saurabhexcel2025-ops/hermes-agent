@@ -112,3 +112,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: Build production Docker image
         run: docker build -f Dockerfile -t control-hub:ci .
+      - name: Dashboard deploy API — restart smoke (Docker)
+        run: bash tests/scripts/docker-deploy-api-smoke.sh
+        env:
+          CH_DOCKER_TEST_IMAGE: control-hub:ci
+          CH_DOCKER_TEST_PORT: "42090"
