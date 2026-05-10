@@ -195,18 +195,23 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const openDropdown = async (purpose: "check" | "rebuild") => {
     setDropdownPurpose(purpose);
     setDropdownOpen(true);
+    const pickBranch = (list: string[], apiDefault: unknown): string => {
+      const def =
+        typeof apiDefault === "string" ? sanitizeGitBranch(apiDefault) : "";
+      if (def && list.includes(def)) return def;
+      return list[0] ?? "dev";
+    };
     try {
       const res = await fetch("/api/update?branches=1");
       const d = await res.json();
-      if (d.data?.branches?.length) {
-        setBranches(d.data.branches);
-      } else {
-        setBranches(["main", "dev"]);
-      }
-      setSelectedBranch("dev");
+      const list: string[] =
+        d.data?.branches?.length > 0 ? d.data.branches : ["main", "dev"];
+      setBranches(list);
+      setSelectedBranch(pickBranch(list, d.data?.default));
     } catch {
-      setBranches(["main", "dev"]);
-      setSelectedBranch("dev");
+      const fallback = ["main", "dev"];
+      setBranches(fallback);
+      setSelectedBranch(pickBranch(fallback, undefined));
     }
   };
 

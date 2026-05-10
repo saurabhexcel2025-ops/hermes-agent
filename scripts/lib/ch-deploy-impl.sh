@@ -33,14 +33,25 @@ ch_deploy_log_update() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
+# Kill every PID ss reports listening on TCP port $1 (multiple socat / fork).
+ch_deploy_kill_tcp_listeners_on_port() {
+  local port="$1"
+  local p
+  for p in $(ss -tlnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u); do
+    kill -9 "$p" 2>/dev/null || true
+  done
+}
+
 ch_deploy_acquire_lock() {
   cleanup() {
     rm -f "$LOCK_FILE"
   }
-  trap cleanup EXIT
   if [ -f "$LOCK_FILE" ]; then
     local LOCK_PID
     LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [ -n "$LOCK_PID" ] && [ "$LOCK_PID" = "$$" ]; then
+      return 0
+    fi
     if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
       ch_deploy_log_update "ERROR: Deploy already running (PID $LOCK_PID)"
       exit 1
@@ -48,214 +59,17 @@ ch_deploy_acquire_lock() {
     ch_deploy_log_update "WARNING: Stale lock file found, removing"
     rm -f "$LOCK_FILE"
   fi
+  trap cleanup EXIT
   echo $$ >"$LOCK_FILE"
 }
 
 ch_deploy_cmd_restart() {
   ch_deploy_acquire_lock
-
-  local APP_DIR="$CH_APP_DIR"
-  local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
-  local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
-  local SOCAT_PID_FILE="$HOME/.hermes/logs/ch-socat.pid"
-  local STOP_FILE="$HOME/.hermes/logs/ch-stop-hub"
-
-  mkdir -p "$(dirname "$LOG_FILE_RESTART")"
-
-  log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE_RESTART"
-  }
-
-  cd "$APP_DIR"
-
-  # One-shot restart: kill zombie on 3000, stop old relay, restart server + socat.
+  cd "$CH_APP_DIR"
   ch_deploy_restart_once
 }
 
-ch_deploy_supervisor_loop() {
-  log "Control Hub supervisor started (PID $$)"
-  log "PID_FILE=$PID_FILE  SOCAT_PID_FILE=$SOCAT_PID_FILE"
-  log "STOP_FILE=$STOP_FILE — delete to trigger shutdown"
-
-  while true; do
-    # Check for stop signal
-    if [ -f "$STOP_FILE" ]; then
-      log "Stop file detected — shutting down..."
-      rm -f "$STOP_FILE"
-      break
-    fi
-
-    # ── 1. Kill zombie on port 3000 (old build that predates this fix) ───────
-    local ZOMBIE_PIDS
-    ZOMBIE_PIDS=$(ss -tlnp sport = :3000 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
-    if [ -n "$ZOMBIE_PIDS" ]; then
-      for zp in $ZOMBIE_PIDS; do
-        if kill -0 "$zp" 2>/dev/null; then
-          log "Killing stale next-server on port 3000 (PID $zp)..."
-          kill -9 "$zp" 2>/dev/null || true
-        fi
-      done
-      sleep 1
-    fi
-
-    # ── 2. Stop any existing socat relay ──────────────────────────────────────
-    local OLD_SOCAT_PID
-    OLD_SOCAT_PID=$(cat "$SOCAT_PID_FILE" 2>/dev/null || true)
-    if [ -n "$OLD_SOCAT_PID" ] && kill -0 "$OLD_SOCAT_PID" 2>/dev/null; then
-      log "Stopping old socat relay (PID $OLD_SOCAT_PID)..."
-      kill -9 "$OLD_SOCAT_PID" 2>/dev/null || true
-      sleep 1
-    fi
-    # Fallback: kill any socat holding 42069
-    local SOCAT_42069_PID
-    SOCAT_42069_PID=$(ss -tlnp "sport = :42069" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
-    if [ -n "$SOCAT_42069_PID" ]; then
-      log "Stopping socat on 42069 (PID $SOCAT_42069_PID)..."
-      kill -9 "$SOCAT_42069_PID" 2>/dev/null || true
-      sleep 1
-    fi
-
-    # ── 3. Find the best available port (prefer .env.local, then auto) ───────
-    local PORT=""
-    if [ -z "${PORT:-}" ] && [ -f "$APP_DIR/.env.local" ]; then
-      PORT="$(grep -E '^PORT=' "$APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r ')"
-    fi
-    if [ -z "$PORT" ]; then
-      PORT="$(ch_auto_pick_port)" || {
-        log "ERROR: No free port in 42069–42100"
-        sleep 10
-        continue
-      }
-    fi
-
-    # Walk up to next free port if preferred is in use
-    local PREFERRED_PORT="$PORT"
-    while ch_tcp_port_in_use "$PORT" 2>/dev/null; do
-      log "Port $PORT in use — trying next port..."
-      PORT=$((PORT + 1))
-      if [ "$PORT" -gt 42100 ]; then
-        log "ERROR: No free port in 42069–42100"
-        sleep 10
-        continue
-      fi
-    done
-    if [ "$PORT" != "$PREFERRED_PORT" ]; then
-      log "Port $PREFERRED_PORT unavailable — using $PORT"
-    fi
-
-    # ── 4. Write new port to .env.local so future runs use it ───────────────
-    if [ -f "$APP_DIR/.env.local" ]; then
-      if grep -q '^PORT=' "$APP_DIR/.env.local" 2>/dev/null; then
-        sed -i "s/^PORT=.*/PORT=$PORT/" "$APP_DIR/.env.local"
-      else
-        echo "PORT=$PORT" >>"$APP_DIR/.env.local"
-      fi
-    fi
-
-    # ── 5. Kill any process already on the target port ──────────────────────
-    log "Freeing port $PORT..."
-    if command -v fuser &>/dev/null; then
-      fuser -k "${PORT}/tcp" 2>/dev/null || true
-    elif command -v lsof &>/dev/null; then
-      for pid in $(lsof -ti:"$PORT" 2>/dev/null); do
-        kill -9 "$pid" 2>/dev/null || true
-      done
-    fi
-    sleep 1
-
-    # ── 6. Start next-server ─────────────────────────────────────────────────
-    local HOST="0.0.0.0"
-    export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
-
-    log "Starting next-server on $HOST:$PORT..."
-    rm -f "$PID_FILE"
-    "$NODE_BIN" node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
-      >>"$LOG_FILE_RESTART" 2>&1 &
-    local SERVER_PID=$!
-    echo "$SERVER_PID" >"$PID_FILE"
-    log "Server started (PID $SERVER_PID)"
-
-    # Wait for server to be ready (up to 20s)
-    local i
-    for i in $(seq 1 20); do
-      if curl -s -o /dev/null -w '' "http://127.0.0.1:${PORT}" 2>/dev/null; then
-        log "Server is ready on http://127.0.0.1:${PORT}"
-        break
-      fi
-      # Check if server died
-      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        log "ERROR: next-server died during startup"
-        break
-      fi
-      sleep 1
-    done
-
-    # ── 7. Start socat relay pointing to the actual server port ─────────────
-    log "Starting socat relay on 192.168.1.169:42069 → 127.0.0.1:$PORT..."
-    /usr/bin/socat TCP-LISTEN:42069,fork,reuseaddr,bind=192.168.1.169 TCP:127.0.0.1:$PORT \
-      >>"$LOG_FILE_RESTART" 2>&1 &
-    local SOCAT_PID=$!
-    echo "$SOCAT_PID" >"$SOCAT_PID_FILE"
-    log "socat relay started (PID $SOCAT_PID)"
-
-    # Verify socat is listening
-    sleep 1
-    if ss -tlnp "sport = :42069" 2>/dev/null | grep -q LISTEN; then
-      log "Relay active: 192.168.1.169:42069 → 127.0.0.1:$PORT"
-    else
-      log "WARNING: socat relay may not have started correctly"
-    fi
-
-    log "All services running. Supervisor watching (PID $$)..."
-
-    # ── 8. Wait for either child to die, then restart ───────────────────────
-    local SERVER_UP=1
-    while true; do
-      sleep 5
-
-      # Check for stop signal
-      if [ -f "$STOP_FILE" ]; then
-        log "Stop file detected — shutting down..."
-        rm -f "$STOP_FILE"
-        SERVER_UP=0
-        break
-      fi
-
-      # Check if server is still alive
-      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        log "WARNING: next-server (PID $SERVER_PID) died — will restart"
-        break
-      fi
-
-      # Check if socat is still alive
-      if ! kill -0 "$SOCAT_PID" 2>/dev/null; then
-        log "WARNING: socat relay (PID $SOCAT_PID) died — will restart"
-        break
-      fi
-    done
-
-    # Clean up dead children before restarting
-    kill -9 "$SERVER_PID" "$SOCAT_PID" 2>/dev/null || true
-    rm -f "$PID_FILE" "$SOCAT_PID_FILE"
-
-    if [ "$SERVER_UP" = "0" ]; then
-      break
-    fi
-
-    log "Restarting services..."
-  done
-
-  # ── Shutdown: kill everything and exit ────────────────────────────────────
-  log "Stopping all services..."
-  local ALL_PIDS
-  ALL_PIDS=$(ss -tlnp "sport = :42069" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
-  for p in $ALL_PIDS; do kill -9 "$p" 2>/dev/null || true; done
-  rm -f "$PID_FILE" "$SOCAT_PID_FILE"
-  log "Supervisor stopped."
-}
-
-# One-shot restart: kill zombies, restart next-server + socat, exit.
-# Used for direct CLI invocations (not the systemd supervisor).
+# One-shot restart: kill zombies, restart next-server + socat relay, exit.
 ch_deploy_restart_once() {
   local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
   local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
@@ -296,13 +110,9 @@ ch_deploy_restart_once() {
     kill -9 "$OLD_SOCAT_PID" 2>/dev/null || true
     sleep 1
   fi
-  local SOCAT_42069_PID
-  SOCAT_42069_PID=$(ss -tlnp "sport = :42069" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
-  if [ -n "$SOCAT_42069_PID" ]; then
-    log "Stopping socat on 42069 (PID $SOCAT_42069_PID)..."
-    kill -9 "$SOCAT_42069_PID" 2>/dev/null || true
-    sleep 1
-  fi
+  log "Stopping all listeners on port 42069..."
+  ch_deploy_kill_tcp_listeners_on_port 42069
+  sleep 1
 
   # ── 3. Find available port ─────────────────────────────────────────────────
   # Always prefer 42069 — kill whatever is on it first (stale socat orphans from
@@ -572,7 +382,7 @@ ch_deploy_run_update() {
   fi
 
   ch_deploy_log_update "Restarting server..."
-  ch_deploy_cmd_restart
+  ch_deploy_restart_once
   ch_deploy_log_update "Update complete"
 }
 
