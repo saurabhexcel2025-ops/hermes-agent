@@ -67,6 +67,9 @@ export default function SkillsPage() {
       const res = await fetch(`/api/skills?profile=${selectedProfile}`);
       const d = await res.json();
       setData(d.data);
+      // Seed all categories as collapsed on first load
+      const cats = Object.keys(d.data.categories || {});
+      setCategoryCollapsed(Object.fromEntries(cats.map((c) => [c, true])));
     } catch {
       showToast("Failed to load skills", "error");
     } finally {
