@@ -190,7 +190,7 @@ export default function SessionsPage() {
     loadSessions(0);
   }, [loadSessions]);
 
-  const sessions = data?.sessions ?? [];
+  const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
 
   const sources = useMemo(() => {
     const srcs = new Set<SessionSource>();

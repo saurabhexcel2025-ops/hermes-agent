@@ -9,9 +9,9 @@
 // Schema: src/lib/db/migrations/009_sessions.sql
 // ═══════════════════════════════════════════════════════════════
 
-import { db, inTransaction, uuid, now } from "./db";
+import { db, uuid, now } from "./db";
 import { getActiveHermesPaths } from "./hermes-agent-runtime";
-import { existsSync, readdirSync, statSync, readFileSync } from "fs";
+import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 
 // ── Types ────────────────────────────────────────────────────
