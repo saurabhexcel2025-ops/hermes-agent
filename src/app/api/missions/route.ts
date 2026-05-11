@@ -14,6 +14,7 @@ import {
   deleteMission,
   buildMissionPrompt,
 } from "@/lib/mission-repository";
+import { createSession, updateSession } from "@/lib/session-repository";
 import { PATHS } from "@/lib/paths";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import type { LocalDirEntry } from "@/types/hermes";
@@ -163,6 +164,25 @@ export async function POST(request: NextRequest) {
       if (!isSaveMode) {
         updateMission(mission.id, { status: "dispatched" });
 
+        // Pre-register the session in Control Hub's unified registry.
+        // This links the mission to its session before hermes even starts,
+        // so the Sessions page shows it immediately after dispatch.
+        let sessionIdFromDb: string | undefined;
+        try {
+          const session = createSession({
+            source: "mission",
+            missionId: mission.id,
+            profileName: profileName ?? null,
+            modelId: modelId ?? null,
+            provider: provider ?? null,
+            title: mission.name,
+            status: "active",
+          });
+          sessionIdFromDb = session.id;
+        } catch (err) {
+          logApiError("POST /api/missions", "createSession", err);
+        }
+
         try {
           // Pass mission.id so dispatchMission writes all output files
           // (.session, .status.json, .output.log) under the same ID the
@@ -178,12 +198,12 @@ export async function POST(request: NextRequest) {
             provider,
           });
 
-          // Capture session ID from the running hermes process and write it
-          // back to the mission record so Sessions can display it.
-          // The .session file is created asynchronously by the detached hermes
-          // process, so poll briefly if it's not ready yet.
-          let sessionId: string | undefined = dispatched.sessionId ?? undefined;
-          if (!sessionId) {
+          // Capture session ID from the running hermes process.
+          // Prefer the hermes-reported session ID; fall back to our pre-registered one.
+          let sessionId: string | undefined = dispatched.sessionId ?? sessionIdFromDb;
+          if (!sessionId && sessionIdFromDb) {
+            sessionId = sessionIdFromDb;
+          } else if (!sessionId) {
             for (let attempt = 0; attempt < 10; attempt++) {
               await new Promise((r) => setTimeout(r, 800));
               try {
@@ -202,6 +222,10 @@ export async function POST(request: NextRequest) {
           });
         } catch (err) {
           logApiError("POST /api/missions", "dispatch", err);
+          // Mark the session as failed
+          if (sessionIdFromDb) {
+            updateSession(sessionIdFromDb, { status: "failed", endedAt: new Date().toISOString() });
+          }
           updateMission(mission.id, { status: "failed" });
         }
       }

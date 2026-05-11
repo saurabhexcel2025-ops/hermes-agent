@@ -19,6 +19,8 @@ import {
   Loader2,
   Database,
   RefreshCw,
+  Star,
+  CheckCircle2,
 } from "lucide-react";
 
 import AppPageShell from "@/components/layout/AppPageShell";
@@ -305,6 +307,73 @@ export default function ModelsPage() {
           <LoadingSpinner text="Loading models..." />
         ) : (
           <>
+            {/* ── Universal Agent Default ─────────────────────────── */}
+            <section data-section="agent-default-hero" className="space-y-4">
+              <div>
+                <h2 className="text-sm font-bold text-white/70 uppercase tracking-wider flex items-center gap-2">
+                  <Star className="w-4 h-4 text-neon-orange" />
+                  Universal Agent Default
+                </h2>
+                <p className="text-xs text-white/30 mt-0.5">
+                  This model is used by every agent profile by default unless overridden per-profile.
+                  Setting a new default here applies immediately to all missions and cron jobs.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-neon-orange/20 bg-gradient-to-r from-neon-orange/5 to-neon-purple/5 p-6">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-xs font-mono text-white/50 uppercase tracking-wider mb-2">
+                      Default Model
+                    </label>
+                    <select
+                      className="w-full bg-dark-800 border border-white/10 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-neon-orange/50 transition-colors"
+                      value={defaults.agent ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value || null;
+                        void handleSetDefault("agent", val);
+                      }}
+                      disabled={busyTaskType === "agent"}
+                    >
+                      <option value="">— None —</option>
+                      {modelOptions.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.provider} / {m.modelId})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    {defaults.agent ? (
+                      <div className="flex items-center gap-2 text-green-400 text-sm font-mono">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Active
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-white/30 text-sm font-mono">
+                        No default set
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Show which model is currently the default */}
+                {defaults.agent && (() => {
+                  const activeModel = models.find((m) => m.id === defaults.agent);
+                  return activeModel ? (
+                    <div className="mt-3 text-xs text-white/40 font-mono">
+                      Currently: <span className="text-white/70">{activeModel.name}</span>
+                      {" — "}
+                      <span className="text-white/50">{activeModel.provider}</span>
+                      {" / "}
+                      <span className="text-white/50">{activeModel.modelId}</span>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            </section>
+
             <section data-section="my-models" className="space-y-4">
               <div>
                 <h2 className="text-sm font-bold text-white/70 uppercase tracking-wider">

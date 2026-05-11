@@ -49,7 +49,7 @@ function resolvePython(hermesHome: string): string {
 }
 
 /**
- * Run a bridge command asynchronously with a timeout.
+ * Run a bridge command with a timeout.
  *
  * When `applyHindsightModelOverride` is true (default for recall/reflect/
  * mental-model commands), the registry's `hindsight` default is injected as

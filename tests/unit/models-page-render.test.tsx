@@ -163,11 +163,12 @@ describe("ModelsPage", () => {
     const { container } = render(<ModelsPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("Claude Sonnet 4")).toBeInTheDocument()
+      // Name appears in hero panel (active default display) AND in the table row
+      expect(screen.getAllByText("Claude Sonnet 4")).toHaveLength(2)
     );
 
     const row = container.querySelector(
-      `[data-row-id=\"${claude.id}\"]`
+      `[data-row-id="${claude.id}"]`
     ) as HTMLElement;
     expect(row).not.toBeNull();
     // Provider + modelId + context cells

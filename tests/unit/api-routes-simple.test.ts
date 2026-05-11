@@ -67,6 +67,14 @@ jest.mock("@/lib/sessions-api-guard", () => ({
   sessionsRateLimitResponse: jest.fn(() => null),
 }));
 
+jest.mock("@/lib/session-repository", () => ({
+  createSession: jest.fn(),
+  updateSession: jest.fn(),
+  getSession: jest.fn(),
+  listSessions: jest.fn(() => ({ sessions: [], total: 0 })),
+  syncHermesSessionsToDb: jest.fn(() => ({ synced: 0 })),
+}));
+
 import { NextRequest } from "next/server";
 
 describe("GET /api/status", () => {
@@ -170,14 +178,34 @@ describe("GET /api/sessions", () => {
   });
 
   it("lists session files", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["session_abc.json"]);
-    mockStatSync.mockReturnValue({
-      size: 1024,
-      mtime: new Date("2026-01-01"),
-      mtimeMs: Date.now(),
-      birthtime: new Date("2026-01-01"),
+    // New architecture: sessions come from the unified sessions table (DB).
+    // The route syncs Hermes files to DB then reads from listSessions().
+    // Override the default mock for this specific test.
+    const { listSessions, syncHermesSessionsToDb } = await import(
+      "@/lib/session-repository"
+    );
+    (listSessions as jest.Mock).mockReturnValueOnce({
+      sessions: [
+        {
+          id: "session_abc",
+          agentType: "hermes",
+          source: "cli",
+          missionId: null,
+          profileName: null,
+          modelId: null,
+          provider: null,
+          title: "session_abc",
+          size: 1024,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          endedAt: null,
+          status: "active",
+          exitCode: null,
+          error: null,
+        },
+      ],
+      total: 1,
     });
+    (syncHermesSessionsToDb as jest.Mock).mockReturnValueOnce({ synced: 1 });
 
     const request = new NextRequest("http://localhost/api/sessions");
     const { GET } = await import("@/app/api/sessions/route");

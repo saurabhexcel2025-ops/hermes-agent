@@ -68,8 +68,8 @@ export default function CardDetailModal({
   const [saving, setSaving] = useState(false);
   const [goalsExpanded, setGoalsExpanded] = useState(true);
 
-  // Derive form state from card — when card changes (new card selected), useLayoutEffect
-  // forces a synchronous re-sync so the form reflects the new card's data.
+  // Derive form state from card — when card changes (new card selected),
+  // useLayoutEffect forces the form to reflect the new card's data immediately.
   useLayoutEffect(() => {
     if (!card) return;
     setTitle(card.title);
