@@ -4,6 +4,8 @@
 // Missions are stored in Control Hub SQLite. Dispatch is handled
 // by the AgentBackend so any agent backend can run missions.
 import { NextRequest, NextResponse } from "next/server";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import {
   getMission,
   listMissions,
@@ -12,6 +14,7 @@ import {
   deleteMission,
   buildMissionPrompt,
 } from "@/lib/mission-repository";
+import { PATHS } from "@/lib/paths";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import type { LocalDirEntry } from "@/types/hermes";
 import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
@@ -21,6 +24,26 @@ import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
 
 // ── GET ───────────────────────────────────────────────────────
+
+interface DiskStatus {
+  status: string;
+  exit_code: number;
+  completed_at: string;
+  error?: string;
+}
+
+/** For dispatched missions, read the Hermes-side status from status.json. */
+function syncMissionStatusFromDisk(mission: ReturnType<typeof getMission>): void {
+  if (!mission || mission.status !== "dispatched") return;
+  const statusPath = join(PATHS.missions, `${mission.id}.status.json`);
+  if (!existsSync(statusPath)) return;
+  try {
+    const disk = JSON.parse(readFileSync(statusPath, "utf-8")) as DiskStatus;
+    if (disk.status === "successful" || disk.status === "failed") {
+      updateMission(mission.id, { status: disk.status as MissionStatus });
+    }
+  } catch { /* ignore read errors */ }
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -32,11 +55,19 @@ export async function GET(request: Request) {
       if (!mission) {
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
       }
-      return NextResponse.json({ data: { mission } });
+      syncMissionStatusFromDisk(mission);
+      // Re-fetch after potential update
+      const refreshed = getMission(id);
+      return NextResponse.json({ data: { mission: refreshed } });
     }
 
     const missions = listMissions();
-    return NextResponse.json({ data: { missions } });
+    // Sync dispatched missions in bulk — only update ones that have a status.json
+    for (const m of missions) {
+      syncMissionStatusFromDisk(m);
+    }
+    const refreshed = listMissions();
+    return NextResponse.json({ data: { missions: refreshed } });
   } catch (error) {
     logApiError("GET /api/missions", id ? `mission ${id}` : "listing missions", error);
     return NextResponse.json({ error: "Failed to load missions" }, { status: 500 });
@@ -102,10 +133,25 @@ export async function POST(request: NextRequest) {
         context: context ?? "",
       });
 
+      // Resolve Hermes profile name to the DB profile_id for the mission record.
+      // listProfiles() returns profiles keyed by their Hermes directory name
+      // (which is what hermes --profile <name> expects). We use it directly
+      // as the profile_id so the mission record shows which profile was used.
+      let resolvedProfileId: string | undefined;
+      if (profileName) {
+        try {
+          const profiles = await agentBackend.listProfiles();
+          const match = profiles.find(
+            (p) => p.name === profileName || p.id === profileName
+          );
+          resolvedProfileId = match?.id;
+        } catch { /* profile lookup failed — leave undefined */ }
+      }
+
       const mission = createMission({
         name: (name as string)?.trim() || "Untitled Mission",
         prompt,
-        profileId,
+        profileId: resolvedProfileId ?? profileId,
         localDirs: dirsNorm,
         references: references ?? [],
         skills: skills ?? [],
@@ -118,7 +164,12 @@ export async function POST(request: NextRequest) {
         updateMission(mission.id, { status: "dispatched" });
 
         try {
+          // Pass mission.id so dispatchMission writes all output files
+          // (.session, .status.json, .output.log) under the same ID the
+          // API returned to the caller. Without this, the backend generates
+          // its own UUID and files are never matched to the DB record.
           const dispatched = await agentBackend.dispatchMission({
+            missionId: mission.id,
             name: mission.name,
             prompt: mission.prompt,
             profileId: mission.profileId,
@@ -126,8 +177,27 @@ export async function POST(request: NextRequest) {
             modelId,
             provider,
           });
+
+          // Capture session ID from the running hermes process and write it
+          // back to the mission record so Sessions can display it.
+          // The .session file is created asynchronously by the detached hermes
+          // process, so poll briefly if it's not ready yet.
+          let sessionId: string | undefined = dispatched.sessionId ?? undefined;
+          if (!sessionId) {
+            for (let attempt = 0; attempt < 10; attempt++) {
+              await new Promise((r) => setTimeout(r, 800));
+              try {
+                const sid = await agentBackend.getMissionSessionId?.(mission.id);
+                if (sid) {
+                  sessionId = sid;
+                  break;
+                }
+              } catch { /* keep polling */ }
+            }
+          }
+
           updateMission(mission.id, {
-            sessionId: dispatched.sessionId,
+            sessionId,
             status: "dispatched",
           });
         } catch (err) {
