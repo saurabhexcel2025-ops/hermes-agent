@@ -205,7 +205,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "Bug",
     color: "pink",
     category: "Engineering - QA",
-    profile: "ch-qa-engineer",
+    profile: "default",
     description: "Reproduce, diagnose, fix, and test a specific bug",
     instruction: [
       "You are a QA Bug Fix Engineer. Your job is to reproduce, diagnose, fix, and verify the reported issue.",
@@ -235,7 +235,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "CheckSquare",
     color: "pink",
     category: "Engineering - QA",
-    profile: "ch-qa-engineer",
+    profile: "default",
     description: "Write and run acceptance tests for a feature or component",
     instruction: [
       "You are a QA Engineer specialising in acceptance testing.",
@@ -259,7 +259,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "TestTube",
     color: "pink",
     category: "Engineering - QA",
-    profile: "ch-qa-engineer",
+    profile: "default",
     description: "Write comprehensive unit and integration tests for a module",
     instruction: [
       "You are a QA Engineer specialising in test coverage.",
@@ -284,7 +284,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "RefreshCw",
     color: "cyan",
     category: "Engineering",
-    profile: "ch-swe-engineer",
+    profile: "default",
     description: "Safely restructure code without changing external behaviour",
     instruction: [
       "You are a Software Engineer specialising in code quality and refactoring.",
@@ -311,7 +311,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "Bug",
     color: "red",
     category: "Engineering",
-    profile: "ch-swe-engineer",
+    profile: "default",
     description: "Find and fix a specific bug",
     instruction: [
       "You are a Software Engineer fixing a bug.",
@@ -333,7 +333,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "Sparkles",
     color: "green",
     category: "Engineering",
-    profile: "ch-swe-engineer",
+    profile: "default",
     description: "Implement a new feature end-to-end",
     instruction: [
       "You are a Software Engineer implementing a new feature.",
@@ -356,7 +356,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "Eye",
     color: "purple",
     category: "Engineering",
-    profile: "ch-swe-engineer",
+    profile: "default",
     description: "Review a pull request or set of code changes",
     instruction: [
       "You are a senior engineer reviewing code.",
@@ -377,7 +377,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "Server",
     color: "orange",
     category: "DevOps",
-    profile: "ch-devops-engineer",
+    profile: "default",
     description: "Manage infrastructure, CI/CD, and deployment",
     instruction: [
       "You are a DevOps Engineer managing infrastructure.",
@@ -399,7 +399,7 @@ export const TEMPLATES: TemplateDef[] = [
     icon: "Rocket",
     color: "orange",
     category: "DevOps",
-    profile: "ch-devops-engineer",
+    profile: "default",
     description: "Deploy an application to an environment",
     instruction: [
       "You are a DevOps Engineer deploying an application.",
