@@ -38,8 +38,7 @@ function safeArc(arc: unknown): StoryArcType | undefined {
       Array.isArray(inner.fixedPlotPoints) &&
       Array.isArray(inner.chapterOutlines)
     ) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return inner as any;
+      return inner as unknown as StoryArcType;
     }
   }
 
@@ -49,8 +48,7 @@ function safeArc(arc: unknown): StoryArcType | undefined {
     Array.isArray(a.fixedPlotPoints) &&
     Array.isArray(a.chapterOutlines)
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return a as any;
+    return a as unknown as StoryArcType;
   }
 
   return undefined;

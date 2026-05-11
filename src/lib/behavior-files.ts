@@ -8,6 +8,11 @@ export type BehaviorFileEntry = {
   category: string;
 };
 
+/**
+ * Return the set of known behaviour files for the active Hermes install.
+ * Each entry maps a logical key (e.g. `"soul"`) to its display name, resolved
+ * filesystem path, and category.
+ */
 export function getBehaviorFiles(): Record<string, BehaviorFileEntry> {
   const H = getActiveHermesPaths();
   return {

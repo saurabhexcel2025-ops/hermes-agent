@@ -21,6 +21,7 @@ const DB_PATH = join(dataDir, "control-hub.db");
 
 let _db: Database.Database | null = null;
 
+/** Open (or reuse) the SQLite database connection. Runs migrations on first open. */
 export function getDb(): Database.Database {
   if (_db) return _db;
 
@@ -40,15 +41,21 @@ export const db = getDb;
 
 // ── Shorthand helpers ─────────────────────────────────────────
 
+/**
+ * Wrap `fn` in a SQLite transaction. Commits on success, rolls back on throw.
+ * shorthand for `db().transaction(fn)()`.
+ */
 export function inTransaction<T>(fn: () => T): T {
   const database = db();
   return database.transaction(fn)();
 }
 
+/** Generate a cryptographically random UUID v4 string. */
 export function uuid(): string {
   return crypto.randomUUID();
 }
 
+/** Return the current UTC time as an ISO-8601 string. */
 export function now(): string {
   return new Date().toISOString();
 }
@@ -115,6 +122,10 @@ function runMigrations(database: Database.Database): void {
 
 let _bootstrapped = false;
 
+/**
+ * Ensure the database is open and migrations have run.
+ * Idempotent — safe to call multiple times.
+ */
 export function ensureDb(): void {
   if (_bootstrapped) return;
   _bootstrapped = true;

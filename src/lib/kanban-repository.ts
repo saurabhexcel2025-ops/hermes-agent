@@ -304,7 +304,6 @@ export function deriveStatusFromColumn(title: string): KanbanCard["status"] {
     : /\btodo\b|\bto[_\s]?do\b|\bto\s*do\b/i.test(t) ? "todo"
     : /\bblocked\b/i.test(t) ? "blocked"
     : "todo";
-  console.error(`[deriveStatusFromColumn] title=${JSON.stringify(title)} t=${JSON.stringify(t)} result=${result}`);
   return result;
 }
 
