@@ -506,15 +506,15 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         </div>
       )}
 
-      {/* Status message — visible inline when operation is in progress */}
-      {message && (
-        <div className="min-h-[1.25rem] px-1 text-[10px] font-mono text-white/50 text-center leading-tight">
-          {serverRestarting ? "Restarting server…" : message}
-        </div>
-      )}
-
-      {/* Button rows */}
+      {/* Button rows — all content lives here so the status message never pushes layout */}
       <div className="space-y-1.5">
+        {/* Status message — visible inline when operation is in progress */}
+        {message && (
+          <div className="min-h-[1.25rem] px-1 text-[10px] font-mono text-white/50 text-center leading-tight">
+            {serverRestarting ? "Restarting server…" : message}
+          </div>
+        )}
+
         {/* Check — full width on its own row */}
         {renderCheckButton()}
 

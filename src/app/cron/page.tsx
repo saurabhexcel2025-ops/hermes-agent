@@ -631,6 +631,7 @@ export default function CronPage() {
   const [pauseAllBusy, setPauseAllBusy] = useState(false);
   const [hwPauseAllBusy, setHwPauseAllBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [hwSyncing, setHwSyncing] = useState(false);
   // Hardware cron tab state
   const [activeTab, setActiveTab] = useState<"agent" | "hardware">("agent");
   const [showHardwareCreate, setShowHardwareCreate] = useState(false);
@@ -855,6 +856,28 @@ export default function CronPage() {
     }
   };
 
+  const handleHwSync = async () => {
+    setHwSyncing(true);
+    try {
+      const res = await fetch("/api/cron/hardware", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync" }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        showToast(d.error || "Hardware sync failed", "error");
+      } else {
+        showToast("Hardware jobs synced");
+        loadHardwareJobs();
+      }
+    } catch {
+      showToast("Hardware sync failed", "error");
+    } finally {
+      setHwSyncing(false);
+    }
+  };
+
   const filteredJobs =
     data?.jobs.filter(
       (job) =>
@@ -969,6 +992,17 @@ export default function CronPage() {
                   onClick={() => void handleHwPauseAll()}
                 >
                   {hwPauseAllBusy ? "Pausing…" : "Pause all"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  color="cyan"
+                  size="sm"
+                  icon={Zap}
+                  loading={hwSyncing}
+                  disabled={hwSyncing}
+                  onClick={() => void handleHwSync()}
+                >
+                  {hwSyncing ? "Syncing…" : "Sync Jobs"}
                 </Button>
                 <Button
                   variant="primary"

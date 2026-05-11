@@ -198,6 +198,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ data: { success: true, pausedCount: jobIds.length } });
     }
 
+    // ── Sync action ───────────────────────────────────────────────────
+    // Re-read crontab and return all detected hardware cron jobs.
+    // This picks up any jobs added or modified outside Control Hub.
+    if (body && typeof body === "object" && (body as Record<string, unknown>).action === "sync") {
+      const crontab = await readCrontab();
+      const disabledIds = loadDisabledIds();
+      const lines = crontab.split("\n");
+      const jobs = lines
+        .map(parseCrontabLine)
+        .filter((j): j is NonNullable<typeof j> => j !== null)
+        .map((j) => ({
+          id: j.id,
+          name: j.name,
+          schedule: j.schedule,
+          enabled: !disabledIds.has(j.id),
+          command: j.command,
+          logFile: j.logFile,
+        }));
+
+      return NextResponse.json({ data: { jobs, total: jobs.length } });
+    }
+
     // ── Create new hardware cron job ────────────────────────────────────
     const { schedule, command, name, logFile } = body as {
       schedule?: string;
