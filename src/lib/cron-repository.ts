@@ -18,13 +18,13 @@
 // (defaults to ~/.local/share/hermes-agent/venv/bin/python3)
 
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { resolve } from "path";
 
-import { db, inTransaction, uuid, now } from "./db";
+import { db, uuid, now } from "./db";
 import { getActiveHermesPaths } from "./hermes-agent-runtime";
 import { logApiError } from "./api-logger";
-import { parseSchedule, type CronJobData } from "./utils";
+import { parseSchedule } from "./utils";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -779,7 +779,6 @@ export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
   const tmpScript = `/tmp/ch_cron_export_${process.pid}_${Date.now()}.py`;
 
   try {
-    const { writeFileSync, unlinkSync } = require("fs");
     writeFileSync(tmpScript, script, "utf-8");
 
     const python = HERMES_VENV_PYTHON;
@@ -864,7 +863,6 @@ export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: s
   };
 
   const tmpScript = `/tmp/ch_cron_push_${process.pid}_${Date.now()}.py`;
-  const { writeFileSync, unlinkSync } = require("fs");
 
   const script = buildPythonScript(hermesAgentPath, hermesHome, "create");
 
@@ -934,7 +932,6 @@ export function removeJobFromHermes(hermesJobId: string): { ok: boolean; error?:
   }
 
   const tmpScript = `/tmp/ch_cron_del_${process.pid}_${Date.now()}.py`;
-  const { writeFileSync, unlinkSync } = require("fs");
 
   const script = buildPythonScript(hermesAgentPath, hermesHome, "delete");
 
