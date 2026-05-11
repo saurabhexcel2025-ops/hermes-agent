@@ -136,6 +136,7 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     state: job.state ?? (job.enabled !== false ? "scheduled" : "paused"),
     deliver: job.deliver ?? "none",
     script: typeof job.script === "string" ? job.script : null,
+    profile_name: "default",
     hermes_job_id: job.id,
     source: "hermes",
     orphan: 0,
@@ -164,6 +165,7 @@ export interface CronJobRecord {
   state: string;
   deliver: string;
   script: string | null;
+  profile_name: string;
   hermes_job_id: string | null;
   source: "ch" | "hermes";
   orphan: boolean;
@@ -191,6 +193,7 @@ function rowToRecord(row: CronJobRow): CronJobRecord {
     state: row.state,
     deliver: row.deliver,
     script: row.script,
+    profile_name: row.profile_name,
     hermes_job_id: row.hermes_job_id,
     source: row.source as "ch" | "hermes",
     orphan: row.orphan === 1,
@@ -218,6 +221,7 @@ interface CronJobRow {
   state: string;
   deliver: string;
   script: string | null;
+  profile_name: string;
   hermes_job_id: string | null;
   source: string;
   orphan: number;
@@ -271,6 +275,7 @@ export interface CreateCronJobInput {
   state?: string;
   deliver?: string;
   script?: string | null;
+  profile_name?: string;
   hermes_job_id?: string | null; // if linking to existing Hermes job
   source?: "ch" | "hermes";
 }
@@ -293,6 +298,7 @@ export interface UpdateCronJobInput {
   last_run_at?: string | null;
   last_status?: string | null;
   last_delivery_error?: string | null;
+  profile_name?: string;
   hermes_job_id?: string | null;
   orphan?: boolean;
 }
@@ -341,6 +347,7 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
     state: input.state ?? "scheduled",
     deliver: input.deliver ?? "none",
     script: input.script ?? null,
+    profile_name: input.profile_name ?? "default",
     hermes_job_id: input.hermes_job_id ?? null,
     source: input.source ?? "ch",
     orphan: 0,
@@ -357,9 +364,9 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
       `INSERT INTO cron_jobs (
         id, name, prompt, skills, model, provider, base_url,
         schedule, schedule_display, repeat_json, enabled, state, deliver, script,
-        hermes_job_id, source, orphan, next_run_at, last_run_at,
+        profile_name, hermes_job_id, source, orphan, next_run_at, last_run_at,
         last_status, last_delivery_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -376,6 +383,7 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
       row.state,
       row.deliver,
       row.script,
+      row.profile_name,
       row.hermes_job_id,
       row.source,
       row.orphan,
@@ -453,6 +461,10 @@ export function updateCronJob(
   if (input.script !== undefined) {
     sets.push("script = ?");
     vals.push(input.script);
+  }
+  if (input.profile_name !== undefined) {
+    sets.push("profile_name = ?");
+    vals.push(input.profile_name);
   }
   if (input.next_run_at !== undefined) {
     sets.push("next_run_at = ?");
@@ -545,7 +557,7 @@ export function importHermesJobs(): {
           `UPDATE cron_jobs SET
             name=?, prompt=?, skills=?, model=?, provider=?, base_url=?,
             schedule=?, schedule_display=?, repeat_json=?, enabled=?, state=?,
-            deliver=?, script=?, next_run_at=?, last_run_at=?,
+            deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
             orphan=0
           WHERE hermes_job_id=?`
@@ -564,6 +576,7 @@ export function importHermesJobs(): {
           row.state,
           row.deliver,
           row.script,
+          row.profile_name,
           row.next_run_at,
           row.last_run_at,
           row.last_status,
@@ -581,9 +594,9 @@ export function importHermesJobs(): {
           `INSERT INTO cron_jobs (
             id, name, prompt, skills, model, provider, base_url,
             schedule, schedule_display, repeat_json, enabled, state, deliver, script,
-            hermes_job_id, source, orphan, next_run_at, last_run_at,
+            profile_name, hermes_job_id, source, orphan, next_run_at, last_run_at,
             last_status, last_delivery_error, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           id,
@@ -600,6 +613,7 @@ export function importHermesJobs(): {
           row.state,
           row.deliver,
           row.script,
+          row.profile_name,
           row.hermes_job_id,
           row.source,
           row.orphan,
@@ -768,6 +782,7 @@ export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
     state: j.state,
     deliver: j.deliver,
     script: j.script,
+    profile_name: j.profile_name,
     created_at: j.created_at,
     next_run_at: j.next_run_at,
     last_run_at: j.last_run_at,
@@ -856,6 +871,7 @@ export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: s
     state: job.state,
     deliver: job.deliver,
     script: job.script,
+    profile_name: job.profile_name,
     created_at: job.created_at,
     next_run_at: job.next_run_at,
     last_run_at: job.last_run_at,
