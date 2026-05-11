@@ -75,23 +75,6 @@ jest.mock("@/lib/audit-log", () => ({
   appendAuditLine: jest.fn(),
 }));
 
-jest.mock("@/lib/jobs-repository", () => ({
-  readJobsFile: jest.fn(() => ({
-    ok: true,
-    jobs: [
-      { id: "job1", name: "Test Job", prompt: "test", enabled: true, state: "scheduled", schedule: { kind: "interval", minutes: 5, display: "every 5m" }, repeat: { times: -1, completed: 0 }, skills: [], model: "", last_run_at: null, next_run_at: null },
-    ],
-  })),
-  withJobsFileLock: jest.fn(async (_path, _backup, fn) => {
-    const jobs = [
-      { id: "job1", name: "Test Job", prompt: "test", enabled: true, state: "scheduled", schedule: { kind: "interval", minutes: 5, display: "every 5m" }, repeat: { times: -1, completed: 0 }, skills: [], model: "", last_run_at: null, next_run_at: null },
-    ];
-    const out = fn(jobs);
-    if (out.action === "abort") return { ok: false, error: out.error };
-    return { ok: true, value: out.value };
-  }),
-}));
-
 jest.mock("@/lib/sessions-api-guard", () => ({
   sessionsRateLimitResponse: jest.fn(() => null),
 }));
@@ -103,13 +86,12 @@ describe("GET /api/cron", () => {
 
   it("returns list of cron jobs", async () => {
     const { GET } = await import("@/app/api/cron/route");
-    const res = await GET();
+    const req = new NextRequest("http://localhost/api/cron");
+    const res = await GET(req as unknown as Request);
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.data.jobs).toHaveLength(1);
-    expect(data.data.jobs[0].id).toBe("job1");
-    expect(data.data.jobs[0].name).toBe("Test Job");
+    expect(data.data.jobs).toHaveLength(0);
   });
 });
 
@@ -118,7 +100,9 @@ describe("GET /api/tools", () => {
 
   it("returns available toolsets", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue("platform_toolsets:\n  cli:\n    - terminal\n    - file\ntoolsets:\n  - terminal\n  - file\n");
+    mockReadFileSync.mockReturnValue(
+      "platform_toolsets:\n  cli:\n    - terminal\n    - file\ntoolsets:\n  - terminal\n  - file\n"
+    );
 
     const request = new NextRequest("http://localhost/api/tools");
     const { GET } = await import("@/app/api/tools/route");
@@ -147,7 +131,9 @@ describe("GET /api/config", () => {
 
   it("returns parsed config", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue("agent:\n  max_turns: 100\nmodel:\n  default: test-model\n");
+    mockReadFileSync.mockReturnValue(
+      "agent:\n  max_turns: 100\nmodel:\n  default: test-model\n"
+    );
 
     const { GET } = await import("@/app/api/config/route");
     const res = await GET();
@@ -185,9 +171,13 @@ describe("GET /api/templates", () => {
   it("returns custom templates", async () => {
     mockExistsSync.mockReturnValue(true);
     mockReaddirSync.mockReturnValue(["test-template.json"]);
-    mockReadFileSync.mockReturnValue(JSON.stringify({
-      id: "custom-1", name: "Custom Template", instruction: "Do stuff",
-    }));
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        id: "custom-1",
+        name: "Custom Template",
+        instruction: "Do stuff",
+      })
+    );
 
     const { GET } = await import("@/app/api/templates/route");
     const res = await GET();

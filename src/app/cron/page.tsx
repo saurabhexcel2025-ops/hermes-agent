@@ -630,6 +630,7 @@ export default function CronPage() {
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [pauseAllBusy, setPauseAllBusy] = useState(false);
   const [hwPauseAllBusy, setHwPauseAllBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   // Hardware cron tab state
   const [activeTab, setActiveTab] = useState<"agent" | "hardware">("agent");
   const [showHardwareCreate, setShowHardwareCreate] = useState(false);
@@ -719,6 +720,32 @@ export default function CronPage() {
       loadJobs();
     } finally {
       setPauseAllBusy(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/cron", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync" }),
+      });
+      const d = (await res.json()) as {
+        error?: string;
+        data?: { hermesImported?: { action: string }[] };
+      };
+      if (!res.ok) {
+        showToast(d.error || "Sync failed", "error");
+      } else {
+        const imported = d.data?.hermesImported?.length ?? 0;
+        showToast(`Synced — ${imported} Hermes job(s) imported`);
+      }
+    } catch {
+      showToast("Sync failed", "error");
+    } finally {
+      setSyncing(false);
+      void loadJobs();
     }
   };
 
@@ -910,6 +937,17 @@ export default function CronPage() {
                   {pauseAllBusy ? "Pausing…" : "Pause all"}
                 </Button>
                 <Button
+                  variant="secondary"
+                  color="orange"
+                  size="sm"
+                  icon={Zap}
+                  loading={syncing}
+                  disabled={syncing}
+                  onClick={() => void handleSync()}
+                >
+                  {syncing ? "Syncing…" : "Sync Jobs"}
+                </Button>
+                <Button
                   variant="primary"
                   color="orange"
                   size="sm"
@@ -933,13 +971,14 @@ export default function CronPage() {
                   {hwPauseAllBusy ? "Pausing…" : "Pause all"}
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="primary"
                   color="cyan"
                   size="sm"
                   icon={Plus}
                   onClick={() => setShowHardwareCreate(true)}
-                  title="New hardware job"
-                />
+                >
+                  New Job
+                </Button>
               </>
             )}
           </div>
@@ -980,7 +1019,7 @@ export default function CronPage() {
                         icon={Plus}
                         onClick={() => setShowCreate(true)}
                       >
-                        Create Job
+                        Create Agent Job
                       </Button>
                     ) : undefined
                   }
@@ -1036,7 +1075,7 @@ export default function CronPage() {
                         icon={Plus}
                         onClick={() => setShowHardwareCreate(true)}
                       >
-                        Add hardware job
+                        Create Hardware Job
                       </Button>
                     ) : undefined
                   }
