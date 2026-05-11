@@ -167,6 +167,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const [updating, setUpdating] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
+  // serverRestarting tracks the gap between "background build/restart fired" and "server actually back up"
+  const [serverRestarting, setServerRestarting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   // Dropdown state
@@ -290,6 +292,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
+      setServerRestarting(true);
+      setMessage("Restarting server (~/.hermes/logs/ch-restart.log)…");
       pollForReturn();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Restart failed";
@@ -317,7 +321,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
-      setMessage("Rebuild started in background (~/.hermes/logs/ch-build.log, ch-restart.log)…");
+      setMessage("Build started — restarting server…");
+      setServerRestarting(true);
       pollForReturn();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Rebuild failed";
@@ -352,6 +357,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           setUpdating(false);
           setRestarting(false);
           setRebuilding(false);
+          setServerRestarting(false);
           setCheckState(d.data?.updateAvailable ? "update-available" : "up-to-date");
           setMessage("Done!");
           setTimeout(() => {
@@ -366,6 +372,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           setUpdating(false);
           setRestarting(false);
           setRebuilding(false);
+          setServerRestarting(false);
           setMessage("Timeout — check server");
         }
       }
@@ -502,10 +509,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
       {/* Status message — visible inline when operation is in progress */}
       {message && (
         <div className="min-h-[1.25rem] px-1 text-[10px] font-mono text-white/50 text-center leading-tight">
-          {updating && "Updating..."}
-          {restarting && "Restarting server..."}
-          {rebuilding && "Building..."}
-          {!updating && !restarting && !rebuilding && message}
+          {serverRestarting ? "Restarting server…" : message}
         </div>
       )}
 
@@ -522,7 +526,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-neon-purple/10 border border-neon-purple/20 text-xs font-mono text-neon-purple hover:bg-neon-purple/20 transition-colors disabled:opacity-50"
           >
             <Hammer className={`w-3.5 h-3.5 ${rebuilding ? "animate-spin" : ""}`} />
-            {rebuilding ? "..." : "Rebuild"}
+            {serverRestarting ? "Restarting…" : rebuilding ? "…" : "Rebuild"}
           </button>
 
           <button
@@ -531,7 +535,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
           >
             <Power className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
-            {restarting ? "..." : "Restart"}
+            {restarting ? "Restarting…" : "Restart"}
           </button>
         </div>
       </div>
