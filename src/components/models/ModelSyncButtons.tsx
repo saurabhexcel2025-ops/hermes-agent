@@ -45,6 +45,10 @@ function SyncModal({
     : "Import from Hermes";
   const [removed, setRemoved] = useState<Set<string>>(new Set());
 
+  const subtitle = direction === "push"
+    ? "Write these settings into your Hermes config as the primary agent model"
+    : "Read these settings from your Hermes config into the selected model";
+
   const visibleChanges = diffs.filter((d) => !removed.has(d.id));
 
   const handleRemove = (id: string) => {
@@ -83,6 +87,7 @@ function SyncModal({
             <X className="w-4 h-4" />
           </button>
         </div>
+        <p className="px-4 py-2 text-[10px] font-mono text-white/40">{subtitle}</p>
 
         {/* Diffs list */}
         <div className="px-4 py-3 max-h-72 overflow-y-auto">

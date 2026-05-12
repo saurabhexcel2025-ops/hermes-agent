@@ -78,41 +78,26 @@ export async function POST(
     const hermesModel = readHermesModelSection();
 
     if (direction === "push") {
-      // Push: DB -> config.yaml (show what will be written)
-      const hProvider = hermesModel?.provider ?? "";
-      const hModelId = hermesModel?.default ?? "";
-      const hBaseUrl = hermesModel?.base_url ?? "";
-
+      // Export: show the DB model's values as "will be written"
       if (model.modelId) {
-        const detail = hModelId && hModelId !== model.modelId
-          ? `${hModelId} -> ${model.modelId}`
-          : model.modelId;
         diffs.push({
           id: "modelId",
           label: "Model ID",
-          detail,
+          detail: model.modelId,
         });
       }
       if (model.provider) {
-        const detail = hProvider && hProvider !== model.provider
-          ? `${hProvider} -> ${model.provider}`
-          : model.provider;
         diffs.push({
           id: "provider",
           label: "Provider",
-          detail,
+          detail: model.provider,
         });
       }
-      {
-        const detail = (model.baseUrl ?? "") !== hBaseUrl
-          ? `${hBaseUrl || "(none)"} -> ${model.baseUrl ?? "(none)"}`
-          : model.baseUrl ?? "(none)";
-        diffs.push({
-          id: "baseUrl",
-          label: "Base URL",
-          detail,
-        });
-      }
+      diffs.push({
+        id: "baseUrl",
+        label: "Base URL",
+        detail: model.baseUrl ?? "(none)",
+      });
 
       // Credential
       if (model.credentialsId && model.apiKey) {
@@ -130,12 +115,12 @@ export async function POST(
       if (diffs.length === 0) {
         diffs.push({
           id: "no-change",
-          label: "No changes",
-          detail: `${model.name} is already in sync with config.yaml`,
+          label: "No data",
+          detail: `${model.name} has no settings to export`,
         });
       }
     } else {
-      // Pull: config.yaml → DB (show what will be read)
+      // Import: show config.yaml values as "current config has"
       if (!hermesModel || !hermesModel.default) {
         diffs.push({
           id: "no-hermes-data",
@@ -143,27 +128,23 @@ export async function POST(
           detail: `No model section found in config.yaml`,
         });
       } else {
-        if (hermesModel.default !== model.modelId) {
-          diffs.push({
-            id: "modelId",
-            label: "Model ID",
-            detail: `${model.modelId} → ${hermesModel.default}`,
-          });
-        }
-        if (hermesModel.provider && hermesModel.provider !== model.provider) {
+        diffs.push({
+          id: "modelId",
+          label: "Model ID",
+          detail: hermesModel.default,
+        });
+        if (hermesModel.provider) {
           diffs.push({
             id: "provider",
             label: "Provider",
-            detail: `${model.provider} → ${hermesModel.provider}`,
+            detail: hermesModel.provider,
           });
         }
-        if ((hermesModel.base_url ?? "") !== (model.baseUrl ?? "")) {
-          diffs.push({
-            id: "baseUrl",
-            label: "Base URL",
-            detail: `${model.baseUrl ?? "(none)"} → ${hermesModel.base_url ?? "(none)"}`,
-          });
-        }
+        diffs.push({
+          id: "baseUrl",
+          label: "Base URL",
+          detail: hermesModel.base_url ?? "(none)",
+        });
       }
 
       if (diffs.length === 0) {
