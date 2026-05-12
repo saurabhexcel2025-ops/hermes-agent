@@ -106,8 +106,11 @@ function emptyDefaults(): Record<TaskType, string | null> {
   );
 }
 
-function defaultBadgesFor(model: ApiModel): TaskType[] {
-  return TASK_TYPES.filter((slot) => model.defaults[slot] === model.id);
+function defaultBadgesFor(
+  model: ApiModel,
+  defaults: Record<TaskType, string | null>,
+): TaskType[] {
+  return TASK_TYPES.filter((slot) => defaults[slot] === model.id);
 }
 
 const DEFAULT_FALLBACK_CONFIG: FallbackConfig = {
@@ -855,7 +858,7 @@ export default function ModelsPage() {
                       </thead>
                       <tbody>
                         {models.map((m) => {
-                          const badges = defaultBadgesFor(m);
+                          const badges = defaultBadgesFor(m, defaults);
                           return (
                             <tr
                               key={m.id}
@@ -915,6 +918,7 @@ export default function ModelsPage() {
                                         baseUrl: m.baseUrl,
                                         contextLength: m.contextLength,
                                         credentialsId: m.credentialsId,
+                                        frameworkId: m.frameworkId,
                                       })
                                     }
                                     className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
