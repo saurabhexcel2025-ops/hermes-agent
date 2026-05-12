@@ -219,6 +219,11 @@ control-hub/
 
 §
 
+The agent is authenticated with GitHub via `$GITHUB_TOKEN` (set in `~/.hermes/.env`).
+The `gh` CLI is also configured with the same PAT. **Always use `gh` as the primary method.**
+
+§
+
 ```bash
 
 # Before starting work
@@ -231,7 +236,9 @@ git pull origin dev
 
 §
 
-# After making changes
+# After making changes — build and test first
+
+npm run build && npm test
 
 git add -A
 
@@ -241,15 +248,29 @@ git push origin feature/your-feature
 
 §
 
-# Create PR for review
+# Create PR for review — PREFERRED: use gh CLI
+
+gh pr create \
+
+  --title "type: description" \
+
+  --body "What changed and why." \
+
+  --base dev \
+
+  --head feature/your-feature
+
+§
+
+# Fallback: curl with $GITHUB_TOKEN (always available)
 
 curl -X POST https://api.github.com/repos/Daniel-Parke/hermes-control-hub/pulls \
 
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Authorization: Bearer \$GITHUB_TOKEN" \
 
   -H "Content-Type: application/json" \
 
-  -d '{"title":"description","body":"what changed","head":"dev","base":"main"}'
+  -d '{"title":"type: description","body":"what changed","head":"feature/your-feature","base":"dev"}'
 
 ```
 
@@ -264,6 +285,8 @@ curl -X POST https://api.github.com/repos/Daniel-Parke/hermes-control-hub/pulls 
 - Never merge your own PRs
 
 - If merge conflict: stop and report to user
+
+- **Never use the browser for GitHub operations** — blocks with CAPTCHAs. Use `gh` CLI, `git`, or `curl` + `$GITHUB_TOKEN`.
 
 §
 
