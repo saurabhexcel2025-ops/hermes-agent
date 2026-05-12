@@ -1,9 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // Framework Registry — maps framework IDs to display metadata
 //
-// This module is SAFE for client components — no fs imports.
-// Active framework persistence is handled server-side in the
-// /api/models/framework API route.
+// This module is SAFE for client components. No fs or server-only
+// imports. Server-side persistence is in framework-registry.server.ts.
 // ═══════════════════════════════════════════════════════════════
 
 export interface FrameworkEntry {
@@ -26,18 +25,16 @@ export const FRAMEWORKS: FrameworkEntry[] = [
     },
 ];
 
+/** The reserved ID for the universal/default scope. */
+export const UNIVERSAL_FRAMEWORK_ID = "*";
+
+/** The reserved display label for the universal scope. */
+export const UNIVERSAL_FRAMEWORK_LABEL = "Universal";
+
 export function getFramework(id: string): FrameworkEntry | undefined {
     return FRAMEWORKS.find(f => f.id === id);
 }
 
 export function listFrameworks(): FrameworkEntry[] {
   return [...FRAMEWORKS];
-}
-
-export function getActiveFrameworkId(): string {
-  return "hermes";
-}
-
-export function setActiveFrameworkId(_id: string): void {
-  // Persisted via /api/models/framework API route.
 }
