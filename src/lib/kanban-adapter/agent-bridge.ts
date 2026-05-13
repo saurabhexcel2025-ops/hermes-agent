@@ -13,7 +13,7 @@
 // AgentBackend (Hermes, PI, OpenClaw, etc.) works without changing the UI.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { getAgentBackend } from "@/lib/backends";
+import { agentBackend } from "@/lib/backends";
 import { getKanbanAdapter } from "./default-adapter";
 import type { DispatchMissionInput } from "@/lib/agent-backend/types";
 import type { KanbanCard } from "./types";
@@ -45,7 +45,7 @@ export async function dispatchKanbanCard(
   card: KanbanCard,
   options: DispatchCardOptions = {}
 ): Promise<{ missionId: string; linked: boolean }> {
-  const backend = getAgentBackend();
+  const backend = agentBackend;
   const adapter = getKanbanAdapter();
 
   // Build the mission prompt from the card
@@ -127,7 +127,7 @@ export async function syncCardWithMissions(
     return { cardStatus: "todo", allMissionsComplete: false };
   }
 
-  const backend = getAgentBackend();
+  const backend = agentBackend;
   let allComplete = true;
 
   for (const link of links) {

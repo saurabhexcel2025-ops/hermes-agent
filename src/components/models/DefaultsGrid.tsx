@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 //
 // Each slot maps to an entry in the model_defaults table
-// (migration 012), keyed on (framework_id, task_type). Changes
+// (migration 012), keyed on (task_type, task_type). Changes
 // propagate to ~/.hermes/config.yaml via syncDefaultsToHermesConfig.
 
 "use client";

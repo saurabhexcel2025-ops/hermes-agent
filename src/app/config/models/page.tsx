@@ -38,7 +38,6 @@ import ModelEditor, {
 import DefaultsGrid, {
   type DefaultsModelOption,
 } from "@/components/models/DefaultsGrid";
-import FrameworkSelector from "@/components/models/FrameworkSelector";
 import BulkAuxiliaryUpdater from "@/components/models/BulkAuxiliaryUpdater";
 import ModelSyncButtons from "@/components/models/ModelSyncButtons";
 import FallbackChainList from "@/components/models/FallbackChainList";
@@ -76,7 +75,6 @@ interface ApiModel {
   baseUrl: string | null;
   contextLength: number | null;
   credentialsId: string | null;
-  frameworkId: string;
   defaults: ApiModelDefaults;
   createdAt: string;
   updatedAt: string;
@@ -122,8 +120,6 @@ const DEFAULT_FALLBACK_CONFIG: FallbackConfig = {
 };
 
 export default function ModelsPage() {
-  const [framework, setFramework] = useState<string>("*");
-  const [frameworkLoaded, setFrameworkLoaded] = useState(false);
   const [models, setModels] = useState<ApiModel[]>([]);
   const [credentials, setCredentials] = useState<ApiCredential[]>([]);
   const [defaults, setDefaults] = useState<Record<TaskType, string | null>>(
@@ -156,9 +152,9 @@ export default function ModelsPage() {
     setError(null);
     try {
       const [mRes, cRes, dRes, driftRes, fbRes, fbCfgRes] = await Promise.all([
-        fetch(`/api/models?framework=${encodeURIComponent(framework)}`),
+        fetch(`/api/models`),
         fetch("/api/credentials"),
-        fetch(`/api/models/defaults?framework=${encodeURIComponent(framework)}`),
+        fetch(`/api/models/defaults`),
         fetch("/api/models/sync/drift"),
         fetch("/api/models/fallbacks"),
         fetch("/api/models/fallbacks/config"),
@@ -217,64 +213,23 @@ export default function ModelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [framework]);
-
-  // Load persisted framework on mount, then load data
-  useEffect(() => {
-    // First, fetch the persisted active framework
-    fetch("/api/models/framework")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const active = data?.data?.active;
-        if (active) {
-          setFramework(active);
-        }
-        setFrameworkLoaded(true);
-      })
-      .catch(() => {
-        setFrameworkLoaded(true);
-      });
   }, []);
 
-  // Load data once framework is determined
   useEffect(() => {
-    if (frameworkLoaded) {
-      void loadAll();
-    }
-  }, [loadAll, frameworkLoaded]);
+    void loadAll();
+  }, [loadAll]);
 
-  // ── Framework change handler ───────────────────────────────────
-
-  const handleFrameworkChange = useCallback(async (newFramework: string) => {
-    setFramework(newFramework);
-    // Persist the active framework via API so it survives page reloads
-    try {
-      const res = await fetch("/api/models/framework", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ framework: newFramework }),
-      });
-      if (!res.ok) {
-        console.error(`Failed to persist framework: ${res.status}`);
-      }
-    } catch (e) {
-      console.error("Failed to persist framework:", e);
-    }
-  }, []);
-
-  // ── Derived model options (framework-scoped) ──────────────────
+  // ── Derived model options (model) ──────────────────
 
   const modelOptions = useMemo<DefaultsModelOption[]>(
     () =>
-      models
-        .filter((m) => m.frameworkId === framework || m.frameworkId === "*")
-        .map((m) => ({
+      models.map((m) => ({
           id: m.id,
           name: m.name,
           provider: m.provider,
           modelId: m.modelId,
         })),
-    [models, framework]
+    [models]
   );
 
   const credentialOptions = useMemo(
@@ -296,7 +251,7 @@ export default function ModelsPage() {
         const res = await fetch(`/api/models/sync/push`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelId, framework, pushCredential: options?.pushCredential !== false }),
+          body: JSON.stringify({ modelId, pushCredential: options?.pushCredential !== false }),
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -317,7 +272,7 @@ export default function ModelsPage() {
         };
       }
     },
-    [framework, loadAll, showToast]
+    [loadAll, showToast]
   );
 
   const handlePull = useCallback(
@@ -328,7 +283,7 @@ export default function ModelsPage() {
         const res = await fetch(`/api/models/sync/pull`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelId, framework, excluded: [...excluded] }),
+          body: JSON.stringify({ modelId, excluded: [...excluded] }),
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -349,7 +304,7 @@ export default function ModelsPage() {
         };
       }
     },
-    [framework, loadAll, showToast]
+    [loadAll, showToast]
   );
 
   // ── Model editor callbacks ─────────────────────────────────────
@@ -404,7 +359,7 @@ export default function ModelsPage() {
         const res = await fetch("/api/models/defaults", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ taskType, modelId, framework }),
+          body: JSON.stringify({ taskType, modelId }),
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -425,7 +380,7 @@ export default function ModelsPage() {
         setBusyTaskType(null);
       }
     },
-    [framework, loadAll, showToast]
+    [loadAll, showToast]
   );
 
   // ── Bulk auxiliary setter ─────────────────────────────────────
@@ -439,7 +394,7 @@ export default function ModelsPage() {
             const res = await fetch("/api/models/defaults", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ taskType, modelId: targetModelId, framework }),
+              body: JSON.stringify({ taskType, modelId: targetModelId }),
             });
             if (!res.ok) {
               const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -471,7 +426,7 @@ export default function ModelsPage() {
         setBusyTaskType(null);
       }
     },
-    [framework, loadAll, showToast]
+    [loadAll, showToast]
   );
 
   // ── Refresh handler ───────────────────────────────────────────
@@ -709,10 +664,7 @@ export default function ModelsPage() {
             >
               Add Model
             </Button>
-            <FrameworkSelector
-              activeFrameworkId={framework}
-              onFrameworkChange={handleFrameworkChange}
-            />
+            
           </>
         }
       />
@@ -802,15 +754,6 @@ export default function ModelsPage() {
                                 {m.provider}
                               </td>
                               <td className="px-4 py-3">
-                                {m.frameworkId === "*" ? (
-                                  <span className="text-[10px] font-mono bg-white/5 text-white/40 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                                    Universal
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] font-mono bg-neon-purple/10 text-neon-purple/70 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                                    {m.frameworkId}
-                                  </span>
-                                )}
                               </td>
                               <td className="px-4 py-3 font-mono text-white/70">
                                 {m.modelId}
@@ -859,7 +802,7 @@ export default function ModelsPage() {
                                         baseUrl: m.baseUrl,
                                         contextLength: m.contextLength,
                                         credentialsId: m.credentialsId,
-                                        frameworkId: m.frameworkId,
+                
                                       })
                                     }
                                     className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"

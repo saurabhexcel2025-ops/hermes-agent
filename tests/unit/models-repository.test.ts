@@ -16,6 +16,7 @@ const missionExtPath = join(repoRoot, "src", "lib", "db", "migrations", "004_mis
 const statusEnumPath = join(repoRoot, "src", "lib", "db", "migrations", "005_mission_status_enum.sql");
 const modelsPath = join(repoRoot, "src", "lib", "db", "migrations", "006_models_credentials.sql");
 const frameworkFallbackPath = join(repoRoot, "src", "lib", "db", "migrations", "012_models_framework_fallback.sql");
+const hermesOnlyPath = join(repoRoot, "src", "lib", "db", "migrations", "014_hermes_only.sql");
 
 let testDb: import("better-sqlite3").Database | null = null;
 
@@ -48,6 +49,8 @@ beforeEach(() => {
   // IF NOT EXISTS guard ensures we can skip the guard rows
   testDb.exec(readFileSync(modelsPath, "utf-8"));
   testDb.exec(readFileSync(frameworkFallbackPath, "utf-8"));
+  // Apply migration 014 to reverse framework scaffolding (Hermes-only)
+  testDb.exec(readFileSync(hermesOnlyPath, "utf-8"));
 });
 
 afterEach(() => {
@@ -220,106 +223,60 @@ describe("models-repository — updateModel + deleteModel", () => {
   });
 });
 
-describe("models-repository — framework scoping", () => {
-  it("listModels without filter returns all models", () => {
+describe("models-repository — listModels returns all models (no framework scoping)", () => {
+  it("listModels returns all models", () => {
     const { createModel, listModels } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    createModel({ name: "Universal", provider: "anthropic", modelId: "claude-1", frameworkId: "*" });
-    createModel({ name: "Hermes-only", provider: "openai", modelId: "gpt-4", frameworkId: "hermes" });
+    createModel({ name: "Universal", provider: "anthropic", modelId: "claude-1" });
+    createModel({ name: "Hermes-only", provider: "openai", modelId: "gpt-4" });
     const all = listModels();
     expect(all).toHaveLength(2);
   });
-
-  it("listModels('hermes') returns universal + hermes-scoped models", () => {
-    const { createModel, listModels } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    createModel({ name: "Universal", provider: "anthropic", modelId: "claude-2", frameworkId: "*" });
-    createModel({ name: "Hermes-only", provider: "openai", modelId: "gpt-4", frameworkId: "hermes" });
-    const filtered = listModels("hermes");
-    expect(filtered).toHaveLength(2);
-  });
-
-  it("listModels('unknown-fw') returns only universal models", () => {
-    const { createModel, listModels } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    createModel({ name: "Universal", provider: "anthropic", modelId: "claude-3", frameworkId: "*" });
-    createModel({ name: "Hermes-only", provider: "openai", modelId: "gpt-4o", frameworkId: "hermes" });
-    const filtered = listModels("unknown-fw");
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].name).toBe("Universal");
-  });
 });
 
-describe("models-repository — framework-scoped defaults", () => {
-  it("getDefaultModel falls back from framework-specific to universal", () => {
+describe("models-repository — defaults have no framework param", () => {
+  it("setDefaultModel and getDefaultModel work without framework param", () => {
     const { createModel, setDefaultModel, getDefaultModel, getModelDefaults } =
       require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    const m1 = createModel({ name: "FW Model", provider: "anthropic", modelId: "claude-fw", frameworkId: "hermes" });
-    const m2 = createModel({ name: "Universal Model", provider: "openai", modelId: "gpt-fw", frameworkId: "*" });
+    const m = createModel({ name: "FW Model", provider: "anthropic", modelId: "claude-fw" });
 
-    // Set universal default
-    setDefaultModel("agent", m2.id, "*");
-    expect(getDefaultModel("agent", "*")?.id).toBe(m2.id);
+    setDefaultModel("agent", m.id);
+    expect(getDefaultModel("agent")?.id).toBe(m.id);
 
-    // No framework-specific default set yet, should not fall back to universal
-    // because getModelDefaults for 'hermes' should show framework-specific then universal
-    const fwDefaults = getModelDefaults("hermes");
-    expect(fwDefaults.agent).toBe(m2.id); // falls back to universal
-
-    // Set framework-specific default - should override
-    setDefaultModel("agent", m1.id, "hermes");
-    const fwDefaultsAfter = getModelDefaults("hermes");
-    expect(fwDefaultsAfter.agent).toBe(m1.id);
-  });
-
-  it("setDefaultModel with framework parameter stores in per-framework defaults", () => {
-    const { createModel, setDefaultModel, getModelDefaults } =
-      require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    const m = createModel({ name: "A", provider: "anthropic", modelId: "x" });
-    setDefaultModel("agent", m.id, "hermes");
-    const defaults = getModelDefaults("hermes");
+    const defaults = getModelDefaults();
     expect(defaults.agent).toBe(m.id);
-
-    // Universal defaults should still be untouched
-    const universalDefaults = getModelDefaults("*");
-    expect(universalDefaults.agent).toBeNull();
   });
-});
 
-describe("models-repository — framework defaults table", () => {
-  it("model_defaults table is empty before any setDefaultModel calls", () => {
+  it("getModelDefaults returns null when no defaults set", () => {
     const { getModelDefaults } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    const defaults = getModelDefaults("*");
+    const defaults = getModelDefaults();
     for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
       expect(defaults[key]).toBeNull();
     }
   });
-});
 
-describe("models-repository — framework filtering with listModels", () => {
-  it("listModels by framework returns matching + universal models", () => {
+  it("listModels returns all models", () => {
     const { createModel, listModels } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    createModel({ name: "Univ", provider: "anthropic", modelId: "a", frameworkId: "*" });
-    createModel({ name: "Hermes", provider: "openai", modelId: "b", frameworkId: "hermes" });
-    
-    const hermesModels = listModels("hermes");
-    expect(hermesModels).toHaveLength(2);
-    
+    createModel({ name: "Univ", provider: "anthropic", modelId: "a" });
+    createModel({ name: "Hermes", provider: "openai", modelId: "b" });
+
     const allModels = listModels();
     expect(allModels).toHaveLength(2);
   });
 });
 
-describe("models-repository — model with frameworkId", () => {
-  it("createModel stores frameworkId and returns it", () => {
+describe("models-repository — model CRUD", () => {
+  it("createModel returns the created model", () => {
     const { createModel, getModel } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    const m = createModel({ name: "F", provider: "anthropic", modelId: "x", frameworkId: "hermes" });
-    expect(m.frameworkId).toBe("hermes");
-    expect(getModel(m.id)?.frameworkId).toBe("hermes");
+    const m = createModel({ name: "F", provider: "anthropic", modelId: "x" });
+    expect(m.name).toBe("F");
+    expect(getModel(m.id)?.name).toBe("F");
   });
 
-  it("updateModel can change frameworkId", () => {
+  it("updateModel works with minimal update", () => {
     const { createModel, updateModel, getModel } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
-    const m = createModel({ name: "F", provider: "anthropic", modelId: "x", frameworkId: "*" });
-    const updated = updateModel(m.id, { frameworkId: "hermes" });
-    expect(updated?.frameworkId).toBe("hermes");
-    expect(getModel(m.id)?.frameworkId).toBe("hermes");
+    const m = createModel({ name: "F", provider: "anthropic", modelId: "x" });
+    const updated = updateModel(m.id, { name: "F Updated" });
+    expect(updated?.name).toBe("F Updated");
+    expect(getModel(m.id)?.name).toBe("F Updated");
   });
 });

@@ -3,7 +3,7 @@
  */
 // ═══════════════════════════════════════════════════════════════
 // Models page UI improvements tests
-// Tests for: compact Agent Default, section icons, FrameworkSelector cleanup
+// Tests for: compact Agent Default, section icons
 // ═══════════════════════════════════════════════════════════════
 
 import "@testing-library/jest-dom";
@@ -125,7 +125,6 @@ describe("ModelsPage UI improvements", () => {
       name: "MiniMax M2.1",
       provider: "minimax",
       modelId: "MiniMax/MiniMax-M2.1",
-      frameworkId: "*",
       baseUrl: null,
       contextLength: 200000,
       credentialsId: null,

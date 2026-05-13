@@ -11,7 +11,6 @@ interface ApiModel {
   baseUrl: string | null;
   contextLength: number | null;
   credentialsId: string | null;
-  frameworkId: string;
   createdAt: string;
   updatedAt: string;
 }

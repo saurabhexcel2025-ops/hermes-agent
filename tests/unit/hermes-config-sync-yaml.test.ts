@@ -20,6 +20,7 @@ const missionExtPath = join(repoRoot, "src", "lib", "db", "migrations", "004_mis
 const statusEnumPath = join(repoRoot, "src", "lib", "db", "migrations", "005_mission_status_enum.sql");
 const modelsPath = join(repoRoot, "src", "lib", "db", "migrations", "006_models_credentials.sql");
 const frameworkFallbackPath = join(repoRoot, "src", "lib", "db", "migrations", "012_models_framework_fallback.sql");
+const hermesOnlyPath = join(repoRoot, "src", "lib", "db", "migrations", "014_hermes_only.sql");
 
 let testDb: import("better-sqlite3").Database | null = null;
 
@@ -56,13 +57,6 @@ jest.mock("@/lib/hermes-agent-runtime", () => ({
   getActiveHermesHome: () => (global as { __FAKE_HERMES_ROOT__?: string }).__FAKE_HERMES_ROOT__,
 }));
 
-// Mock framework-registry so sync-manager doesn't import fs in test context
-jest.mock("@/lib/framework-registry", () => ({
-  getActiveFrameworkId: () => "hermes",
-  listFrameworks: () => [],
-  FRAMEWORKS: [],
-}));
-
 function loadRealBetterSqlite3(): typeof import("better-sqlite3") {
   return require("better-sqlite3/lib/index.js") as typeof import("better-sqlite3");
 }
@@ -82,6 +76,8 @@ beforeEach(() => {
   testDb.exec(readFileSync(modelsPath, "utf-8"));
   // Apply migration 012 to add framework_id and model_defaults
   testDb.exec(readFileSync(frameworkFallbackPath, "utf-8"));
+  // Apply migration 014 to reverse framework scaffolding (Hermes-only)
+  testDb.exec(readFileSync(hermesOnlyPath, "utf-8"));
 });
 
 afterEach(() => {

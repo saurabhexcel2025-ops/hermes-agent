@@ -16,8 +16,6 @@ import Modal from "@/components/ui/Modal";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
 import type { AgentProfile, ProfileFile } from "@/types/hermes";
-import FrameworkSelector from "@/components/models/FrameworkSelector";
-import { useActiveFramework } from "@/lib/framework-context";
 
 const PERSONALITIES = [
   "technical", "helpful", "creative", "concise", "teacher",
@@ -43,7 +41,6 @@ interface EditorState {
 interface RegistryAgentRow {
   id: string;
   label: string;
-  framework: string;
   filesystemRoot: string;
 }
 
@@ -73,7 +70,7 @@ export default function BehaviourPage() {
   const [deleting, setDeleting] = useState(false);
 
   const { showToast, toastElement } = useToast();
-  const frameworkCtx = useActiveFramework();
+
 
   const loadAgentTargets = useCallback(async () => {
     try {
@@ -290,13 +287,6 @@ export default function BehaviourPage() {
           </Button>
         }
       />
-
-      <div className="px-6 pt-4">
-        <FrameworkSelector
-          activeFrameworkId={frameworkCtx.activeFrameworkId}
-          onFrameworkChange={(id) => void frameworkCtx.setActiveFrameworkId(id)}
-        />
-      </div>
 
       <div className="px-6 py-6">
         {registryAgents.length > 0 && (

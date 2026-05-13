@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
       upsertAgentEntry({
         id: String(register.id),
         label: String(register.label || register.id),
-        framework: "hermes",
         filesystemRoot: String(register.filesystemRoot).replace(/[/\\]+$/, ""),
         gatewayBaseUrl: register.gatewayBaseUrl,
         llmBaseUrl: register.llmBaseUrl,

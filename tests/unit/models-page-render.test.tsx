@@ -151,7 +151,6 @@ describe("ModelsPage", () => {
       name: "MiniMax M2.1",
       provider: "minimax",
       modelId: "MiniMax/MiniMax-M2.1",
-      frameworkId: "*",
       baseUrl: null,
       contextLength: 200000,
       credentialsId: null,

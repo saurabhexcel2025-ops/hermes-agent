@@ -3,9 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 //
 // Drives mission dispatch, generic LLM calls, and the Hindsight bridge.
-// Models can be scoped to a specific framework (framework_id = 'hermes')
-// or universal (framework_id = '*'). Defaults are stored in the
-// separate model_defaults table keyed on (framework_id, task_type).
+// Defaults are stored in the model_defaults table keyed on task_type.
 
 import { db, inTransaction, uuid, now } from "./db";
 import { isTaskType, type TaskType } from "./hermes-providers";
@@ -33,7 +31,6 @@ export interface ModelRecord {
   name: string;
   provider: string;
   modelId: string;
-  frameworkId: string;
   baseUrl: string | null;
   contextLength: number | null;
   credentialsId: string | null;
@@ -57,7 +54,6 @@ export interface CreateModelInput {
   name: string;
   provider: string;
   modelId: string;
-  frameworkId?: string;  // defaults to '*' (universal)
   baseUrl?: string | null;
   contextLength?: number | null;
   credentialsId?: string | null;
@@ -69,7 +65,6 @@ export interface UpdateModelInput {
   name?: string;
   provider?: string;
   modelId?: string;
-  frameworkId?: string;
   baseUrl?: string | null;
   contextLength?: number | null;
   credentialsId?: string | null;
@@ -89,7 +84,6 @@ interface ModelRow {
   name: string;
   provider: string;
   model_id: string;
-  framework_id: string;
   base_url: string | null;
   context_length: number | null;
   credentials_id: string | null;
@@ -103,7 +97,6 @@ function rowToModel(row: ModelRow): ModelRecord {
     name: row.name,
     provider: row.provider,
     modelId: row.model_id,
-    frameworkId: row.framework_id,
     baseUrl: row.base_url,
     contextLength: row.context_length,
     credentialsId: row.credentials_id,
@@ -123,18 +116,10 @@ function emptyDefaults(): ModelDefaults {
 
 // ── Read ───────────────────────────────────────────────────────
 
-export function listModels(frameworkId?: string): ModelRecord[] {
-  let rows: ModelRow[];
-  if (frameworkId) {
-    // Return models matching this framework OR universal ('*')
-    rows = db()
-      .prepare("SELECT * FROM models WHERE framework_id = ? OR framework_id = '*' ORDER BY created_at DESC")
-      .all(frameworkId) as ModelRow[];
-  } else {
-    rows = db()
-      .prepare("SELECT * FROM models ORDER BY created_at DESC")
-      .all() as ModelRow[];
-  }
+export function listModels(): ModelRecord[] {
+  const rows = db()
+    .prepare("SELECT * FROM models ORDER BY created_at DESC")
+    .all() as ModelRow[];
   return rows.map(rowToModel);
 }
 
@@ -154,52 +139,32 @@ export function getModelWithKey(id: string): ModelWithKey | null {
 
 // ── Defaults (now in model_defaults table) ─────────────────────────
 
-export function getDefaultModel(taskType: TaskType, frameworkId: string = "*"): ModelRecord | null {
+export function getDefaultModel(taskType: TaskType): ModelRecord | null {
   if (!isTaskType(taskType)) {
     throw new Error(`Unknown task type: ${taskType}`);
   }
-  // Try framework-specific first, fall back to universal
-  for (const fw of [frameworkId, "*"]) {
-    const row = db()
-      .prepare(
-        `SELECT m.* FROM models m INNER JOIN model_defaults d ON m.id = d.model_id WHERE d.framework_id = ? AND d.task_type = ? LIMIT 1`
-      )
-      .get(fw, taskType) as ModelRow | undefined;
-    if (row) return rowToModel(row);
-  }
-  return null;
+  const row = db()
+    .prepare(
+      `SELECT m.* FROM models m INNER JOIN model_defaults d ON m.id = d.model_id WHERE d.task_type = ? LIMIT 1`
+    )
+    .get(taskType) as ModelRow | undefined;
+  return row ? rowToModel(row) : null;
 }
 
-export function getModelDefaults(frameworkId: string = "*"): ModelDefaults {
+export function getModelDefaults(): ModelDefaults {
   const defaults = emptyDefaults();
   
-  // Get framework-specific defaults
-  const fwRows = db()
-    .prepare("SELECT task_type, model_id FROM model_defaults WHERE framework_id = ?")
-    .all(frameworkId) as { task_type: string; model_id: string | null }[];
+  const rows = db()
+    .prepare("SELECT task_type, model_id FROM model_defaults")
+    .all() as { task_type: string; model_id: string | null }[];
   
-  for (const row of fwRows) {
+  for (const row of rows) {
     if (isTaskType(row.task_type)) {
       defaults[row.task_type] = row.model_id;
     }
   }
   
-  // Fill in any undefined slots from Universal defaults
-  const uniRows = db()
-    .prepare("SELECT task_type, model_id FROM model_defaults WHERE framework_id = '*'")
-    .all() as { task_type: string; model_id: string | null }[];
-  
-  for (const row of uniRows) {
-    if (isTaskType(row.task_type) && defaults[row.task_type] === null) {
-      defaults[row.task_type] = row.model_id;
-    }
-  }
-  
   return defaults;
-}
-
-export function getFrameworkDefaults(frameworkId: string): ModelDefaults {
-  return getModelDefaults(frameworkId);
 }
 
 // ── Write ──────────────────────────────────────────────────────
@@ -211,21 +176,19 @@ export function createModel(input: CreateModelInput): ModelRecord {
 
   const id = uuid();
   const ts = now();
-  const frameworkId = input.frameworkId || "*";
 
   db()
     .prepare(
       `INSERT INTO models (
-         id, name, provider, model_id, framework_id, base_url, context_length, credentials_id,
+         id, name, provider, model_id, base_url, context_length, credentials_id,
          created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
       input.name.trim(),
       input.provider.trim(),
       input.modelId.trim(),
-      frameworkId,
       input.baseUrl ?? null,
       input.contextLength ?? null,
       input.credentialsId ?? null,
@@ -233,21 +196,17 @@ export function createModel(input: CreateModelInput): ModelRecord {
       ts
     );
 
-  // Process default-slot flags: if any defaults are set, first clear ALL
-  // existing defaults for the universal framework (single-default invariant),
-  // then set the new defaults.
+  // Process default-slot flags: if any defaults are set, clear existing
+  // defaults for that slot, then set the new defaults.
   if (input.defaults && Object.values(input.defaults).some(Boolean)) {
     for (const [slot, isDefault] of Object.entries(input.defaults)) {
       if (isDefault && isTaskType(slot)) {
-        // Clear all existing defaults for this slot first
         db()
-          .prepare(
-            "DELETE FROM model_defaults WHERE task_type = ? AND framework_id = ?"
-          )
-          .run(slot, frameworkId);
+          .prepare("DELETE FROM model_defaults WHERE task_type = ?")
+          .run(slot);
         db()
-          .prepare("INSERT INTO model_defaults (id, framework_id, task_type, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-          .run(uuid(), frameworkId, slot, id, ts, ts);
+          .prepare("INSERT INTO model_defaults (id, task_type, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+          .run(uuid(), slot, id, ts, ts);
       }
     }
   }
@@ -277,10 +236,6 @@ export function updateModel(id: string, input: UpdateModelInput): ModelRecord | 
       sets.push("model_id = ?");
       vals.push(input.modelId.trim());
     }
-    if (input.frameworkId !== undefined) {
-      sets.push("framework_id = ?");
-      vals.push(input.frameworkId.trim());
-    }
     if (input.baseUrl !== undefined) {
       sets.push("base_url = ?");
       vals.push(input.baseUrl);
@@ -297,21 +252,17 @@ export function updateModel(id: string, input: UpdateModelInput): ModelRecord | 
     vals.push(id);
     db().prepare(`UPDATE models SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
 
-    // Process default-slot flags — use new frameworkId if changed, else existing
+    // Process default-slot flags
     if (input.defaults) {
-      const effectiveFw = (input.frameworkId && input.frameworkId.trim().length > 0)
-        ? input.frameworkId.trim()
-        : existing.frameworkId;
       for (const [slot, isDefault] of Object.entries(input.defaults)) {
         if (!isTaskType(slot)) continue;
-        // Clear all existing defaults for this slot in the effective framework
         db()
-          .prepare("DELETE FROM model_defaults WHERE task_type = ? AND framework_id = ?")
-          .run(slot, effectiveFw);
+          .prepare("DELETE FROM model_defaults WHERE task_type = ?")
+          .run(slot);
         if (isDefault) {
           db()
-            .prepare("INSERT INTO model_defaults (id, framework_id, task_type, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-            .run(uuid(), effectiveFw, slot, id, ts, ts);
+            .prepare("INSERT INTO model_defaults (id, task_type, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+            .run(uuid(), slot, id, ts, ts);
         }
       }
     }
@@ -331,7 +282,7 @@ export function deleteModel(id: string): boolean {
   return true;
 }
 
-export function setDefaultModel(taskType: TaskType, modelId: string | null, frameworkId: string = "*"): ModelDefaults {
+export function setDefaultModel(taskType: TaskType, modelId: string | null): ModelDefaults {
   if (!isTaskType(taskType)) {
     throw new Error(`Unknown task type: ${taskType}`);
   }
@@ -347,20 +298,20 @@ export function setDefaultModel(taskType: TaskType, modelId: string | null, fram
   const ts = now();
 
   inTransaction(() => {
-    // Remove existing default for this framework+task_type
+    // Remove existing default for this task_type
     db()
-      .prepare("DELETE FROM model_defaults WHERE framework_id = ? AND task_type = ?")
-      .run(frameworkId, taskType);
+      .prepare("DELETE FROM model_defaults WHERE task_type = ?")
+      .run(taskType);
 
     // Insert new default if modelId provided
     if (modelId) {
       db()
-        .prepare("INSERT INTO model_defaults (id, framework_id, task_type, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(uuid(), frameworkId, taskType, modelId, ts, ts);
+        .prepare("INSERT INTO model_defaults (id, task_type, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+        .run(uuid(), taskType, modelId, ts, ts);
     }
   });
 
-  return getModelDefaults(frameworkId);
+  return getModelDefaults();
 }
 
 // ── Upsert (used by hermes-import.ts) ─────────────────────────
@@ -372,8 +323,8 @@ export function setDefaultModel(taskType: TaskType, modelId: string | null, fram
  * may not exist in older schemas. importKey is accepted for API compatibility
  * but is not used in the SQL query.
  * 
- * For each task type in defaultSlots, sets this model as the universal ('*')
- * default for that slot.
+ * For each task type in defaultSlots, sets this model as the default
+ * for that slot.
  */
 export function upsertModel(input: {
   /** Accepted for API compatibility with hermes-import.ts; not used in SQL. */
@@ -393,7 +344,7 @@ export function upsertModel(input: {
     .get(input.provider, input.modelId) as { id: string } | undefined;
 
   if (existing) {
-    // Update existing row (preserve framework_id, credentials_id)
+    // Update existing row (preserve credentials_id)
     db()
       .prepare("UPDATE models SET name = ?, base_url = ?, updated_at = ? WHERE id = ?")
       .run(input.name, input.baseUrl, ts, existing.id);
@@ -401,22 +352,22 @@ export function upsertModel(input: {
     // Update defaults for this model
     for (const slot of input.defaultSlots) {
       if (isTaskType(slot)) {
-        setDefaultModel(slot, existing.id, "*");
+        setDefaultModel(slot, existing.id);
       }
     }
 
     return { id: existing.id, action: "updated" };
   }
 
-  // Insert new row (framework_id = '*', universal)
+  // Insert new row
   const id = uuid();
 
   db()
     .prepare(
       `INSERT INTO models (
-         id, name, provider, model_id, framework_id, base_url, context_length, credentials_id,
+         id, name, provider, model_id, base_url, context_length, credentials_id,
          created_at, updated_at
-       ) VALUES (?, ?, ?, ?, '*', ?, ?, NULL, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
     )
     .run(
       id,
@@ -432,7 +383,7 @@ export function upsertModel(input: {
   // Set defaults for newly inserted model
   for (const slot of input.defaultSlots) {
     if (isTaskType(slot)) {
-      setDefaultModel(slot, id, "*");
+      setDefaultModel(slot, id);
     }
   }
 

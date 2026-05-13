@@ -16,7 +16,6 @@ import {
   syncFallbacksToHermesConfig,
 } from "./hermes-config-sync";
 import { isHermesProvider, type HermesProvider, envVarForProvider } from "./hermes-providers";
-import { getActiveFrameworkId } from "./framework-registry.server";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -28,7 +27,7 @@ export interface SyncActionResult {
 
 export interface DriftReport {
   modelsInHermesNotInDb: Array<{ name: string; provider: string; modelId: string }>;
-  modelsInDbNotInHermes: Array<{ name: string; provider: string; modelId: string; frameworkId: string }>;
+  modelsInDbNotInHermes: Array<{ name: string; provider: string; modelId: string }>;
   primaryDiffers: { dbModel: string; hermesModel: string } | null;
 }
 
@@ -125,8 +124,7 @@ function readHermesConfigModels(): Array<{ name: string; provider: string; model
  * side or the other.
  */
 export function detectConfigDrift(): DriftReport {
-  const frameworkId = getActiveFrameworkId();
-  const dbModels = listModels(frameworkId);
+  const dbModels = listModels();
   const dbModelByKey = new Map(
     dbModels.map((m) => [`${m.provider}::${m.modelId}`, m])
   );
@@ -154,7 +152,7 @@ export function detectConfigDrift(): DriftReport {
     const matched = dbModelByKey.get(`${hermesPrimary.provider}::${hermesPrimary.modelId}`);
     if (matched) {
       // Compare with the DB default agent model for the active framework
-      const dbDefaults = getModelDefaults(frameworkId);
+      const dbDefaults = getModelDefaults();
       const defaultAgentId = dbDefaults.agent;
       if (defaultAgentId) {
         const dbDefault = getModel(defaultAgentId);
@@ -352,9 +350,8 @@ export function pushAllToHermes(): FullPushResult {
   const modelResults: SyncActionResult[] = [];
   const credentialResults: SyncActionResult[] = [];
 
-  // Push only the default agent model for the active framework
-  const frameworkId = getActiveFrameworkId();
-  const defaults = getModelDefaults(frameworkId);
+  // Push only the default agent model
+  const defaults = getModelDefaults();
   if (defaults.agent) {
     const result = pushModelToHermes(defaults.agent);
     if (result.success) modelResults.push(result);

@@ -1,20 +1,17 @@
 // ═══════════════════════════════════════════════════════════════
-// agent-registry.ts — Persisted Hermes installs (v1: framework hermes only)
+// agent-registry.ts — Persisted Hermes install (single agent)
 // ═══════════════════════════════════════════════════════════════
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { CH_DATA_DIR } from "./paths";
 
-const REGISTRY_VERSION = 1;
+const REGISTRY_VERSION = 2;
 const REGISTRY_FILENAME = "agents-registry.json";
-
-export type HermesFrameworkId = "hermes";
 
 export interface AgentRegistryEntry {
   id: string;
   label: string;
-  framework: HermesFrameworkId;
   filesystemRoot: string;
   /** e.g. http://127.0.0.1:8642 — local gateway health + LLM base */
   gatewayBaseUrl?: string;
@@ -49,7 +46,6 @@ function defaultRegistry(): AgentRegistryFile {
       {
         id: "default",
         label: "Default Hermes",
-        framework: "hermes",
         filesystemRoot,
       },
     ],
@@ -78,7 +74,6 @@ export function readAgentRegistry(): AgentRegistryFile {
       agents: parsed.agents.map((a) => ({
         id: String(a.id),
         label: String(a.label || a.id),
-        framework: (a.framework === "hermes" ? "hermes" : "hermes") as HermesFrameworkId,
         filesystemRoot: String(a.filesystemRoot || "").replace(/[/\\]+$/, ""),
         gatewayBaseUrl:
           typeof a.gatewayBaseUrl === "string" && a.gatewayBaseUrl.trim()

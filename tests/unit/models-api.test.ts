@@ -61,11 +61,6 @@ jest.mock("@/lib/models-repository", () => {
   };
 });
 
-jest.mock("@/lib/framework-registry", () => ({
-  getActiveFrameworkId: jest.fn(() => "hermes"),
-  listFrameworks: jest.fn(() => []),
-  FRAMEWORKS: [],
-}));
 
 // Mock the sync-manager for any push/pull imports
 jest.mock("@/lib/sync-manager", () => ({
@@ -101,7 +96,6 @@ const SAMPLE_MODEL = {
   name: "Sonnet",
   provider: "anthropic",
   modelId: "anthropic/claude-sonnet-4",
-  frameworkId: "*",
   baseUrl: null,
   contextLength: 200000,
   credentialsId: null,
@@ -308,7 +302,7 @@ describe("/api/models/defaults", () => {
     repo.__setDefaultModel.mockReturnValue({ agent: "m_1" });
     const res = await putDefaults({ taskType: "agent", modelId: "m_1" });
     expect(res.status).toBe(200);
-    expect(repo.__setDefaultModel).toHaveBeenCalledWith("agent", "m_1", "*");
+    expect(repo.__setDefaultModel).toHaveBeenCalledWith("agent", "m_1");
     expect(audit.appendAuditLine).toHaveBeenCalledWith(
       expect.objectContaining({ action: "model.default.set" })
     );
@@ -318,7 +312,7 @@ describe("/api/models/defaults", () => {
     repo.__setDefaultModel.mockReturnValue({ agent: null });
     const res = await putDefaults({ taskType: "agent", modelId: null });
     expect(res.status).toBe(200);
-    expect(repo.__setDefaultModel).toHaveBeenCalledWith("agent", null, "*");
+    expect(repo.__setDefaultModel).toHaveBeenCalledWith("agent", null);
   });
 
   it("PUT rejects unknown task type", async () => {
