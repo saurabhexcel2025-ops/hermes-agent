@@ -6,8 +6,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, memo as reactMemo, startTransition } from "react";
+import { useState, useEffect, useCallback, useMemo, memo as reactMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   // Dashboard icons
   Activity,
@@ -36,7 +37,7 @@ import TemplateCard from "@/components/ui/TemplateCard";
 import { useToast } from "@/components/ui/Toast";
 import type { SystemStatus, AccentColor } from "@/types/hermes";
 import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
-import { shellHeaderBarClasses } from "@/lib/theme";
+import AppPageShell from "@/components/layout/AppPageShell";
 import { StatPillSkeleton } from "@/components/skeletons";
 
 interface HermesProcess {
@@ -127,44 +128,17 @@ function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }
       </span>
     );
   }
-  if (state === "running") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-green/10 text-neon-green">
-        <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running
-      </span>
-    );
-  }
-  if (state === "scheduled") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-green/10 text-neon-green">
-        <Play className="w-2.5 h-2.5" /> Active
-      </span>
-    );
-  }
-  if (state === "queued") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-orange/10 text-neon-orange">
-        <Clock className="w-2.5 h-2.5" /> Queued
-      </span>
-    );
-  }
-  if (state === "completed") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-neon-green/10 text-neon-green">
-        <CheckCircle2 className="w-2.5 h-2.5" /> Done
-      </span>
-    );
-  }
-  if (state === "failed") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-red-500/10 text-red-400">
-        <XCircle className="w-2.5 h-2.5" /> Failed
-      </span>
-    );
-  }
+  const styles: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
+    running: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Loader2 className="w-2.5 h-2.5 animate-spin" />, label: "Running" },
+    scheduled: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Play className="w-2.5 h-2.5" />, label: "Active" },
+    queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-2.5 h-2.5" />, label: "Queued" },
+    completed: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-2.5 h-2.5" />, label: "Done" },
+    failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-2.5 h-2.5" />, label: "Failed" },
+  };
+  const s = styles[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: state.charAt(0).toUpperCase() + state.slice(1) };
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-white/40">
-      {state.charAt(0).toUpperCase() + state.slice(1)}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${s.bg} ${s.text}`}>
+      {s.icon} {s.label}
     </span>
   );
 }
@@ -187,6 +161,9 @@ function StatPill({
     green: "border-neon-green/20 text-neon-green",
     pink: "border-neon-pink/20 text-neon-pink",
     orange: "border-neon-orange/20 text-neon-orange",
+    red: "border-red-500/20 text-red-400",
+    blue: "border-blue-500/20 text-blue-400",
+    yellow: "border-yellow-500/20 text-yellow-400",
   };
   return (
     <div className={`rounded-lg border ${colorClasses[color]} bg-dark-900/50 px-4 py-3 flex items-center gap-3`}>
@@ -198,6 +175,34 @@ function StatPill({
     </div>
   );
 }
+
+// ── Template Category Constants (module-level — don't re-create on every render) ──
+
+const DEFAULT_PLATFORMS = ["discord", "telegram", "slack", "whatsapp"] as const;
+
+const TEMPLATE_CAT_ORDER = [
+  "Business - Operations",
+  "Engineering - QA",
+  "Engineering - DevOps",
+  "Engineering - Software",
+  "Engineering - Data",
+  "Engineering - Data Science",
+  "Business - Creative",
+  "Support",
+  "Custom",
+] as const;
+
+const TEMPLATE_CAT_COLORS: Record<string, AccentColor> = {
+  "Engineering - QA": "pink",
+  "Engineering - DevOps": "cyan",
+  "Engineering - Software": "purple",
+  "Engineering - Data": "green",
+  "Engineering - Data Science": "orange",
+  "Business - Operations": "cyan",
+  "Business - Creative": "orange",
+  "Support": "blue",
+  "Custom": "purple",
+};
 
 export default function Dashboard() {
   const [data, setDataFields] = useState<{
@@ -218,24 +223,30 @@ export default function Dashboard() {
   const { status, monitor, processes, missions, config, templates } = data;
 
   const setData = useCallback((partial: Partial<typeof data>) => {
-    startTransition(() => {
-      setDataFields(prev => ({ ...prev, ...partial }));
-    });
+    setDataFields(prev => ({ ...prev, ...partial }));
   }, []);
   const [dispatchExpanded, setDispatchExpanded] = useState(false);
   const [errorSev, setErrorSev] = useState<"all" | "error" | "warning">("all");
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
   const { showToast, toastElement } = useToast();
+  const router = useRouter();
 
   const filteredErrors = useMemo(() => {
     if (!monitor?.errors) return [];
     if (errorSev === "all") return monitor.errors;
     // Use the DB severity field — reliable, no string matching
     return monitor.errors.filter((e) => e.severity === errorSev);
-  }, [monitor?.errors, errorSev]);
+  }, [monitor, errorSev]);
 
   // Cancel a mission from the dashboard
   const handleCancelMission = useCallback(async (missionId: string, missionName: string) => {
-    if (!confirm(`Cancel "${missionName}"? The cron job will be paused.`)) return;
+    // First click: show confirmation state
+    if (cancelConfirmId !== missionId) {
+      setCancelConfirmId(missionId);
+      setTimeout(() => setCancelConfirmId((prev) => prev === missionId ? null : prev), 4000);
+      return;
+    }
+    setCancelConfirmId(null);
     try {
       const res = await fetch("/api/missions", {
         method: "POST",
@@ -247,6 +258,7 @@ export default function Dashboard() {
         showToast(body?.error || "Failed to cancel mission", "error");
         return;
       }
+      showToast(`Cancelled "${missionName}"`, "success");
       // Refresh missions
       const data = await fetch("/api/missions");
       const d = await data.json();
@@ -254,20 +266,26 @@ export default function Dashboard() {
     } catch {
       showToast("Failed to cancel mission", "error");
     }
-  }, [showToast, setData]);
+  }, [showToast, setData, cancelConfirmId]);
 
   // Update cron job schedule inline
   const handleCronScheduleChange = useCallback(async (jobId: string, newSchedule: string) => {
     try {
-      await fetch("/api/cron", {
+      const putRes = await fetch("/api/cron", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: jobId, schedule: newSchedule }),
       });
+      if (!putRes.ok) {
+        const body = await putRes.json().catch(() => null);
+        showToast(body?.error || "Failed to update cron schedule", "error");
+        return;
+      }
       // Refresh monitor data to show updated schedule
       const res = await fetch("/api/monitor");
       const d = await res.json();
       if (d.data) setData({ monitor: d.data });
+      showToast("Schedule updated", "success");
     } catch {
       showToast("Failed to update cron schedule", "error");
     }
@@ -290,12 +308,14 @@ export default function Dashboard() {
         ]);
 
       if (!signal.aborted) {
-        setData({ status: statusRes.data });
-        setData({ config: configRes.data });
-        setData({ templates: templatesRes.data?.templates || [] });
-        setData({ monitor: monitorRes.data });
-        setData({ processes: processesRes.data?.processes || processesRes.processes || [] });
-        setData({ missions: missionsRes.data?.missions || [] });
+        setData({
+          status: statusRes.data,
+          config: configRes.data,
+          templates: templatesRes.data?.templates || [],
+          monitor: monitorRes.data,
+          processes: processesRes.data?.processes || processesRes.processes || [],
+          missions: missionsRes.data?.missions || [],
+        });
       }
     };
     initialLoad();
@@ -345,10 +365,24 @@ export default function Dashboard() {
   const activeProcesses = useMemo(() => processes.filter((p) => p.status === "running"), [processes]);
   const activeMissions = useMemo(() => missions.filter((m) => m.status === "queued" || m.status === "dispatched"), [missions]);
 
+  // Snapshot current time for render — capture once on mount
+  const [now] = useState(() => Date.now());
+
+  // Group templates by category for the dispatch section
+  const groupedTemplates = useMemo(() => {
+    const grouped: Record<string, typeof templates> = {};
+    for (const t of templates) {
+      const cat = t.isCustom ? "Custom" : (t.category || "Other");
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(t);
+    }
+    return grouped;
+  }, [templates]);
+
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
+    <AppPageShell variant="scanlines">
       {/* Top Bar */}
-      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between`}>
+      <div className="sticky top-0 z-30 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
             <span className="text-neon-cyan text-glow-cyan">CONTROL</span>{" "}
@@ -480,7 +514,7 @@ export default function Dashboard() {
                   description={t.description}
                   isCustom={t.isCustom}
                   compact
-                  onSelect={() => window.location.href = `/missions?template=${t.id}`}
+                  onSelect={() => router.push(`/missions?template=${t.id}`)}
                 />
               ))}
               {templates.length > 12 && (
@@ -497,67 +531,37 @@ export default function Dashboard() {
           {/* Expanded: grouped by category, all compact pills */}
           {dispatchExpanded && (
             <div className="px-4 pb-4 space-y-3">
-              {(() => {
-                const grouped: Record<string, typeof templates> = {};
-                for (const t of templates) {
-                  const cat = t.isCustom ? "Custom" : (t.category || "Other");
-                  if (!grouped[cat]) grouped[cat] = [];
-                  grouped[cat].push(t);
-                }
-                const catOrder = [
-                  "Business - Operations",
-                  "Engineering - QA",
-                  "Engineering - DevOps",
-                  "Engineering - Software",
-                  "Engineering - Data",
-                  "Engineering - Data Science",
-                  "Business - Creative",
-                  "Support",
-                  "Custom",
-                ].filter((c) => grouped[c]);
-                const categoryColors: Record<string, string> = {
-                  "Engineering - QA": "pink",
-                  "Engineering - DevOps": "cyan",
-                  "Engineering - Software": "purple",
-                  "Engineering - Data": "green",
-                  "Engineering - Data Science": "orange",
-                  "Business - Operations": "cyan",
-                  "Business - Creative": "orange",
-                  "Support": "blue",
-                  "Custom": "purple",
-                };
-                return catOrder.map((cat) => {
-                  const items = grouped[cat];
-                  if (!items) return null;
-                  const color = categoryColors[cat] || "cyan";
-                  return (
-                    <CategoryAccordion
-                      key={cat}
-                      name={cat}
-                      count={items.length}
-                      color={color}
-                      expandable={cat === "Custom" && items.length > 6}
-                      defaultOpen={true}
-                    >
-                      <div className="flex flex-wrap gap-1.5">
-                        {items.map((t) => (
-                          <TemplateCard
-                            key={t.id}
-                            id={t.id}
-                            name={t.name}
-                            icon={t.icon}
-                            color={t.color}
-                            description={t.description}
-                            isCustom={t.isCustom}
-                            compact
-                            onSelect={() => window.location.href = `/missions?template=${t.id}`}
-                          />
-                        ))}
-                      </div>
-                    </CategoryAccordion>
-                  );
-                });
-              })()}
+              {TEMPLATE_CAT_ORDER.map((cat) => {
+                const items = groupedTemplates[cat];
+                if (!items) return null;
+                const color = TEMPLATE_CAT_COLORS[cat] || "cyan";
+                return (
+                  <CategoryAccordion
+                    key={cat}
+                    name={cat}
+                    count={items.length}
+                    color={color}
+                    expandable={cat === "Custom" && items.length > 6}
+                    defaultOpen={true}
+                  >
+                    <div className="flex flex-wrap gap-1.5">
+                      {items.map((t) => (
+                        <TemplateCard
+                          key={t.id}
+                          id={t.id}
+                          name={t.name}
+                          icon={t.icon}
+                          color={t.color}
+                          description={t.description}
+                          isCustom={t.isCustom}
+                          compact
+                          onSelect={() => router.push(`/missions?template=${t.id}`)}
+                        />
+                      ))}
+                    </div>
+                  </CategoryAccordion>
+                );
+              })}
             </div>
           )}
         </div>
@@ -607,10 +611,14 @@ export default function Dashboard() {
                       <span className="text-[10px] font-mono text-white/25">{timeAgo(m.createdAt)}</span>
                       <button
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCancelMission(m.id, m.name); }}
-                        className="text-[10px] font-mono text-white/20 hover:text-red-400 transition-colors px-1.5 py-0.5 rounded hover:bg-red-500/10"
+                        className={`text-[10px] font-mono transition-colors px-1.5 py-0.5 rounded ${
+                          cancelConfirmId === m.id
+                            ? "bg-red-500/20 text-red-400"
+                            : "text-white/20 hover:text-red-400 hover:bg-red-500/10"
+                        }`}
                         title="Cancel mission"
                       >
-                        Cancel
+                        {cancelConfirmId === m.id ? "Confirm?" : "Cancel"}
                       </button>
                     </div>
                   </div>
@@ -663,9 +671,7 @@ export default function Dashboard() {
                             : job.lastRun && !job.nextRun
                             ? `${titleCase(job.lastStatus || "Ok")} ${timeAgo(job.lastRun)}`
                             : job.nextRun &&
-                              new Date(job.nextRun).getTime() >
-                                // eslint-disable-next-line react-hooks/purity -- need current time vs scheduled next_run
-                                Date.now()
+                              new Date(job.nextRun).getTime() > now
                             ? "Next " + timeUntil(job.nextRun)
                             : job.lastRun
                             ? `Active · Ran ${timeAgo(job.lastRun)}`
@@ -704,7 +710,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                   ))
-                : ["discord", "telegram", "slack", "whatsapp"].map((p) => (
+                : DEFAULT_PLATFORMS.map((p) => (
                     <div key={p} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <StatusDot status="idle" />
@@ -781,7 +787,12 @@ export default function Dashboard() {
             </h2>
             <RefreshCw
               className="w-3 h-3 text-white/20 hover:text-white/50 cursor-pointer"
-              onClick={() => fetch("/api/agents").then((r) => r.json()).then((d) => setData({ processes: d.data?.processes || d.processes || [] }))}
+              onClick={() => {
+                fetch("/api/agents")
+                  .then((r) => r.json())
+                  .then((d) => setData({ processes: d.data?.processes || d.processes || [] }))
+                  .catch(() => showToast("Failed to refresh processes", "error"));
+              }}
             />
           </div>
           {processes.length === 0 ? (
@@ -848,6 +859,6 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
-    </div>
+    </AppPageShell>
   );
 }

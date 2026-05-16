@@ -11,26 +11,20 @@ import {
   Wrench, Check, ChevronDown, ChevronRight,
   Info, ToggleLeft, ToggleRight, Plus,
 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import type { ToolDefinition } from "@/lib/agent-backend/types";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  core: "Core Tools",
-  platform: "Platform Tools",
-  custom: "Custom Tools",
-  mcp: "MCP Tools",
-};
-
-const CATEGORY_COLORS: Record<string, "cyan" | "purple" | "orange" | "pink" | "green" | "gray"> = {
-  core: "cyan",
-  platform: "purple",
-  custom: "orange",
-  mcp: "pink",
+const CATEGORY_META: Record<string, { label: string; color: "cyan" | "purple" | "orange" | "pink" | "green" | "gray"; badgeLabel?: string; badgeColor?: "cyan" | "purple" | "pink" | "gray" }> = {
+  core: { label: "Core Tools", color: "cyan", badgeLabel: "Core", badgeColor: "cyan" },
+  platform: { label: "Platform Tools", color: "purple", badgeLabel: "Platform", badgeColor: "purple" },
+  custom: { label: "Custom Tools", color: "orange" },
+  mcp: { label: "MCP Tools", color: "pink", badgeLabel: "MCP", badgeColor: "pink" },
 };
 
 export default function ToolsPage() {
@@ -132,7 +126,7 @@ export default function ToolsPage() {
   const hasPending = Object.keys(pendingToggles).length > 0;
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       {toastElement}
       <PageHeader
         icon={Wrench}
@@ -170,19 +164,20 @@ export default function ToolsPage() {
         {loading ? (
           <LoadingSpinner text="Loading tools..." />
         ) : tools.length === 0 ? (
-          <div className="text-center py-16 text-white/30">
-            <Wrench className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p className="text-lg font-medium">No tools registered</p>
-            <p className="text-sm mt-1">Register custom tools or enable Hermes platform tools</p>
-          </div>
+          <EmptyState
+            icon={Wrench}
+            title="No tools registered"
+            description="Register custom tools or enable Hermes platform tools"
+          />
         ) : (
           <div className="space-y-4">
             {["core", "platform", "custom", "mcp"].map((category) => {
+              const meta = CATEGORY_META[category];
+              if (!meta) return null;
               const categoryTools = toolsByCategory[category] ?? [];
               if (categoryTools.length === 0) return null;
               const isExpanded = expandedCategories[category] ?? true;
               const enabledCount = categoryTools.filter(t => isEnabled(t)).length;
-              const color = CATEGORY_COLORS[category] ?? "gray";
 
               return (
                 <div key={category} className="rounded-xl border border-white/10 bg-dark-900/50">
@@ -198,9 +193,9 @@ export default function ToolsPage() {
                         ? <ChevronDown className="w-4 h-4 text-white/30" />
                         : <ChevronRight className="w-4 h-4 text-white/30" />}
                       <span className="text-sm font-semibold text-white/70">
-                        {CATEGORY_LABELS[category] || category}
+                        {meta.label}
                       </span>
-                      <Badge color={color} size="sm">
+                      <Badge color={meta.color} size="sm">
                         {enabledCount}/{categoryTools.length}
                       </Badge>
                     </div>
@@ -211,6 +206,7 @@ export default function ToolsPage() {
                     <div className="border-t border-white/5">
                       {categoryTools.map((tool) => {
                         const enabled = isEnabled(tool);
+                        const toolMeta = CATEGORY_META[tool.category];
                         return (
                           <div
                             key={tool.id}
@@ -231,14 +227,13 @@ export default function ToolsPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-mono text-white/80">{tool.label}</span>
-                                {tool.category === "mcp" && (
-                                  <Badge color="pink" size="sm">MCP</Badge>
-                                )}
-                                {tool.category === "platform" && (
-                                  <Badge color="purple" size="sm">Platform</Badge>
-                                )}
-                                {tool.category === "core" && (
-                                  <Badge color="cyan" size="sm">Core</Badge>
+                                {toolMeta?.badgeLabel && (
+                                  <Badge
+                                    color={toolMeta.badgeColor ?? "gray"}
+                                    size="sm"
+                                  >
+                                    {toolMeta.badgeLabel}
+                                  </Badge>
                                 )}
                               </div>
                               <p className="text-xs text-white/30 mt-0.5">{tool.description}</p>
@@ -337,6 +332,6 @@ export default function ToolsPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AppPageShell>
   );
 }

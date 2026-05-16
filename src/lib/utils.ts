@@ -128,4 +128,20 @@ export interface CronJobData {
   [key: string]: unknown;
 }
 
+// ── Model Defaults ───────────────────────────────────────────
+
+import { TASK_TYPES, type TaskType } from "@/lib/hermes-providers";
+
+/**
+ * Empty task-defaults map — initialises all 12 slots to null.
+ * Client-safe (no DB dependency), shared between server and UI.
+ * Uses TASK_TYPES from hermes-providers as the single source of truth.
+ */
+export function emptyModelDefaults(): Record<TaskType, string | null> {
+  return TASK_TYPES.reduce<Record<TaskType, string | null>>(
+    (acc, slot) => { acc[slot] = null; return acc; },
+    {} as Record<TaskType, string | null>
+  );
+}
+
 

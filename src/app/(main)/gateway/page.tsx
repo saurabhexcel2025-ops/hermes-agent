@@ -1,26 +1,26 @@
 // ═══════════════════════════════════════════════════════════════
-// Gateway Status — Platform connection & log viewer
+// Gateway Status — Platform connection status
 // ═══════════════════════════════════════════════════════════════
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Globe,
   MessageCircle,
   Hash,
   Phone,
   RefreshCw,
-  FileText,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import AppPageShell from "@/components/layout/AppPageShell";
 import Button from "@/components/ui/Button";
 
 interface GatewayData {
   platforms: Record<string, boolean>;
-  recentLogs: string[];
-  logAvailable: boolean;
+  connectedCount: number;
+  lastSynced: string | null;
 }
 
 const platformMeta: Record<string, {
@@ -38,28 +38,40 @@ export default function GatewayPage() {
   const [data, setData] = useState<GatewayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/gateway");
+      const res = await fetch("/api/gateway", { signal });
       if (!res.ok) throw new Error("Failed to load gateway data");
       const json = await res.json();
-      setData(json.data);
+      if (!signal?.aborted) setData(json.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (!signal?.aborted) setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    loadData(controller.signal);
+    return () => { controller.abort(); };
+  }, [loadData]);
+
+  const handleRefresh = useCallback(() => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    loadData(controller.signal);
+  }, [loadData]);
+
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       <PageHeader
         title="Gateway Status"
         subtitle="Platform connections and recent gateway logs"
@@ -69,7 +81,7 @@ export default function GatewayPage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={loadData}
+            onClick={handleRefresh}
             loading={loading}
             icon={RefreshCw}
           >
@@ -128,52 +140,9 @@ export default function GatewayPage() {
               </div>
             </div>
 
-            {/* Gateway Logs */}
-            <div>
-              <h2 className="text-sm font-mono text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <FileText className="w-3 h-3 text-neon-cyan" />
-                Recent Gateway Logs
-              </h2>
-              <div className="rounded-xl border border-white/10 bg-dark-900/50 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-dark-800/50">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                    <div className="w-3 h-3 rounded-full bg-green-500/80" />
-                  </div>
-                  <span className="text-xs text-white/40 font-mono ml-2">
-                    gateway.log
-                  </span>
-                </div>
-                <div className="p-4 font-mono text-xs space-y-0.5 max-h-96 overflow-y-auto">
-                  {data?.recentLogs && data.recentLogs.length > 0 ? (
-                    data.recentLogs.map((line, i) => (
-                      <div
-                        key={i}
-                        className={`${
-                          line.includes("ERROR")
-                            ? "text-red-400"
-                            : line.includes("WARN")
-                            ? "text-neon-orange"
-                            : "text-white/40"
-                        }`}
-                      >
-                        {line}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-white/20 py-8 text-center">
-                      {data?.logAvailable
-                        ? "Log file is empty"
-                        : "No gateway log found"}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

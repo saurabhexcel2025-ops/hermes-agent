@@ -27,16 +27,21 @@ import {
 import { requireMcApiKey } from "@/lib/api-auth";
 import { ensureSyncLayer } from "@/lib/sync";
 
-// ── Debounce: only sync if 30s since last sync ──────────────
-let lastSyncTime = 0;
-const SYNC_DEBOUNCE_MS = 30_000;
+// ── Debounced sync: fires at most once per 30s ───────────────
+// Uses a module-level Promise chain instead of a mutable timestamp.
+// This avoids the mutable state anti-pattern while preserving the
+// debounce semantics for concurrent requests.
+let pendingSync: Promise<void> | null = null;
 
-function ensureSyncLayerDebounced() {
-  const now = Date.now();
-  if (now - lastSyncTime > SYNC_DEBOUNCE_MS) {
-    lastSyncTime = now;
+function triggerSyncOnce(): void {
+  if (pendingSync) return;
+  pendingSync = new Promise<void>((resolve) => {
     ensureSyncLayer();
-  }
+    setTimeout(() => {
+      pendingSync = null;
+      resolve();
+    }, 30_000);
+  });
 }
 
 function parseQuery(
@@ -51,8 +56,12 @@ function parseQuery(
 } {
   const u = new URL(req.url);
   const id = u.searchParams.get("id") ?? undefined;
-  const agentType = (u.searchParams.get("agentType") ?? undefined) as AgentType | undefined;
-  const source = (u.searchParams.get("source") ?? undefined) as SessionSource | undefined;
+  const rawAgentType = u.searchParams.get("agentType");
+  const agentType: AgentType | undefined =
+    rawAgentType && ["hermes"].includes(rawAgentType) ? rawAgentType as AgentType : undefined;
+  const rawSource = u.searchParams.get("source");
+  const source: SessionSource | undefined =
+    rawSource && ["cli", "cron", "mission", "api"].includes(rawSource) ? rawSource as SessionSource : undefined;
   const missionIdParam = u.searchParams.get("missionId");
   const missionId: string | null | undefined =
     missionIdParam === null ? undefined : missionIdParam;
@@ -77,7 +86,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sync layer handles background syncing of Hermes sessions (debounced — at most once per 30s)
-    ensureSyncLayerDebounced();
+    triggerSyncOnce();
 
     const result = listSessions({
       agentType: q.agentType,

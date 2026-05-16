@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import {
@@ -15,6 +15,7 @@ import {
   addTeamMember,
   removeTeamMember,
 } from "@/lib/teams-repository";
+import { updateBoard } from "@/lib/kanban-repository";
 import type { TeamMember } from "@/types/hermes";
 
 // ── GET ───────────────────────────────────────────────────────
@@ -50,9 +51,7 @@ export async function GET(request: Request) {
 // ── POST ──────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   try {
@@ -157,7 +156,6 @@ export async function POST(request: NextRequest) {
       if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
 
       // Update board's team_id and return updated team
-      const { updateBoard } = await import("@/lib/kanban-repository");
       const board = updateBoard(boardId, { teamId });
       if (!board) return NextResponse.json({ error: "Board not found" }, { status: 404 });
 

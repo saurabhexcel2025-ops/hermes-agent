@@ -29,6 +29,8 @@ import { SearchInput } from "@/components/ui/Input";
 import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import Badge from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
+import { timeAgo } from "@/lib/utils";
+import AppPageShell from "@/components/layout/AppPageShell";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -63,30 +65,16 @@ const PAGE_SIZE = 50;
 
 const SOURCE_META: Record<
   SessionSource,
-  { label: string; color: string; icon: React.ReactNode }
+  { label: string; colorClass: string; icon: React.ReactNode }
 > = {
-  cli: { label: "CLI", color: "orange", icon: <Bot className="w-3 h-3" /> },
-  cron: { label: "Cron", color: "cyan", icon: <Calendar className="w-3 h-3" /> },
-  mission: { label: "Mission", color: "green", icon: <Zap className="w-3 h-3" /> },
-  api: { label: "API", color: "purple", icon: <ChevronRight className="w-3 h-3" /> },
+  cli: { label: "CLI", colorClass: "bg-neon-orange/10 text-neon-orange", icon: <Bot className="w-3 h-3" /> },
+  cron: { label: "Cron", colorClass: "bg-neon-cyan/10 text-neon-cyan", icon: <Calendar className="w-3 h-3" /> },
+  mission: { label: "Mission", colorClass: "bg-neon-green/10 text-neon-green", icon: <Zap className="w-3 h-3" /> },
+  api: { label: "API", colorClass: "bg-neon-purple/10 text-neon-purple", icon: <ChevronRight className="w-3 h-3" /> },
 };
 
 // ── Helpers ─────────────────────────────────────────────────
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
 
 function formatTitle(session: Session): string {
   if (session.title) return session.title;
@@ -123,10 +111,10 @@ function SessionCard({ session }: { session: Session }) {
             <div className="flex items-center gap-3 text-xs text-white/30 font-mono flex-wrap">
               <span className={`flex items-center gap-1 ${statusColor}`}>
                 <Clock className="w-3 h-3" />
-                {formatDate(session.startedAt)}
+                {timeAgo(session.startedAt)}
               </span>
               <span className="flex items-center gap-1">
-                <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-neon-${meta.color}/10 text-neon-${meta.color}`}>
+                <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono ${meta.colorClass}`}>
                   {meta.icon}
                   {meta.label}
                 </span>
@@ -166,20 +154,20 @@ export default function SessionsPage() {
   const { showToast, toastElement } = useToast();
 
   const loadSessions = useCallback(
-    (offset: number) => {
+    async (offset: number) => {
       setLoading(true);
       const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
       if (sourceFilter) params.set("source", sourceFilter);
 
-      fetch(`/api/sessions?${params}`)
-        .then((res) => res.json())
-        .then((d) => {
-          setData(d.data ?? { sessions: [], total: 0 });
-        })
-        .catch(() => {
-          showToast("Failed to load sessions", "error");
-        })
-        .finally(() => setLoading(false));
+      try {
+        const res = await fetch(`/api/sessions?${params}`);
+        const d = await res.json();
+        setData(d.data ?? { sessions: [], total: 0 });
+      } catch {
+        showToast("Failed to load sessions", "error");
+      } finally {
+        setLoading(false);
+      }
     },
     [sourceFilter, showToast],
   );
@@ -187,7 +175,7 @@ export default function SessionsPage() {
   // Initial load + reload on filter change
   useEffect(() => {
     setPage(0);
-    loadSessions(0);
+    void loadSessions(0);
   }, [loadSessions]);
 
   const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
@@ -212,13 +200,9 @@ export default function SessionsPage() {
   }, [sessions, search]);
 
   const totalPages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
-  const paginatedSessions = filteredSessions.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE,
-  );
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       <PageHeader
         icon={Clock}
         title="Session History"
@@ -284,7 +268,7 @@ export default function SessionsPage() {
               Showing {filteredSessions.length} of {data?.total ?? 0} sessions
             </div>
             <div className="grid gap-3">
-              {paginatedSessions.map((session) => (
+              {filteredSessions.map((session) => (
                 <SessionCard key={session.id} session={session} />
               ))}
             </div>
@@ -294,7 +278,7 @@ export default function SessionsPage() {
                   onClick={() => {
                     const newPage = Math.max(0, page - 1);
                     setPage(newPage);
-                    loadSessions(newPage * PAGE_SIZE);
+                    void loadSessions(newPage * PAGE_SIZE);
                   }}
                   disabled={page === 0}
                   className="text-xs font-mono px-3 py-1.5 rounded bg-white/5 text-white/40 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -308,7 +292,7 @@ export default function SessionsPage() {
                   onClick={() => {
                     const newPage = Math.min(totalPages - 1, page + 1);
                     setPage(newPage);
-                    loadSessions(newPage * PAGE_SIZE);
+                    void loadSessions(newPage * PAGE_SIZE);
                   }}
                   disabled={page >= totalPages - 1}
                   className="text-xs font-mono px-3 py-1.5 rounded bg-white/5 text-white/40 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -321,6 +305,6 @@ export default function SessionsPage() {
         )}
       </div>
       {toastElement}
-    </div>
+    </AppPageShell>
   );
 }

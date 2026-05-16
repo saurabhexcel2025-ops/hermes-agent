@@ -12,7 +12,7 @@
 // ═════════════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import { getKanbanAdapter } from "@/lib/kanban-adapter/default-adapter";
@@ -38,14 +38,6 @@ export async function GET(request: Request) {
       if (!doc) {
         return NextResponse.json({ error: "Board not found" }, { status: 404 });
       }
-      // Ensure columnIds and cardIds are populated
-      doc.board.columnIds = Object.keys(doc.columns);
-      for (const col of Object.values(doc.columns)) {
-        col.cardIds = adapter()
-          .listCards(boardId)
-          .filter((c) => c.columnId === col.id)
-          .map((c) => c.id);
-      }
       return NextResponse.json({ data: doc });
     }
 
@@ -60,9 +52,7 @@ export async function GET(request: Request) {
 // ── POST ───────────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   try {

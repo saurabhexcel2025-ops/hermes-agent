@@ -49,6 +49,7 @@ import {
 } from "@/lib/hermes-providers";
 import type { FallbackChainEntry, FallbackConfig } from "@/types/hermes";
 import type { SyncActionResult } from "@/lib/sync-manager";
+import { emptyModelDefaults } from "@/lib/utils";
 
 // ── API row shapes ──────────────────────────────────────────────
 
@@ -96,15 +97,7 @@ interface SyncDrift {
   driftDetails?: string[];
 }
 
-function emptyDefaults(): Record<TaskType, string | null> {
-  return TASK_TYPES.reduce<Record<TaskType, string | null>>(
-    (acc, slot) => {
-      acc[slot] = null;
-      return acc;
-    },
-    {} as Record<TaskType, string | null>
-  );
-}
+// ── API row shapes ──────────────────────────────────────────────
 
 function defaultBadgesFor(
   model: ApiModel,
@@ -113,17 +106,11 @@ function defaultBadgesFor(
   return TASK_TYPES.filter((slot) => defaults[slot] === model.id);
 }
 
-const DEFAULT_FALLBACK_CONFIG: FallbackConfig = {
-  restorePrimaryOnFallback: true,
-  fallbackNotification: false,
-  apiMaxRetries: 2,
-};
-
 export default function ModelsPage() {
   const [models, setModels] = useState<ApiModel[]>([]);
   const [credentials, setCredentials] = useState<ApiCredential[]>([]);
   const [defaults, setDefaults] = useState<Record<TaskType, string | null>>(
-    emptyDefaults()
+    emptyModelDefaults()
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,17 +118,21 @@ export default function ModelsPage() {
     undefined
   );
   const [busyTaskType, setBusyTaskType] = useState<TaskType | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [drift, setDrift] = useState<SyncDrift | null>(null);
 
   // Fallback chain state
   const [fallbackChain, setFallbackChain] = useState<FallbackChainEntry[]>([]);
-  const [fallbackConfig, setFallbackConfig] = useState<FallbackConfig>(
-    DEFAULT_FALLBACK_CONFIG
-  );
+  const [fallbackConfig, setFallbackConfig] = useState<FallbackConfig>({
+    restorePrimaryOnFallback: true,
+    fallbackNotification: false,
+    apiMaxRetries: 2,
+  });
   const [syncingFallback, setSyncingFallback] = useState(false);
   const [importingFallback, setImportingFallback] = useState(false);
+  const [editingFallbackEntry, setEditingFallbackEntry] = useState<FallbackChainEntry | null>(null);
+  const [editingFallbackUrl, setEditingFallbackUrl] = useState("");
+  const [savingFallbackUrl, setSavingFallbackUrl] = useState(false);
 
   const { showToast, toastElement } = useToast();
 
@@ -183,7 +174,7 @@ export default function ModelsPage() {
 
       setModels(m.data?.models ?? []);
       setCredentials(c.data?.credentials ?? []);
-      const next = emptyDefaults();
+      const next = emptyModelDefaults();
       const incoming = d.data?.defaults;
       if (incoming) {
         for (const slot of TASK_TYPES) {
@@ -205,8 +196,6 @@ export default function ModelsPage() {
       // Fallback config
       if (fbCfgData.data?.config) {
         setFallbackConfig(fbCfgData.data.config);
-      } else {
-        setFallbackConfig(DEFAULT_FALLBACK_CONFIG);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load registry");
@@ -317,35 +306,27 @@ export default function ModelsPage() {
 
   const handleDelete = useCallback(
     async (model: ApiModel) => {
-      if (deletingId === model.id) {
-        try {
-          const res = await fetch(`/api/models/${encodeURIComponent(model.id)}`, {
-            method: "DELETE",
-          });
-          if (!res.ok) {
-            const data = (await res.json().catch(() => ({}))) as {
-              error?: string;
-            };
-            throw new Error(data.error || "Delete failed");
-          }
-          showToast(`Deleted ${model.name}`, "success");
-          setDeletingId(null);
-          await loadAll();
-        } catch (err) {
-          showToast(
-            err instanceof Error ? err.message : "Delete failed",
-            "error"
-          );
-          setDeletingId(null);
+      if (!confirm(`Delete model "${model.name}"? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/models/${encodeURIComponent(model.id)}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(data.error || "Delete failed");
         }
-      } else {
-        setDeletingId(model.id);
-        setTimeout(() => {
-          setDeletingId((curr) => (curr === model.id ? null : curr));
-        }, 4000);
+        showToast(`Deleted ${model.name}`, "success");
+        await loadAll();
+      } catch (err) {
+        showToast(
+          err instanceof Error ? err.message : "Delete failed",
+          "error"
+        );
       }
     },
-    [deletingId, loadAll, showToast]
+    [loadAll, showToast]
   );
 
   // ── Default model setter ───────────────────────────────────────
@@ -524,30 +505,38 @@ export default function ModelsPage() {
 
   const handleFallbackEdit = useCallback(
     async (entry: FallbackChainEntry) => {
-      // For now, allow editing the override base URL
-      const overrideBaseUrl = entry.overrideBaseUrl || "";
-      const newValue = prompt(
-        `Edit override base URL for ${entry.modelName}:\n(Current: ${overrideBaseUrl || "(empty)"})`,
-        overrideBaseUrl
-      );
-      if (newValue === null) return; // cancelled
+      setEditingFallbackEntry(entry);
+      setEditingFallbackUrl(entry.overrideBaseUrl || "");
+    },
+    [],
+  );
+
+  const handleFallbackEditSave = useCallback(
+    async () => {
+      if (!editingFallbackEntry) return;
+      const entry = editingFallbackEntry;
+      const overrideUrl = editingFallbackUrl;
+      setSavingFallbackUrl(true);
       try {
         const res = await fetch(`/api/models/fallbacks/${encodeURIComponent(entry.id)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ overrideBaseUrl: newValue.trim() || null }),
+          body: JSON.stringify({ overrideBaseUrl: overrideUrl.trim() || null }),
         });
         if (!res.ok) throw new Error("Update failed");
         await loadAll();
+        setEditingFallbackEntry(null);
         showToast("Fallback updated", "success");
       } catch (err) {
         showToast(
           err instanceof Error ? err.message : "Update failed",
           "error"
         );
+      } finally {
+        setSavingFallbackUrl(false);
       }
     },
-    [loadAll, showToast]
+    [editingFallbackEntry, editingFallbackUrl, loadAll, showToast]
   );
 
   const handleFallbackAddFromRegistry = useCallback(
@@ -813,23 +802,11 @@ export default function ModelsPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleDelete(m)}
-                                    className={`p-1.5 rounded-lg transition-colors ${
-                                      deletingId === m.id
-                                        ? "text-red-400 bg-red-500/10"
-                                        : "text-white/30 hover:text-red-400 hover:bg-red-500/10"
-                                    }`}
+                                    className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                     aria-label={`Delete ${m.name}`}
-                                    title={
-                                      deletingId === m.id
-                                        ? "Click again to confirm"
-                                        : "Delete"
-                                    }
+                                    title="Delete"
                                   >
-                                    {deletingId === m.id ? (
-                                      <Loader2 className="w-3.5 h-3.5" />
-                                    ) : (
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    )}
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </td>
@@ -972,6 +949,52 @@ export default function ModelsPage() {
       )}
 
       {toastElement}
+
+      {/* Fallback URL Edit Modal */}
+      {editingFallbackEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEditingFallbackEntry(null)}>
+          <div className="w-full max-w-md bg-dark-900 border border-white/10 rounded-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-white/10">
+              <h3 className="text-sm font-semibold text-white">
+                Edit override Base URL: {editingFallbackEntry.modelName}
+              </h3>
+            </div>
+            <div className="p-4">
+              <label className="block text-[10px] font-mono text-white/40 uppercase mb-1.5">
+                Override Base URL
+              </label>
+              <input
+                type="text"
+                value={editingFallbackUrl}
+                onChange={(e) => setEditingFallbackUrl(e.target.value)}
+                placeholder="https://api.openai.com/v1"
+                className="w-full bg-dark-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono outline-none focus:border-neon-purple/50 transition-colors"
+                autoFocus
+              />
+              <p className="text-[10px] text-white/30 font-mono mt-1.5">
+                Leave empty to use the model&apos;s default base URL
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setEditingFallbackEntry(null)}
+                className="px-3 py-1.5 text-xs font-mono text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleFallbackEditSave}
+                disabled={savingFallbackUrl}
+                className="px-3 py-1.5 text-xs font-mono bg-neon-purple/20 text-neon-purple rounded-lg hover:bg-neon-purple/30 transition-colors disabled:opacity-50"
+              >
+                {savingFallbackUrl ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppPageShell>
   );
 }

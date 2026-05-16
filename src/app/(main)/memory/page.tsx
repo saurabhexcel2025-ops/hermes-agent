@@ -8,28 +8,29 @@ import { useState, useEffect } from "react";
 import { Brain } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import type { MemoryProviderType } from "@/types/hermes";
+import AppPageShell from "@/components/layout/AppPageShell";
+import type { MemoryProviderType, MemoryData } from "@/types/hermes";
+import { timeAgo } from "@/lib/utils";
 
 // Lazy load provider-specific components
 import HindsightBrowser from "@/components/memory/HindsightBrowser";
 
 // Holographic browser (inline for holographic provider)
-function HolographicBrowser() {
-  const [data, setData] = useState<{
-    facts: Array<{
-      id: number; content: string; category: string; tags: string;
-      trust: number; createdAt: string; updatedAt: string;
-    }>; total: number; dbSize: number; available: boolean;
-    provider: string; message?: string;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
+function HolographicBrowser({ initialData }: {
+  initialData?: MemoryData | null;
+}) {
+  const [data, setData] = useState<MemoryData | null>(() => initialData ?? null);
+  const [loading, setLoading] = useState(!initialData);
 
   useEffect(() => {
+    // Only fetch if no initial data was provided by the parent
+    if (initialData) return;
     fetch("/api/memory")
       .then((r) => r.json())
       .then((d) => setData(d.data))
+      .catch(() => { /* silently handled by data.available check */ })
       .finally(() => setLoading(false));
-  }, []);
+  }, [initialData]);
 
   if (loading) return <LoadingSpinner text="Loading memory..." />;
 
@@ -100,7 +101,7 @@ function parseHolographicFact(raw: string): {
     const text = textMatch ? textMatch[1].replace(/\\'/g, "'") : raw;
     const type = typeMatch ? typeMatch[1] : "observation";
     const entities = entitiesMatch ? entitiesMatch[1] : "";
-    const occurred = occurredMatch ? formatDate(occurredMatch[1]) : "";
+    const occurred = occurredMatch ? timeAgo(occurredMatch[1]) : "";
 
     return { text, type, entities, occurred };
   } catch {
@@ -108,93 +109,68 @@ function parseHolographicFact(raw: string): {
   }
 }
 
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays}d ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-    return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
-  } catch {
-    return "";
-  }
-}
+const PROVIDER_META: Record<string, { title: string; description: string }> = {
+  hindsight: { title: "Hindsight Memory", description: "Knowledge graph memory with semantic search" },
+  holographic: { title: "Holographic Memory", description: "Structured fact storage with trust scoring" },
+};
 
 export default function MemoryPage() {
   const [provider, setProvider] = useState<MemoryProviderType | null>(null);
+  const [memData, setMemData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    // Detect provider from config — wait up to 8s for the memory API,
-    // then fall back to "none" rather than showing an endless spinner
-    const timer = setTimeout(() => {
-      if (!cancelled) {
-        setProvider("none");
-        setLoading(false);
-      }
-    }, 8000);
+    const controller = new AbortController();
+    const signal = controller.signal;
 
-    fetch("/api/memory")
+    fetch("/api/memory", { signal })
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) {
+        if (!signal.aborted) {
           setProvider(d.data?.provider || "none");
-          clearTimeout(timer);
+          setMemData(d.data || null);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!signal.aborted) {
           setProvider("none");
-          clearTimeout(timer);
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!signal.aborted) setLoading(false);
       });
 
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      controller.abort();
     };
   }, []);
 
-  const getTitle = () => {
-    switch (provider) {
-      case "hindsight": return "Hindsight Memory";
-      case "holographic": return "Holographic Memory";
-      default: return "Memory";
-    }
-  };
+  const title = PROVIDER_META[provider ?? ""]?.title || "Memory";
+  const description = provider
+    ? (PROVIDER_META[provider]?.description || "No memory provider configured")
+    : "Loading...";
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-950 grid-bg">
+      <AppPageShell>
         <PageHeader icon={Brain} title="Memory" subtitle="Loading..." color="pink" />
         <div className="px-6 py-12"><LoadingSpinner text="Detecting memory provider..." /></div>
-      </div>
+      </AppPageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       <PageHeader
         icon={Brain}
-        title={getTitle()}
-        subtitle={provider === "hindsight" ? "Knowledge graph memory with semantic search" :
-                  provider === "holographic" ? "Structured fact storage with trust scoring" :
-                  "No memory provider configured"}
+        title={title}
+        subtitle={description}
         color="pink"
       />
 
       <div className="px-6 py-6">
         {provider === "hindsight" && <HindsightBrowser />}
-        {provider === "holographic" && <HolographicBrowser />}
+        {provider === "holographic" && memData && <HolographicBrowser initialData={memData} />}
         {provider === "none" && (
           <div className="text-center py-12">
             <Brain className="w-12 h-12 text-pink-400/40 mx-auto mb-4" />
@@ -204,6 +180,8 @@ export default function MemoryPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }
+
+

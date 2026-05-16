@@ -25,20 +25,7 @@ import type {
   KanbanDocument,
   GoalSession,
 } from "@/types/hermes";
-
-// ── API helpers ────────────────────────────────────────────────
-
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(path, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error ?? `HTTP ${res.status}`);
-  }
-  return res.json();
-}
+import { apiFetch } from "@/lib/api-fetch";
 
 // ── Board Selector ─────────────────────────────────────────────
 
@@ -110,26 +97,29 @@ export default function KanbanPage() {
 
   // Goal sessions (keyed by cardId)
   const [goalSessions, setGoalSessions] = useState<Record<string, GoalSession>>({});
-  const [goalPolling, setGoalPolling] = useState(false);
 
   // ── Load boards on mount ─────────────────────────────────────
 
   const loadBoards = useCallback(async () => {
     try {
       const data = await apiFetch("/api/kanban");
-      setBoards(data.data?.boards ?? []);
-      if (!selectedBoardId && (data.data?.boards?.length ?? 0) > 0) {
-        setSelectedBoardId(data.data.boards[0].id);
-      }
+      const boardList = data.data?.boards ?? [];
+      setBoards(boardList);
     } catch {
       showToast("Failed to load boards", "error");
     }
-  }, [showToast, selectedBoardId]);
+  }, [showToast]);
 
   useEffect(() => {
     loadBoards();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadBoards]);
+
+  // Auto-select first board when boards load and none selected
+  useEffect(() => {
+    if (!selectedBoardId && boards.length > 0) {
+      setSelectedBoardId(boards[0].id);
+    }
+  }, [boards, selectedBoardId]);
 
   // ── Load selected board document ─────────────────────────────
 
@@ -166,7 +156,6 @@ export default function KanbanPage() {
 
   const pollGoalSessions = useCallback(async () => {
     if (Object.keys(goalSessions).length === 0) return;
-    setGoalPolling(true);
     try {
       const updated: Record<string, GoalSession> = {};
       for (const [cardId, session] of Object.entries(goalSessions)) {
@@ -176,7 +165,7 @@ export default function KanbanPage() {
         }
         // Check completion for any active step with a mission
         const activeStep = session.steps.find(
-          (s) => s.status === "active" && s.missionId
+          (s) => s.status === "in_progress" && s.missionId
         );
         if (activeStep) {
           try {
@@ -199,8 +188,8 @@ export default function KanbanPage() {
         updated[cardId] = session;
       }
       setGoalSessions(updated);
-    } finally {
-      setGoalPolling(false);
+    } catch {
+      // Silently handle
     }
   }, [goalSessions]);
 
@@ -344,27 +333,8 @@ export default function KanbanPage() {
       const newCards = { ...doc.cards, [card.id]: card };
       const newDoc = { ...doc, cards: newCards };
       await handleBoardChange(newDoc);
-
-      // Persist via API
-      try {
-        await apiFetch("/api/kanban", {
-          method: "POST",
-          body: JSON.stringify({
-            action: "update-card",
-            boardId: card.boardId,
-            cardId: card.id,
-            title: card.title,
-            description: card.description,
-            status: card.status,
-            assigneeProfileId: card.assigneeProfileId,
-            labels: card.labels,
-          }),
-        });
-      } catch {
-        showToast("Failed to save card", "error");
-      }
     },
-    [doc, handleBoardChange, showToast]
+    [doc, handleBoardChange]
   );
 
   const handleDeleteCard = useCallback(
@@ -627,7 +597,7 @@ export default function KanbanPage() {
                   onCheckCompletion={(idx) =>
                     handleCheckCompletion(activeGoalSession.id, idx)
                   }
-                  polling={goalPolling}
+                  polling={false}
                 />
               </div>
             </div>

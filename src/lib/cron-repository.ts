@@ -143,7 +143,7 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     next_run_at: job.next_run_at ?? null,
     last_run_at: job.last_run_at ?? null,
     last_status: job.last_status ?? null,
-    last_delivery_error: job.last_status ?? null,
+    last_delivery_error: job.last_delivery_error ?? null,
     created_at: job.created_at ?? new Date().toISOString(),
   };
 }
@@ -550,40 +550,37 @@ export function importHermesJobs(): {
     const row = hermesJobToRow(job);
 
     if (existing) {
-      // Update — preserve CH-specific fields (source, id) from existing row
+      // Update — preserve CH-specific fields from existing row
       const ts = now();
-      db()
-        .prepare(
-          `UPDATE cron_jobs SET
-            name=?, prompt=?, skills=?, model=?, provider=?, base_url=?,
+      // For CH-sourced jobs, don't overwrite enabled/state — the UI controls those
+      // For Hermes-sourced jobs, sync everything (they're mirrors)
+      const preserveEnabledState = existing.source === "ch";
+      const updateFields = preserveEnabledState
+        ? `name=?, prompt=?, skills=?, model=?, provider=?, base_url=?,
+            schedule=?, schedule_display=?, repeat_json=?,
+            deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
+            last_status=?, last_delivery_error=?, updated_at=?,
+            orphan=0`
+        : `name=?, prompt=?, skills=?, model=?, provider=?, base_url=?,
             schedule=?, schedule_display=?, repeat_json=?, enabled=?, state=?,
             deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
-            orphan=0
+            orphan=0`;
+      const updateParams = preserveEnabledState
+        ? [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
+           row.schedule, row.schedule_display, row.repeat_json,
+           row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
+           row.last_status, row.last_delivery_error, ts]
+        : [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
+           row.schedule, row.schedule_display, row.repeat_json, row.enabled, row.state,
+           row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
+           row.last_status, row.last_delivery_error, ts];
+      db()
+        .prepare(
+          `UPDATE cron_jobs SET ${updateFields}
           WHERE hermes_job_id=?`
         )
-        .run(
-          row.name,
-          row.prompt,
-          row.skills,
-          row.model,
-          row.provider,
-          row.base_url,
-          row.schedule,
-          row.schedule_display,
-          row.repeat_json,
-          row.enabled,
-          row.state,
-          row.deliver,
-          row.script,
-          row.profile_name,
-          row.next_run_at,
-          row.last_run_at,
-          row.last_status,
-          row.last_delivery_error,
-          ts,
-          job.id
-        );
+        .run(...updateParams, job.id);
       imported.push({ id: existing.id, action: "updated", hermes_job_id: job.id });
     } else {
       // Insert new
@@ -636,6 +633,23 @@ export function importHermesJobs(): {
     .run(now(), ...Array.from(hermesIds));
 
   return { imported, errors };
+}
+
+// ── Hermes path resolution ─────────────────────────────────
+
+const HERMES_AGENT_SEARCH_PATHS = [
+  "../hermes-agent",
+  ".local/share/hermes-agent",
+  "/home/daniel/.local/share/hermes-agent",
+  "/home/daniel/.hermes/hermes-agent",
+] as const;
+
+function resolveHermesAgentPath(hermesHome: string): string | null {
+  for (const rel of HERMES_AGENT_SEARCH_PATHS) {
+    const p = resolve(hermesHome, rel);
+    if (existsSync(p + "/cron/jobs.py")) return p;
+  }
+  return null;
 }
 
 // ── Python script template ─────────────────────────────────
@@ -743,25 +757,12 @@ export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
-  const hermesAgentPaths = [
-    resolve(hermesHome, "../hermes-agent"),
-    resolve(hermesHome, ".local/share/hermes-agent"),
-    "/home/daniel/.local/share/hermes-agent",
-    "/home/daniel/.hermes/hermes-agent",
-  ];
-
-  let hermesAgentPath: string | null = null;
-  for (const p of hermesAgentPaths) {
-    if (existsSync(p + "/cron/jobs.py")) {
-      hermesAgentPath = p;
-      break;
-    }
-  }
+  const hermesAgentPath = resolveHermesAgentPath(hermesHome);
 
   if (!hermesAgentPath) {
     return {
       ok: false,
-      error: `Could not find hermes-agent cron module. Searched: ${hermesAgentPaths.join(", ")}`,
+      error: `Could not find hermes-agent cron module. Searched: ${HERMES_AGENT_SEARCH_PATHS.map((p) => resolve(hermesHome, p)).join(", ")}`,
     };
   }
 
@@ -832,20 +833,7 @@ export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: s
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
-  const hermesAgentPaths = [
-    resolve(hermesHome, "../hermes-agent"),
-    resolve(hermesHome, ".local/share/hermes-agent"),
-    "/home/daniel/.local/share/hermes-agent",
-    "/home/daniel/.hermes/hermes-agent",
-  ];
-
-  let hermesAgentPath: string | null = null;
-  for (const p of hermesAgentPaths) {
-    if (existsSync(p + "/cron/jobs.py")) {
-      hermesAgentPath = p;
-      break;
-    }
-  }
+  const hermesAgentPath = resolveHermesAgentPath(hermesHome);
 
   if (!hermesAgentPath) {
     return { ok: false, error: "Could not find hermes-agent cron module" };
@@ -923,20 +911,7 @@ export function removeJobFromHermes(hermesJobId: string): { ok: boolean; error?:
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
-  const hermesAgentPaths = [
-    resolve(hermesHome, "../hermes-agent"),
-    resolve(hermesHome, ".local/share/hermes-agent"),
-    "/home/daniel/.local/share/hermes-agent",
-    "/home/daniel/.hermes/hermes-agent",
-  ];
-
-  let hermesAgentPath: string | null = null;
-  for (const p of hermesAgentPaths) {
-    if (existsSync(p + "/cron/jobs.py")) {
-      hermesAgentPath = p;
-      break;
-    }
-  }
+  const hermesAgentPath = resolveHermesAgentPath(hermesHome);
 
   if (!hermesAgentPath) {
     return { ok: false, error: "Could not find hermes-agent cron module" };

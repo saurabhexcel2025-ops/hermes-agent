@@ -21,15 +21,9 @@ import PageHeader from "@/components/layout/PageHeader";
 import AppPageShell from "@/components/layout/AppPageShell";
 import Button from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import type { LogFileGroup } from "@/lib/log-files";
+import type { LogFileGroup, LogFileMeta } from "@/lib/log-files";
 import { parseLogLine, type ParsedLogLevel } from "@/lib/log-line-format";
-
-interface LogFileMeta {
-  name: string;
-  size: number;
-  modified: string;
-  group: LogFileGroup;
-}
+import { formatBytes } from "@/lib/utils";
 
 interface LogData {
   name: string;
@@ -40,12 +34,6 @@ interface LogData {
   lines: string[];
   availableLogs: LogFileMeta[];
   error?: string;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 function levelTextClass(level: ParsedLogLevel): string {
@@ -123,10 +111,8 @@ export default function LogsPage() {
   const [lineCount, setLineCount] = useState(200);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [refreshTick, setRefreshTick] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const dataRef = useRef<LogData | null>(null);
-  const isMountedRef = useRef(true);
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
@@ -136,9 +122,6 @@ export default function LogsPage() {
     setLoadError(null);
     if (hasData) {
       setRefreshing(true);
-      setRefreshTick(false);
-      await new Promise((r) => setTimeout(r, 10));
-      setRefreshTick(true);
     } else {
       setLoading(true);
     }
@@ -163,6 +146,10 @@ export default function LogsPage() {
       setRefreshing(false);
     }
   }, [activeLog, lineCount]);
+
+  // Stable ref for polling — avoids recreating the interval when loadLogs deps change
+  const loadLogsRef = useRef(loadLogs);
+  useEffect(() => { loadLogsRef.current = loadLogs; }, [loadLogs]);
 
   const handleDeleteAllLogs = useCallback(async () => {
     if (!deleteConfirm) {
@@ -211,16 +198,13 @@ export default function LogsPage() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    isMountedRef.current = true;
     const id = setInterval(() => {
-      void loadLogs();
+      void loadLogsRef.current();
     }, 5000);
     return () => {
       clearInterval(id);
-      isMountedRef.current = false;
-      setAutoRefresh(false);
     };
-  }, [autoRefresh, loadLogs]);
+  }, [autoRefresh]);
 
   useEffect(() => {
     if (autoScroll && terminalRef.current) {
@@ -268,7 +252,7 @@ export default function LogsPage() {
                 autoRefresh
                   ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50 shadow-[0_0_8px_rgba(6,214,214,0.3)]"
                   : "bg-dark-900/50 text-white/40 border border-white/10 hover:text-white/60"
-              } ${autoRefresh && refreshTick ? "animate-auto-refresh-tick" : ""}`}
+              } ${autoRefresh ? "animate-auto-refresh-tick" : ""}`}
               title={autoRefresh ? "Auto-refresh on (click to disable)" : "Auto-refresh off (click to enable)"}
             >
               {autoRefresh ? (

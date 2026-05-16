@@ -17,38 +17,20 @@ import {
   Copy,
   MoreVertical,
 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/Input";
 import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
+import {
+  getPersonalityEmoji,
+} from "@/lib/personalities";
 
 interface Personality {
   name: string;
   prompt: string;
-}
-
-// Personality emoji presets for visual flair
-const PERSONALITY_EMOJIS: Record<string, string> = {
-  catgirl: "🐱",
-  concise: "📌",
-  creative: "🎨",
-  helpful: "🤝",
-  hype: "🔥",
-  kawaii: "✨",
-  noir: "🕵️",
-  philosopher: "🤔",
-  pirate: "🏴‍☠️",
-  shakespeare: "🎭",
-  surfer: "🤙",
-  teacher: "📚",
-  technical: "🔧",
-  uwu: "🌸",
-};
-
-function getPersonalityEmoji(name: string): string {
-  return PERSONALITY_EMOJIS[name] || "💬";
 }
 
 function PersonalityCard({
@@ -379,7 +361,7 @@ export default function PersonalitiesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       <PageHeader
         title="Personalities"
         subtitle="Manage agent personality presets — custom system prompts for different behaviours"
@@ -460,6 +442,6 @@ export default function PersonalitiesPage() {
       )}
 
       {toastElement}
-    </div>
+    </AppPageShell>
   );
 }

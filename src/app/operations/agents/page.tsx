@@ -1,14 +1,11 @@
 "use client";
 
-// Force client-side rendering so hooks (useState, useEffect, useCallback)
-// resolve correctly on first render without SSR hydration timing issues.
-export const dynamic = "force-dynamic";
-
 import { useState, useEffect, useCallback } from "react";
 import {
   Users, FileText, Save, RotateCcw, Download, Eye, EyeOff,
   Check, AlertCircle, Plus, Trash2,
 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
@@ -16,19 +13,11 @@ import Modal from "@/components/ui/Modal";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
 import type { AgentProfile, ProfileFile } from "@/types/hermes";
-
-const PERSONALITIES = [
-  "technical", "helpful", "creative", "concise", "teacher",
-  "philosopher", "pirate", "shakespeare", "surfer", "noir",
-  "kawaii", "catgirl", "hype", "uwu",
-];
-
-const PERSONALITY_COLORS: Record<string, string> = {
-  technical: "cyan", helpful: "green", creative: "pink", concise: "orange",
-  teacher: "purple", philosopher: "cyan", pirate: "orange", shakespeare: "purple",
-  surfer: "green", noir: "gray", kawaii: "pink", catgirl: "pink",
-  hype: "orange", uwu: "pink",
-};
+import {
+  PERSONALITIES,
+  PERSONALITY_COLORS,
+  titleCasePersonality,
+} from "@/lib/personalities";
 
 interface EditorState {
   profileId: string;
@@ -206,16 +195,16 @@ export default function BehaviourPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-950 grid-bg">
+      <AppPageShell>
         {toastElement}
         <PageHeader icon={Users} title="Agents" subtitle="Loading profiles..." color="purple" />
         <div className="px-6 py-12"><LoadingSpinner text="Loading profiles..." /></div>
-      </div>
+      </AppPageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       {toastElement}
       <PageHeader
         icon={Users}
@@ -239,13 +228,14 @@ export default function BehaviourPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {profiles.map((profile) => {
             const isExpanded = expandedProfile === profile.id;
-            const color = profile.isDefault ? "cyan" : "purple";
             return (
               <div
                 key={profile.id}
                 className={`rounded-xl border transition-all cursor-pointer ${
                   isExpanded
-                    ? `border-${color}-500/50 bg-${color}-500/5 col-span-full`
+                    ? profile.isDefault
+                      ? "border-cyan-500/50 bg-cyan-500/5 col-span-full"
+                      : "border-purple-500/50 bg-purple-500/5 col-span-full"
                     : "border-white/10 bg-dark-900/50 hover:border-white/20"
                 }`}
                 onClick={() => !isExpanded && setExpandedProfile(profile.id)}
@@ -254,7 +244,7 @@ export default function BehaviourPage() {
                 <div className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Users className={`w-5 h-5 text-${color}-400`} />
+                      <Users className={`w-5 h-5 ${profile.isDefault ? "text-cyan-400" : "text-purple-400"}`} />
                       <span className="font-semibold text-white">{profile.name}</span>
                       {profile.isDefault && (
                         <Badge color="cyan" size="sm">Default</Badge>
@@ -264,7 +254,7 @@ export default function BehaviourPage() {
                       color={(PERSONALITY_COLORS[profile.personality] || "gray") as "cyan" | "green" | "pink" | "orange" | "purple" | "gray" | "red"}
                       size="sm"
                     >
-                      {profile.personality.charAt(0).toUpperCase() + profile.personality.slice(1)}
+                      {titleCasePersonality(profile.personality)}
                     </Badge>
                   </div>
                   <p className="text-sm text-white/50 mb-3">{profile.description}</p>
@@ -283,13 +273,13 @@ export default function BehaviourPage() {
                     <div className="mb-4 flex items-center gap-3">
                       <span className="text-sm text-white/50">Personality:</span>
                       <select
-                        value={profile.personality.charAt(0).toUpperCase() + profile.personality.slice(1)}
+                        value={profile.personality}
                         onChange={(e) => handlePersonalityChange(profile.id, e.target.value)}
                         disabled={savingPersonality === profile.id}
                         className="bg-dark-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-purple-500/50 focus:outline-none"
                       >
                         {PERSONALITIES.map((p) => (
-                          <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                          <option key={p} value={p}>{titleCasePersonality(p)}</option>
                         ))}
                       </select>
                       {savingPersonality === profile.id && (
@@ -299,7 +289,7 @@ export default function BehaviourPage() {
 
                     {/* File Groups */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {["identity", "user", "system"].map((group) => {
+                      {["identity", "user"].map((group) => {
                         const groupFiles = profile.files.filter((f) => {
                           if (group === "identity") return ["soul", "agents"].includes(f.key);
                           if (group === "user") return ["user", "memory"].includes(f.key);
@@ -551,6 +541,6 @@ export default function BehaviourPage() {
           </p>
         </Modal>
       </div>
-    </div>
+    </AppPageShell>
   );
 }

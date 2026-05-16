@@ -5,7 +5,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronUp, ChevronDown, Plus, Edit3, Trash2, ChevronDown as ChevronDownIcon } from "lucide-react";
+import { ChevronUp, ChevronDown, Plus, Edit3, Trash2 } from "lucide-react";
 import type { FallbackChainEntry } from "@/types/hermes";
 import GlowSurface from "@/components/ui/GlowSurface";
 
@@ -129,16 +129,10 @@ export default function FallbackChainList({
 }: FallbackChainListProps) {
   const [showRegistryDropdown, setShowRegistryDropdown] = useState(false);
   const [showAddCustom, setShowAddCustom] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDeleteClick = (id: string) => {
-    if (deletingId === id) {
-      onDelete(id);
-      setDeletingId(null);
-    } else {
-      setDeletingId(id);
-      setTimeout(() => setDeletingId((curr) => (curr === id ? null : curr)), 3000);
-    }
+    if (!confirm("Remove this fallback model?")) return;
+    onDelete(id);
   };
 
   const handleAddFromRegistry = (modelId: string) => {
@@ -242,12 +236,8 @@ export default function FallbackChainList({
                         type="button"
                         onClick={() => handleDeleteClick(entry.id)}
                         disabled={disabled}
-                        title={deletingId === entry.id ? "Click again to confirm" : "Delete"}
-                        className={`p-1 rounded transition-colors disabled:opacity-50 ${
-                          deletingId === entry.id
-                            ? "text-red-400 bg-red-500/10"
-                            : "text-white/30 hover:text-red-400 hover:bg-red-500/10"
-                        }`}
+                        title="Delete"
+                        className="p-1 rounded text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -283,7 +273,7 @@ export default function FallbackChainList({
           >
             <Plus className="w-3.5 h-3.5" />
             Add from Registry
-            <ChevronDownIcon className="w-3 h-3" />
+            <ChevronDown className="w-3 h-3" />
           </button>
           {showRegistryDropdown && (
             <div className="absolute top-full left-0 mt-1 z-10 w-56 bg-dark-800 border border-white/10 rounded-lg shadow-xl overflow-hidden">
