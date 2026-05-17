@@ -69,7 +69,7 @@ function DropdownMenu({
   useLayoutEffect(() => {
     if (!anchorRef.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
-    const menuH = presets.length * 36 + 16;
+    const menuH = Math.min(presets.length * 36 + 16, 288);
     const spaceBelow = window.innerHeight - rect.bottom;
 
     // Prefer below — only show above when there truly isn't room beneath
@@ -229,144 +229,112 @@ export default function ScheduleSelector({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Mode tabs */}
-      <div className="flex items-center gap-2">
-        <ModeTab
-          label="Interval"
-          icon={<RefreshCw className="w-3 h-3" />}
-          active={mode === "interval"}
-          onClick={() => onModeChange("interval")}
-        />
-        <ModeTab
-          label="Wall Clock"
-          icon={<Clock className="w-3 h-3" />}
-          active={mode === "wall-clock"}
-          onClick={() => onModeChange("wall-clock")}
-        />
-        <ModeTab
-          label="Post-run"
-          icon={<Timer className="w-3 h-3" />}
-          active={mode === "post-run"}
-          onClick={() => onModeChange("post-run")}
-        />
+    <div className="space-y-2">
+      {/* Top row: mode tabs + compact interval selector */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
+          <ModeTab
+            label="Interval"
+            icon={<RefreshCw className="w-3 h-3" />}
+            active={mode === "interval"}
+            onClick={() => onModeChange("interval")}
+          />
+          <ModeTab
+            label="Wall Clock"
+            icon={<Clock className="w-3 h-3" />}
+            active={mode === "wall-clock"}
+            onClick={() => onModeChange("wall-clock")}
+          />
+          <ModeTab
+            label="Post-run"
+            icon={<Timer className="w-3 h-3" />}
+            active={mode === "post-run"}
+            onClick={() => onModeChange("post-run")}
+          />
+        </div>
+
+        {/* Interval / Post-run: compact selector beside mode tabs */}
+        {(mode === "interval" || mode === "post-run") && (
+          <div className="flex-1 min-w-0">
+            <button
+              ref={buttonRef}
+              onClick={() => setActiveDropdown((prev) => prev === mode ? null : mode)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white hover:border-white/30 transition-colors"
+            >
+              <span className="flex items-center gap-2 truncate">
+                {mode === "post-run" ? (
+                  <Timer className="w-4 h-4 shrink-0 text-neon-purple" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 shrink-0 text-neon-cyan" />
+                )}
+                <span>Every {displayLabel}</span>
+              </span>
+              <ChevronDown className={`w-4 h-4 shrink-0 text-white/30 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            </button>
+            {isOpen && (
+              <DropdownMenu
+                anchorRef={buttonRef}
+                presets={PRESETS}
+                activePresetValue={activePresetValue}
+                onSelect={(v) => { onChange(v); setActiveDropdown(null); }}
+                onClose={handleClose}
+                width={220}
+              />
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Interval mode */}
-      {mode === "interval" && (
-        <div>
-          <button
-            ref={buttonRef}
-            onClick={() => setActiveDropdown((prev) => prev === mode ? null : mode)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white hover:border-white/30 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 text-neon-cyan" />
-              <div className="text-left">
-                <div className="font-medium text-sm">Every {displayLabel}</div>
-                <div className="text-[10px] text-white/30">Repeat frequency</div>
-              </div>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-          </button>
-          {isOpen && (
-            <DropdownMenu
-              anchorRef={buttonRef}
-              presets={PRESETS}
-              activePresetValue={activePresetValue}
-              onSelect={(v) => { onChange(v); setActiveDropdown(null); }}
-              onClose={handleClose}
-              width={220}
-            />
-          )}
-          <p className="text-[10px] text-white/25 font-mono mt-1">
-            Runs on a fixed time interval from when the job starts.
-          </p>
-        </div>
-      )}
-
-      {/* Wall Clock mode */}
+      {/* Wall Clock mode: start time + repeat every (below the top row) */}
       {mode === "wall-clock" && (
-        <div className="space-y-2">
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <label className="text-[10px] text-white/40 font-mono block mb-1">
-                Start Time
-              </label>
-              <input
-                type="time"
-                value={startTime || "00:00"}
-                onChange={(e) => {
-                  if (onStartTimeChange) onStartTimeChange(e.target.value);
-                  // Rebuild the schedule with new time
-                  const cronExpr = buildWallClockSchedule(e.target.value, value);
-                  onChange(cronExpr);
-                }}
-                className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-neon-cyan/50 font-mono"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="text-[10px] text-white/40 font-mono block mb-1">
-                Repeat Every
-              </label>
-              <button
-                ref={buttonRef}
-                onClick={() => setActiveDropdown((prev) => prev === mode ? null : mode)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white hover:border-white/30 transition-colors"
-              >
-                <span>Every {displayLabel}</span>
-                <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-              </button>
-              {isOpen && (
-                <DropdownMenu
-                  anchorRef={buttonRef}
-                  presets={PRESETS}
-                  activePresetValue={activePresetValue}
-                  onSelect={(v) => handleIntervalChange(v)}
-                  onClose={handleClose}
-                  width={220}
-                />
-              )}
-            </div>
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <label className="text-[10px] text-white/40 font-mono block mb-1">
+              Start Time
+            </label>
+            <input
+              type="time"
+              value={startTime || "00:00"}
+              onChange={(e) => {
+                if (onStartTimeChange) onStartTimeChange(e.target.value);
+                const cronExpr = buildWallClockSchedule(e.target.value, value);
+                onChange(cronExpr);
+              }}
+              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-neon-cyan/50 font-mono"
+            />
           </div>
-          <p className="text-[10px] text-white/25 font-mono">
-            Runs daily at the specified start time with the given repeat interval.
-          </p>
+          <div className="flex-1">
+            <label className="text-[10px] text-white/40 font-mono block mb-1">
+              Repeat Every
+            </label>
+            <button
+              ref={buttonRef}
+              onClick={() => setActiveDropdown((prev) => prev === mode ? null : mode)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white hover:border-white/30 transition-colors"
+            >
+              <span>Every {displayLabel}</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            </button>
+            {isOpen && (
+              <DropdownMenu
+                anchorRef={buttonRef}
+                presets={PRESETS}
+                activePresetValue={activePresetValue}
+                onSelect={(v) => handleIntervalChange(v)}
+                onClose={handleClose}
+                width={220}
+              />
+            )}
+          </div>
         </div>
       )}
 
-      {/* Post-run mode */}
-      {mode === "post-run" && (
-        <div>
-          <button
-            ref={buttonRef}
-            onClick={() => setActiveDropdown((prev) => prev === mode ? null : mode)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white hover:border-white/30 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Timer className="w-4 h-4 text-neon-purple" />
-              <div className="text-left">
-                <div className="font-medium text-sm">Every {displayLabel}</div>
-                <div className="text-[10px] text-white/30">After each run completes</div>
-              </div>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-          </button>
-          {isOpen && (
-            <DropdownMenu
-              anchorRef={buttonRef}
-              presets={PRESETS}
-              activePresetValue={activePresetValue}
-              onSelect={(v) => { onChange(v); setActiveDropdown(null); }}
-              onClose={handleClose}
-              width={220}
-            />
-          )}
-          <p className="text-[10px] text-white/25 font-mono mt-1">
-            Waits for the mission to finish, then schedules the next run after the specified delay.
-          </p>
-        </div>
-      )}
+      {/* Description text */}
+      <p className="text-[10px] text-white/25 font-mono">
+        {mode === "interval" && "Runs on a fixed time interval from when the job starts."}
+        {mode === "wall-clock" && "Runs daily at the specified start time with the given repeat interval."}
+        {mode === "post-run" && "Waits for the mission to finish, then schedules the next run after the specified delay."}
+      </p>
     </div>
   );
 }
