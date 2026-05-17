@@ -5,17 +5,18 @@
 // ═══════════════════════════════════════════════════════════════
 
 import AppPageShell from "@/components/layout/AppPageShell";
+import { shellHeaderBarClasses } from "@/lib/theme";
 
 export function FormSkeleton() {
   return (
     <AppPageShell>
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4">
+      {/* Header — uses shellHeaderBarClasses to match actual page height (min-h-5rem = 80px) */}
+      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between gap-4 w-full animate-pulse`}>
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 rounded bg-white/10 animate-pulse" />
+          <div className="w-5 h-5 rounded bg-white/10" />
           <div className="space-y-1">
-            <div className="h-5 w-40 rounded bg-white/10 animate-pulse" />
-            <div className="h-3 w-36 rounded bg-white/10 animate-pulse" />
+            <div className="h-5 w-40 rounded bg-white/10" />
+            <div className="h-3 w-36 rounded bg-white/10" />
           </div>
         </div>
       </div>
@@ -49,25 +50,23 @@ export function FormSkeleton() {
 export function ModelsPageSkeleton() {
   return (
     <AppPageShell>
-      {/* Header with tabs */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-5 h-5 rounded bg-white/10 animate-pulse" />
-            <div className="space-y-1">
-              <div className="h-5 w-28 rounded bg-white/10 animate-pulse" />
-              <div className="h-3 w-40 rounded bg-white/10 animate-pulse" />
-            </div>
+      {/* Header with tabs — uses shellHeaderBarClasses to match actual page height (min-h-5rem = 80px) */}
+      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between gap-4 w-full animate-pulse`}>
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 rounded bg-white/10" />
+          <div className="space-y-1">
+            <div className="h-5 w-28 rounded bg-white/10" />
+            <div className="h-3 w-40 rounded bg-white/10" />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-24 rounded-lg bg-white/10 animate-pulse" />
-            <div className="h-8 w-24 rounded-lg bg-white/10 animate-pulse" />
-          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-24 rounded-lg bg-white/10" />
+          <div className="h-8 w-24 rounded-lg bg-white/10" />
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="border-b border-white/10 px-6 py-2 flex gap-2">
+      <div className="border-b border-white/10 bg-dark-950 px-6 py-2 flex gap-2 animate-pulse">
         <div className="h-8 w-20 rounded-lg bg-white/10 animate-pulse" />
         <div className="h-8 w-24 rounded-lg bg-white/10 animate-pulse" />
         <div className="h-8 w-16 rounded-lg bg-white/10 animate-pulse" />

@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import AppPageShell from "@/components/layout/AppPageShell";
+import { shellHeaderBarClasses } from "@/lib/theme";
 
 export function StatPillSkeleton() {
   return (
@@ -99,20 +100,20 @@ function ProcessCardSkeleton() {
 export function DashboardSkeleton() {
   return (
     <AppPageShell variant="scanlines">
-      {/* Top Bar skeleton */}
-      <div className="sticky top-0 z-30 border-b border-white/10 bg-dark-900/80 backdrop-blur-md px-6 py-3 flex items-center justify-between">
+      {/* Top Bar — uses shellHeaderBarClasses to match actual page height (min-h-5rem = 80px) */}
+      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between gap-4 w-full animate-pulse`}>
         <div className="space-y-1">
-          <div className="h-6 w-32 rounded bg-white/10 animate-pulse" />
-          <div className="h-3 w-20 rounded bg-white/10 animate-pulse" />
+          <div className="h-6 w-32 rounded bg-white/10" />
+          <div className="h-3 w-20 rounded bg-white/10" />
         </div>
         <div className="flex items-center gap-6">
           <div className="space-y-1 text-right">
-            <div className="h-4 w-16 rounded bg-white/10 animate-pulse" />
-            <div className="h-3 w-24 rounded bg-white/10 animate-pulse" />
+            <div className="h-4 w-16 rounded bg-white/10" />
+            <div className="h-3 w-24 rounded bg-white/10" />
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-white/20" />
-            <div className="h-3 w-14 rounded bg-white/10 animate-pulse" />
+            <div className="h-3 w-14 rounded bg-white/10" />
           </div>
         </div>
       </div>

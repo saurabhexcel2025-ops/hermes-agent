@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import AppPageShell from "@/components/layout/AppPageShell";
+import { shellHeaderBarClasses } from "@/lib/theme";
 
 interface TabbedContentSkeletonProps {
   tabs?: number;
@@ -19,13 +20,13 @@ export function TabbedContentSkeleton({
 }: TabbedContentSkeletonProps) {
   return (
     <AppPageShell>
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4">
+      {/* Header — uses shellHeaderBarClasses to match actual page height (min-h-5rem = 80px) */}
+      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between gap-4 w-full animate-pulse`}>
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 rounded bg-white/10 animate-pulse" />
+          <div className="w-5 h-5 rounded bg-white/10" />
           <div className="space-y-1">
-            <div className="h-5 w-36 rounded bg-white/10 animate-pulse" />
-            <div className="h-3 w-44 rounded bg-white/10 animate-pulse" />
+            <div className="h-5 w-36 rounded bg-white/10" />
+            <div className="h-3 w-44 rounded bg-white/10" />
           </div>
         </div>
       </div>
