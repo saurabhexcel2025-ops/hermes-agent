@@ -523,19 +523,27 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           <button
             onClick={() => openDropdown("rebuild")}
             disabled={isBusy}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-neon-purple/10 border border-neon-purple/20 text-xs font-mono text-neon-purple hover:bg-neon-purple/20 transition-colors disabled:opacity-50"
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-mono transition-colors disabled:opacity-50 ${
+              rebuilding || serverRestarting
+                ? "bg-neon-purple/20 border border-neon-purple/30 text-neon-purple/90"
+                : "bg-neon-purple/10 border border-neon-purple/20 text-neon-purple hover:bg-neon-purple/20"
+            }`}
           >
             <Hammer className={`w-3.5 h-3.5 flex-shrink-0 ${rebuilding ? "animate-spin" : ""}`} />
-            {serverRestarting ? "Restarting…" : rebuilding ? "…" : "Rebuild"}
+            Rebuild
           </button>
 
           <button
             onClick={handleRestart}
             disabled={isBusy}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-mono text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-mono transition-colors disabled:opacity-50 ${
+              restarting
+                ? "bg-red-500/20 border border-red-500/30 text-red-300"
+                : "bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20"
+            }`}
           >
             <Power className={`w-3.5 h-3.5 flex-shrink-0 ${restarting ? "animate-spin" : ""}`} />
-            {restarting ? "Restarting…" : "Restart"}
+            Restart
           </button>
         </div>
       </div>
