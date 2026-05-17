@@ -13,7 +13,8 @@ import {
 import GoalCheckpointList from "./GoalCheckpointList";
 import GoalKanbanLinker from "./GoalKanbanLinker";
 import type { GoalDetail } from "@/lib/goals-bridge";
-import { timeAgo } from "@/lib/utils";
+import { timeAgo, safeTimeAgo } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 interface GoalDetailPanelProps {
   goal: GoalDetail | null;
@@ -56,6 +57,7 @@ export default function GoalDetailPanel({
   onDelete,
 }: GoalDetailPanelProps) {
   const [deleting, setDeleting] = useState(false);
+  const { showToast, toastElement } = useToast();
 
   // ── API helpers ─────────────────────────────────────────────
 
@@ -139,7 +141,7 @@ export default function GoalDetailPanel({
         onClose();
       }
     } catch {
-      // fail silently
+      showToast("Failed to delete goal", "error");
     }
     setDeleting(false);
   }, [goal, onDelete, onClose]);
@@ -148,8 +150,8 @@ export default function GoalDetailPanel({
 
   const statusStyle = STATUS_STYLES[goal.status] || STATUS_STYLES.active;
   const progressColor = PROGRESS_COLORS[goal.status] || PROGRESS_COLORS.active;
-  const createdAgo = timeAgo(new Date(goal.created_at * 1000).toISOString());
-  const updatedAgo = timeAgo(new Date(goal.updated_at * 1000).toISOString());
+  const createdAgo = safeTimeAgo(goal.created_at);
+  const updatedAgo = safeTimeAgo(goal.updated_at);
   const linkedTaskIds = (goal.linked_tasks || []).map((t) => t.task_id);
 
   return (
@@ -296,6 +298,7 @@ export default function GoalDetailPanel({
           />
         </div>
       </div>
+      {toastElement}
     </div>
   );
 }

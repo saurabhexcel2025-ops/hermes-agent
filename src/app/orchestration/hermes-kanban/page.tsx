@@ -118,15 +118,15 @@ export default function HermesKanbanPage() {
 
   const fetchBoards = useCallback(async () => {
     try {
-      const res = await fetch("/api/orchestration/hermes-kanban/boards");
+      const res = await fetch("/api/orchestration/hermes-kanban/board?scope=boards");
       const json = await res.json();
-      if (json.data) {
-        const list: BoardOption[] = json.data;
+      if (json.data?.boards) {
+        const list: BoardOption[] = json.data.boards;
         setBoards(list);
-        if (list.length > 0 && !activeBoard) setActiveBoard(list[0].slug);
+        setActiveBoard((prev) => prev || (list.length > 0 ? list[0].slug : ""));
       }
     } catch { /* ignore */ }
-  }, [activeBoard]);
+  }, []);
 
   // ── Initial load ───────────────────────────────────────
   useEffect(() => {

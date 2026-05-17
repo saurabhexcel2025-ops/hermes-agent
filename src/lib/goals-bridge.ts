@@ -77,31 +77,46 @@ export function listGoals(filters?: {
   category?: string;
   priority?: number;
   limit?: number;
-}): Goal[] {
+}): GoalDetail[] {
   const db = getDb();
-  let sql = "SELECT * FROM goals WHERE 1=1";
+  let sql = `SELECT g.*, 
+    COALESCE(cp_stats.total, 0) AS checkpoints_total,
+    COALESCE(cp_stats.done, 0) AS checkpoints_done
+    FROM goals g
+    LEFT JOIN (
+      SELECT goal_id, COUNT(*) AS total, SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS done
+      FROM goal_checkpoints GROUP BY goal_id
+    ) cp_stats ON cp_stats.goal_id = g.id
+    WHERE 1=1`;
   const params: unknown[] = [];
 
   if (filters?.status) {
-    sql += " AND status = ?";
+    sql += " AND g.status = ?";
     params.push(filters.status);
   }
   if (filters?.category) {
-    sql += " AND category = ?";
+    sql += " AND g.category = ?";
     params.push(filters.category);
   }
   if (filters?.priority) {
-    sql += " AND priority = ?";
+    sql += " AND g.priority = ?";
     params.push(filters.priority);
   }
 
-  sql += " ORDER BY priority DESC, created_at DESC";
+  sql += " ORDER BY g.priority DESC, g.created_at DESC";
   if (filters?.limit) {
     sql += " LIMIT ?";
     params.push(filters.limit);
   }
 
-  return db.prepare(sql).all(...params) as Goal[];
+  const rows = db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
+  return rows.map((row) => {
+    const total = (row.checkpoints_total as number) || 0;
+    const done = (row.checkpoints_done as number) || 0;
+    const progress_pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const { checkpoints_total, checkpoints_done, ...goal } = row;
+    return { ...goal, progress_pct } as unknown as GoalDetail;
+  });
 }
 
 export function getGoal(id: string): GoalDetail | null {

@@ -177,13 +177,9 @@ export default function GoalsList({
       {/* Top bar */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Target className="w-5 h-5 text-neon-purple" />
-            Goals
-          </h1>
           {goals.length > 0 && (
             <span className="text-xs font-mono text-white/40 bg-white/5 px-2 py-0.5 rounded-full">
-              {goals.length}
+              {goals.length} total
             </span>
           )}
         </div>

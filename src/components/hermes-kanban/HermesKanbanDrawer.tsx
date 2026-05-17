@@ -14,7 +14,7 @@ import {
   Save,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { timeAgo } from "@/lib/utils";
+import { timeAgo, safeTimeAgo } from "@/lib/utils";
 
 interface Comment {
   id: number;
@@ -571,14 +571,14 @@ export default function HermesKanbanDrawer({
           )}
 
           {/* Claim info for running tasks */}
-          {isRunning && task.claim_expires_at && (
+          {isRunning && (
             <div>
               <label className="block text-xs font-mono text-white/40 uppercase tracking-wider mb-1">
                 <Clock className="w-3 h-3 inline mr-1" />
                 Claim expires
               </label>
               <span className="text-sm text-neon-orange font-mono">
-                {timeAgo(new Date(task.claim_expires_at * 1000).toISOString())}
+                {safeTimeAgo((task as any).claim_expires ?? task.claim_expires_at)}
               </span>
             </div>
           )}
@@ -692,7 +692,7 @@ export default function HermesKanbanDrawer({
                 <div key={c.id} className="bg-white/5 border border-white/10 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-mono text-neon-cyan/80 font-semibold">{c.author}</span>
-                    <span className="text-[10px] text-white/30 font-mono">{timeAgo(new Date(c.created_at * 1000).toISOString())}</span>
+                    <span className="text-[10px] text-white/30 font-mono">{safeTimeAgo(c.created_at)}</span>
                   </div>
                   <p className="text-sm text-white/70 whitespace-pre-wrap">{c.body}</p>
                 </div>
@@ -749,7 +749,7 @@ export default function HermesKanbanDrawer({
                     <div className="flex items-center justify-between mt-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-white/30 font-mono">
-                          {timeAgo(new Date(r.started_at * 1000).toISOString())}
+                          {safeTimeAgo(r.started_at)}
                         </span>
                         {r.ended_at && (
                           <span className="text-[10px] text-white/30 font-mono">
@@ -792,7 +792,7 @@ export default function HermesKanbanDrawer({
                   <div key={e.id} className="flex items-center justify-between bg-white/5 rounded px-2 py-1">
                     <span className="text-xs text-white/50 font-mono">{e.kind}</span>
                     <span className="text-[10px] text-white/30 font-mono">
-                      {timeAgo(new Date(e.created_at * 1000).toISOString())}
+                      {safeTimeAgo(e.created_at)}
                     </span>
                   </div>
                 ))}
@@ -802,8 +802,8 @@ export default function HermesKanbanDrawer({
 
           {/* Timestamps */}
           <div className="flex items-center justify-between text-[10px] text-white/20 font-mono pt-2 border-t border-white/10">
-            <span>Created: {timeAgo(new Date(task.created_at * 1000).toISOString())}</span>
-            <span>Updated: {timeAgo(new Date(task.updated_at * 1000).toISOString())}</span>
+            <span>Created: {safeTimeAgo(task.created_at)}</span>
+            <span>Updated: {safeTimeAgo(task.updated_at ?? task.created_at)}</span>
           </div>
         </div>
       </div>

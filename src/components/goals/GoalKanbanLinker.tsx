@@ -59,7 +59,7 @@ export default function GoalKanbanLinker({
   useEffect(() => {
     if (fetched) return;
     setLoading(true);
-    fetch("/api/orchestration/hermes-kanban/board")
+    fetch("/api/orchestration/hermes-kanban")
       .then((r) => r.json())
       .then((json) => {
         const tasks = (json.data?.tasks || json.data || []) as KanbanTaskBasic[];

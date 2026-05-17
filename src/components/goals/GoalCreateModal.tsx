@@ -27,7 +27,7 @@ const PRIORITY_LABELS: Record<number, string> = {
   2: "Low",
   3: "Medium",
   4: "High",
-  5: "Highest",
+  5: "Critical",
 };
 
 const STATUS_OPTIONS: Goal["status"][] = [

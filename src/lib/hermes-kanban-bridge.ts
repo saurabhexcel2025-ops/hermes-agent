@@ -381,7 +381,7 @@ export async function getDiagnostics(): Promise<KanbanDiagnostic[]> {
 
 /** List all boards. */
 export async function listBoards(): Promise<KanbanBoard[]> {
-  return (await hermesCli(["boards"])) as KanbanBoard[];
+  return (await hermesCli(["boards", "list"])) as KanbanBoard[];
 }
 
 /** Get stats for a specific board. */
