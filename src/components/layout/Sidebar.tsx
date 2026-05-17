@@ -524,7 +524,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             onClick={() => openDropdown("rebuild")}
             disabled={isBusy}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-mono transition-colors disabled:opacity-50 ${
-              rebuilding || serverRestarting
+              rebuilding
                 ? "bg-neon-purple/20 border border-neon-purple/30 text-neon-purple/90"
                 : "bg-neon-purple/10 border border-neon-purple/20 text-neon-purple hover:bg-neon-purple/20"
             }`}
