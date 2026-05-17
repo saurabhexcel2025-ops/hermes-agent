@@ -302,6 +302,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
       const msg = err instanceof Error ? err.message : "Restart failed";
       setMessage(msg);
       setRestarting(false);
+      setServerRestarting(false);
       busyRef.current = false;
     }
   };
@@ -333,6 +334,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
       const msg = err instanceof Error ? err.message : "Rebuild failed";
       setMessage(msg);
       setRebuilding(false);
+      setServerRestarting(false);
       busyRef.current = false;
     }
   };
@@ -364,6 +366,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           setRestarting(false);
           setRebuilding(false);
           setServerRestarting(false);
+          busyRef.current = false;
           setCheckState(d.data?.updateAvailable ? "update-available" : "up-to-date");
           setMessage("Done!");
           setTimeout(() => {
@@ -379,6 +382,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           setRestarting(false);
           setRebuilding(false);
           setServerRestarting(false);
+          busyRef.current = false;
           setMessage("Timeout — check server");
         }
       }

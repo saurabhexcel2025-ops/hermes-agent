@@ -53,6 +53,16 @@ ch_deploy_acquire_lock() {
   }
   trap cleanup EXIT
 
+  # ── Re-entrancy guard: if WE already own the lock (nested call in same PID),
+  #    allow it — the outer call is responsible for releasing it on exit.
+  if [ -d "$LOCK_DIR" ]; then
+    local LOCK_PID
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
+    if [ "$LOCK_PID" = "$$" ]; then
+      return 0  # re-entrancy: we already own it
+    fi
+  fi
+
   # Try to atomically claim the lock directory.
   if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     # Another process holds the lock — check if it's still alive.
@@ -75,13 +85,31 @@ ch_deploy_acquire_lock() {
 }
 
 ch_deploy_cmd_restart() {
-  ch_deploy_acquire_lock
-  cd "$CH_APP_DIR"
+  # Guard against concurrent restarts: if the lock is held by another live process,
+  # a restart is already in progress. Exit cleanly rather than racing to kill the
+  # server that the in-progress restart just started (the second restart would
+  # otherwise kill the server started by the first, leaving nothing running).
+  if [ -f "$LOCK_FILE" ]; then
+    local LOCK_PID
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
+    if [ -n "$LOCK_PID" ] && [ "$LOCK_PID" != "$$" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+      ch_deploy_log_update "Restart already in progress (PID $LOCK_PID) — exiting cleanly"
+      exit 0
+    fi
+  fi
+  # Lock is acquired inside ch_deploy_restart_once so the lock covers the
+  # entire restart operation (including the wait-for-ready loop), not just
+  # the spawn of the detached subprocess.
   ch_deploy_restart_once
 }
 
 # One-shot restart: kill zombies, restart next-server, optional socat relay, exit.
+# Lock is held for the entire operation (not just the spawn) so concurrent restarts
+# cannot interfere with each other's server lifecycle.
 ch_deploy_restart_once() {
+  ch_deploy_acquire_lock
+  cd "$CH_APP_DIR"
+
   local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
   local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
   local SOCAT_PID_FILE="$HOME/.hermes/logs/ch-socat.pid"
@@ -252,8 +280,26 @@ ch_deploy_restart_once() {
 }
 
 ch_deploy_cmd_rebuild() {
-  ch_deploy_acquire_lock
+  # Guard against concurrent rebuilds: if the lock is held by another live process,
+  # a rebuild is already in progress. Exit cleanly rather than racing to kill the
+  # server that the in-progress rebuild just started.
+  if [ -f "$LOCK_FILE" ]; then
+    local LOCK_PID
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
+    if [ -n "$LOCK_PID" ] && [ "$LOCK_PID" != "$$" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+      ch_deploy_log_update "Rebuild already in progress (PID $LOCK_PID) — exiting cleanly"
+      exit 0
+    fi
+  fi
+  # Lock is acquired inside ch_deploy_restart_once (called at end) so the lock
+  # covers the full rebuild + restart sequence. The re-entrancy check in
+  # ch_deploy_acquire_lock handles the case where the outer ch_deploy_acquire_lock
+  # (called first) and inner ch_deploy_acquire_lock (inside ch_deploy_restart_once)
+  # both run in the same PID.
+  ch_deploy_cmd_rebuild_impl
+}
 
+ch_deploy_cmd_rebuild_impl() {
   local CH_BRANCH="${CH_DEPLOY_BRANCH:-${CH_UPDATE_GIT_BRANCH:-dev}}"
   local APP_DIR="$CH_APP_DIR"
   local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
