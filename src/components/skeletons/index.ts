@@ -1,11 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // Skeletons — Barrel export
-// All skeleton components in one place for clean imports.
+// StatPillSkeleton is the only skeleton still used inline
+// (by src/app/page.tsx during its own loading state).
+// All other skeletons were only used by loading.tsx files,
+// which have been removed (pages handle their own loading).
 // ═══════════════════════════════════════════════════════════════
 
-export { DashboardSkeleton, StatPillSkeleton, HandoffBarSkeleton } from "./DashboardSkeleton";
-export { CardGridSkeleton } from "./CardGridSkeleton";
-export { DetailSkeleton } from "./DetailSkeleton";
-export { LogViewerSkeleton } from "./LogViewerSkeleton";
-export { FormSkeleton, ModelsPageSkeleton } from "./FormSkeleton";
-export { TabbedContentSkeleton } from "./TabbedContentSkeleton";
+export { StatPillSkeleton } from "./StatPillSkeleton";

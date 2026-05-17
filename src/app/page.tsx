@@ -40,6 +40,7 @@ import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
 import AppPageShell from "@/components/layout/AppPageShell";
 import { shellHeaderBarClasses } from "@/lib/theme";
 import { StatPillSkeleton } from "@/components/skeletons";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface HermesProcess {
   id: string;
@@ -226,6 +227,7 @@ export default function Dashboard() {
   const setData = useCallback((partial: Partial<typeof data>) => {
     setDataFields(prev => ({ ...prev, ...partial }));
   }, []);
+  const [ready, setReady] = useState(false);
   const [dispatchExpanded, setDispatchExpanded] = useState(false);
   const [errorSev, setErrorSev] = useState<"all" | "error" | "warning">("all");
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
@@ -317,6 +319,7 @@ export default function Dashboard() {
           processes: processesRes.data?.processes || processesRes.processes || [],
           missions: missionsRes.data?.missions || [],
         });
+        setReady(true);
       }
     };
     initialLoad();
@@ -405,7 +408,12 @@ export default function Dashboard() {
       </div>
       {toastElement}
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      {!ready ? (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <LoadingSpinner text="Loading dashboard..." />
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* ═══ Compact Stat Row ═══ */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {monitor ? (
@@ -860,6 +868,7 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+      )}
     </AppPageShell>
   );
 }
