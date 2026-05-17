@@ -24,7 +24,11 @@ source "$CH_SCRIPTS_ROOT/lib/ch-port.sh"
 # shellcheck source=ch-env.sh
 source "$CH_SCRIPTS_ROOT/lib/ch-env.sh"
 
-LOCK_FILE="${TMPDIR:-/tmp}/ch-deploy.lock"
+# Atomic lock using mkdir (POSIX-guaranteed atomic — no race between check and write).
+# mkdir succeeds iff the directory did not exist; both creation and failure are
+# immediate and race-free.
+LOCK_DIR="${TMPDIR:-/tmp}/ch-deploy.lock.d"
+LOCK_FILE="$LOCK_DIR/pid"
 LOG_FILE="$HOME/.hermes/logs/ch-update.log"
 
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -43,24 +47,31 @@ ch_deploy_kill_tcp_listeners_on_port() {
 }
 
 ch_deploy_acquire_lock() {
+  # Clean up our own lock directory on exit (normal or error).
   cleanup() {
-    rm -f "$LOCK_FILE"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
   }
-  if [ -f "$LOCK_FILE" ]; then
+  trap cleanup EXIT
+
+  # Try to atomically claim the lock directory.
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # Another process holds the lock — check if it's still alive.
     local LOCK_PID
-    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
-    if [ -n "$LOCK_PID" ] && [ "$LOCK_PID" = "$$" ]; then
-      return 0
-    fi
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
     if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
       ch_deploy_log_update "ERROR: Deploy already running (PID $LOCK_PID)"
       exit 1
     fi
-    ch_deploy_log_update "WARNING: Stale lock file found, removing"
-    rm -f "$LOCK_FILE"
+    # Stale lock — another process held it but is now gone. Remove and retry.
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+      ch_deploy_log_update "ERROR: Could not acquire deploy lock (retry race)"
+      exit 1
+    fi
   fi
-  trap cleanup EXIT
-  echo $$ >"$LOCK_FILE"
+
+  # We own it — record our PID so the next claimant can identify us.
+  echo "$$" > "$LOCK_FILE"
 }
 
 ch_deploy_cmd_restart() {

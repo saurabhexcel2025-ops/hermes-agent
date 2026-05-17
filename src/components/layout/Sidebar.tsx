@@ -170,6 +170,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   // serverRestarting tracks the gap between "background build/restart fired" and "server actually back up"
   const [serverRestarting, setServerRestarting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Synchronous busy guard — ref, not state, so it updates immediately on click
+  const busyRef = useRef(false);
 
   // Dropdown state
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -275,7 +277,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   };
 
   const handleRestart = async () => {
-    if (restarting) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setRestarting(true);
     setMessage("Restart requested (~/.hermes/logs/ch-restart.log)…");
     try {
@@ -299,11 +302,13 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
       const msg = err instanceof Error ? err.message : "Restart failed";
       setMessage(msg);
       setRestarting(false);
+      busyRef.current = false;
     }
   };
 
   const doRebuild = async (branch: string) => {
-    if (rebuilding) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setRebuilding(true);
     setDeployBranch(branch);
     setMessage("Rebuilding...");
@@ -328,6 +333,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
       const msg = err instanceof Error ? err.message : "Rebuild failed";
       setMessage(msg);
       setRebuilding(false);
+      busyRef.current = false;
     }
   };
 
