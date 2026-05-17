@@ -20,6 +20,13 @@ import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
+import { createCronJob, pushJobToHermes } from "@/lib/cron-repository";
+
+// ── Helpers ───────────────────────────────────────────────────────
+
+function resolveMissionId(body: Record<string, unknown>): string | undefined {
+  return (body.id ?? body.missionId) as string | undefined;
+}
 
 // ── GET ───────────────────────────────────────────────────────
 
@@ -138,6 +145,51 @@ export async function POST(request: NextRequest) {
       });
 
       const isSaveMode = dispatchMode === "save" || dispatchMode === "queue";
+      const isCronMode = dispatchMode === "cron" && scheduleVal;
+
+      if (isCronMode) {
+        // ── Recurring mission: create a cron job instead of dispatching one-shot ──
+        // The mission record stays "queued"; the cron job will dispatch it on schedule.
+        updateMission(mission.id, { status: "queued" });
+
+        try {
+          const profileNameFinal = profileName as string | undefined;
+          const cronJob = createCronJob({
+            name: mission.name,
+            prompt: mission.prompt,
+            skills: skills as string[] | undefined,
+            model: modelId as string | undefined,
+            provider: provider as string | undefined,
+            schedule: scheduleVal!,
+            repeat: { times: null }, // infinite
+            enabled: true,
+            state: "scheduled",
+            deliver: "none",
+            profile_name: profileNameFinal ?? "default",
+            source: "ch",
+          });
+
+          // Link mission to cron job
+          updateMission(mission.id, { cronJobId: cronJob.id });
+
+          // Push to Hermes so the scheduler picks it up
+          const pushResult = pushJobToHermes(cronJob.id);
+          if (!pushResult.ok) {
+            logApiError("POST /api/missions", "pushJobToHermes", pushResult.error);
+          }
+
+          appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: true });
+          return NextResponse.json(
+            { data: { mission: getMission(mission.id) } },
+            { status: 201 }
+          );
+        } catch (err) {
+          logApiError("POST /api/missions", "cron dispatch", err);
+          updateMission(mission.id, { status: "failed" });
+          appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: false });
+          return NextResponse.json({ error: "Failed to create cron job for mission" }, { status: 500 });
+        }
+      }
 
       if (!isSaveMode) {
         updateMission(mission.id, { status: "dispatched" });
@@ -217,7 +269,7 @@ export async function POST(request: NextRequest) {
 
     // ── Update Mission ─────────────────────────────────────────
     if (action === "update") {
-      const { id, missionId, status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule } = body as {
+      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule } = body as {
         id?: string;
         missionId?: string;
         status?: string;
@@ -234,7 +286,7 @@ export async function POST(request: NextRequest) {
         timeoutMinutes?: number;
         schedule?: string;
       };
-      const missionIdFinal = id ?? missionId;
+      const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
       if (!missionIdFinal)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
@@ -297,7 +349,7 @@ export async function POST(request: NextRequest) {
     // The unified V1 status enum has no `cancelled` state — cancellations
     // are recorded as `failed` with an explicit "Cancelled by user" result.
     if (action === "cancel") {
-      const cancelId = (body as Record<string, string>).id ?? (body as Record<string, string>).missionId;
+      const cancelId = resolveMissionId(body as Record<string, unknown>);
       if (!cancelId)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
@@ -314,8 +366,7 @@ export async function POST(request: NextRequest) {
 
     // ── Delete Mission ─────────────────────────────────────────
     if (action === "delete") {
-      const { id, missionId } = body as { id?: string; missionId?: string };
-      const missionIdFinal = id ?? missionId;
+      const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
       if (!missionIdFinal)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
