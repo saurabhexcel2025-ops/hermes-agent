@@ -190,7 +190,13 @@ export default function HermesKanbanPage() {
         body: JSON.stringify({ title, status }),
       });
       if (res.ok) {
-        showToast("Task created", "success");
+        // Hermes CLI only supports --triage, no --status flag.
+        // Triage -> lands in triage column; all others -> lands in "ready" (CLI default)
+        const landed = status === "triage" ? "triage" : "ready";
+        const hint = status !== "triage" && status !== "ready"
+          ? ` (use drawer to move to ${status})`
+          : "";
+        showToast(`Task created in ${landed}${hint}`, "success");
         fetchTasks();
       }
     } catch {

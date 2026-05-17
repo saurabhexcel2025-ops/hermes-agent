@@ -363,7 +363,17 @@ export async function getTaskContext(id: string): Promise<Record<string, unknown
 
 /** Get available assignees (profiles) with task counts. */
 export async function getAssignees(): Promise<Array<{ profile: string; task_count: number }>> {
-  return (await hermesCli(["assignees"])) as Array<{ profile: string; task_count: number }>;
+  // Hermes CLI returns: { name: string; on_disk: boolean; counts: Record<string, number> }[]
+  // Normalize to: { profile: string; task_count: number }[]
+  const raw = (await hermesCli(["assignees"])) as Array<{
+    name: string;
+    on_disk: boolean;
+    counts: Record<string, number>;
+  }>;
+  return raw.map((a) => ({
+    profile: a.name,
+    task_count: Object.values(a.counts || {}).reduce((sum: number, c: number) => sum + c, 0),
+  }));
 }
 
 /** List runs for a task, optionally filtered by outcome. */

@@ -44,12 +44,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, ...options } = body;
 
+    // Map status to triage flag — Hermes CLI only supports --triage, not --status
+    // Without --triage, the default status is "ready"
+    const triage = options.triage === true || options.status === "triage";
+
     const result = await bridge.createTask(title, {
       body: options.body,
       assignee: options.assignee,
       priority: options.priority,
       tenant: options.tenant,
-      triage: options.triage,
+      triage,
       skills: options.skills,
       parent: options.parent,
       workspace: options.workspace,

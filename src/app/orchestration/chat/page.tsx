@@ -317,6 +317,7 @@ export default function ChatPage() {
                 className={`w-full text-left px-3 py-2 border-b border-white/5 transition-colors hover:bg-white/5 ${
                   s.id === activeSessionId ? "bg-white/10 border-l-2 border-l-neon-cyan" : ""
                 }`}
+                title={s.title}
               >
                 <div className="text-xs text-white/70 truncate font-medium">
                   {s.title}

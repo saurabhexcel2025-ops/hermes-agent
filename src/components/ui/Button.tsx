@@ -98,6 +98,7 @@ export default function Button({
 
   return (
     <button
+      type="button"
       className={`inline-flex items-center justify-center rounded-lg font-mono transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${variantStyles} ${s} ${className}`}
       disabled={disabled || loading}
       {...props}
