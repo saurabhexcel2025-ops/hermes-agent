@@ -11,7 +11,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   MessageCircle, Send, Plus, X, Download,
-  Bot, User, Loader2, AlertTriangle,
+  Bot, User, Loader2, AlertTriangle, Square,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
@@ -150,6 +150,14 @@ function generateSessionId(): string {
   return `session_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
 }
 
+/** Format model ID into human-readable name. */
+function formatModelName(id: string): string {
+  if (id === "hermes-agent") return "Agent Default";
+  // Strip provider prefix and split on separators
+  const parts = id.split("/").pop()?.split(/[-_]+/) || [];
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
 // ── Typing indicator component ─────────────────────────────────
 
 function TypingIndicator() {
@@ -185,6 +193,8 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const streamGenRef = useRef(0);
 
   // Gateway connectivity check
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
@@ -294,6 +304,8 @@ export default function ChatPage() {
   const handleDeleteSession = useCallback(
     (id: string, e?: React.MouseEvent) => {
       e?.stopPropagation();
+      // Kill any active stream before deleting
+      abortControllerRef.current?.abort();
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== id);
         // If we deleted the active session, switch to the next available
@@ -332,7 +344,14 @@ export default function ChatPage() {
   // ── Send message ───────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text) return;
+
+    // Abort any existing stream and let the new message through (interrupt)
+    abortControllerRef.current?.abort();
+    const gen = ++streamGenRef.current;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     // If no active session, create one on the fly
     if (!activeSessionId) {
       // Create a new session and then send — we do this synchronously
@@ -396,6 +415,7 @@ export default function ChatPage() {
             model,
             stream: true,
           }),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -453,9 +473,13 @@ export default function ChatPage() {
           }
         }
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Chat failed", "error");
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Intentional abort — no toast
+        } else {
+          showToast(err instanceof Error ? err.message : "Chat failed", "error");
+        }
       } finally {
-        setIsStreaming(false);
+        if (gen === streamGenRef.current) setIsStreaming(false);
       }
       return;
     }
@@ -514,6 +538,7 @@ export default function ChatPage() {
           model,
           stream: true,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -566,11 +591,15 @@ export default function ChatPage() {
         }
       }
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Chat failed", "error");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // Intentional abort — no toast
+      } else {
+        showToast(err instanceof Error ? err.message : "Chat failed", "error");
+      }
     } finally {
-      setIsStreaming(false);
+      if (gen === streamGenRef.current) setIsStreaming(false);
     }
-  }, [input, isStreaming, activeSessionId, sessions, model, showToast, gatewayOnline, updateSession]);
+  }, [input, activeSessionId, sessions, model, showToast, gatewayOnline, updateSession]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────
   const handleKeyDown = useCallback(
@@ -586,6 +615,8 @@ export default function ChatPage() {
   // ── Clear session messages ─────────────────────────────────
   const handleClearSession = useCallback(() => {
     if (!activeSessionId) return;
+    // Kill any active stream before clearing
+    abortControllerRef.current?.abort();
     const session = sessions.find((s) => s.id === activeSessionId);
     if (!session || session.messages.length === 0) return;
 
@@ -616,11 +647,13 @@ export default function ChatPage() {
     return () => document.removeEventListener("click", handler);
   }, [showToast]);
 
-  // ── Models that appear in dropdown ─────────────────────────
+  // ── Models for dropdown ────────────────────────────────────
   const mergedModels = useMemo(() => {
-    const set = new Set([DEFAULT_MODEL, ...availableModels, model]);
-    return Array.from(set);
-  }, [availableModels, model]);
+    // Dedupe gateway models, strip "hermes-agent" from them
+    const gatewaySet = new Set(availableModels.filter((m) => m !== "hermes-agent"));
+    // Always put Agent Default first
+    return ["hermes-agent", ...Array.from(gatewaySet)];
+  }, [availableModels]);
 
   // Only show sessions with messages in the sidebar
   const sessionList = useMemo(
@@ -643,11 +676,11 @@ export default function ChatPage() {
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 outline-none focus:border-neon-purple/50 transition-colors font-mono cursor-pointer appearance-none max-w-[200px]"
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 outline-none focus:border-neon-purple/50 transition-colors font-mono cursor-pointer appearance-none max-w-[220px]"
               title="Select model"
             >
               {mergedModels.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m} value={m}>{formatModelName(m)}</option>
               ))}
             </select>
             <Button
@@ -696,10 +729,10 @@ export default function ChatPage() {
                     <div className="relative group/download">
                       <button
                         onClick={(e) => handleDownloadJSON(s, e)}
-                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-neon-cyan/20 hover:text-neon-cyan text-white/30"
+                        className="w-7 h-7 flex items-center justify-center rounded hover:bg-neon-cyan/20 hover:text-neon-cyan text-white/30"
                         title="Download as JSON"
                       >
-                        <Download className="w-3 h-3" />
+                        <Download className="w-4 h-4" />
                       </button>
                       {/* CSV option — appears on hover of the download button */}
                       <div className="absolute right-0 top-full mt-0.5 hidden group-hover/download:block z-50">
@@ -713,10 +746,10 @@ export default function ChatPage() {
                     </div>
                     <button
                       onClick={(e) => handleDeleteSession(s.id, e)}
-                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-neon-red/20 hover:text-neon-red text-white/30"
+                      className="w-7 h-7 flex items-center justify-center rounded hover:bg-neon-red/20 hover:text-neon-red text-white/30"
                       title="Delete session"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -849,13 +882,14 @@ export default function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  hasActiveSession
+                  isStreaming
+                    ? 'Type to interrupt and send a new message...'
+                    : hasActiveSession
                     ? 'Type a message... (Enter to send, Shift+Enter for newline)'
                     : 'Type a message to start a new conversation...'
                 }
                 rows={1}
-                disabled={isStreaming}
-                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-neon-cyan/50 transition-colors font-mono resize-none disabled:opacity-50"
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-neon-cyan/50 transition-colors font-mono resize-none"
                 style={{ minHeight: "42px", maxHeight: "120px" }}
                 onInput={(e) => {
                   const ta = e.target as HTMLTextAreaElement;
@@ -874,12 +908,16 @@ export default function ChatPage() {
                   </button>
                 )}
                 <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isStreaming}
-                  className="w-9 h-9 flex items-center justify-center rounded-lg bg-neon-cyan/20 border border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  onClick={isStreaming ? () => abortControllerRef.current?.abort() : handleSend}
+                  disabled={!input.trim() && !isStreaming}
+                  className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${
+                    isStreaming
+                      ? "bg-neon-red/20 border-neon-red/30 text-neon-red hover:bg-neon-red/30"
+                      : "bg-neon-cyan/20 border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-30 disabled:cursor-not-allowed"
+                  }`}
                 >
                   {isStreaming ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Square className="w-4 h-4 fill-current" />
                   ) : (
                     <Send className="w-4 h-4" />
                   )}
