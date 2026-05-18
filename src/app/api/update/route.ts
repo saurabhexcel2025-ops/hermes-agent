@@ -394,6 +394,16 @@ function spawnChDeploy(
     `sleep 3; bash ${quoteShellSingle(CH_DEPLOY_SCRIPT)} ${deployArgs.map(quoteShellSingle).join(" ")}`.trimEnd();
 
   try {
+    // Clear any stale failed systemd transient unit before spawning
+    try {
+      execFileSync("systemctl", ["--user", "reset-failed", `${unitName}.service`], {
+        stdio: "ignore",
+        timeout: 5000,
+      });
+    } catch {
+      // reset-failed fails if unit doesn't exist — that's fine
+    }
+
     const sys = spawn(
       "systemd-run",
       [
