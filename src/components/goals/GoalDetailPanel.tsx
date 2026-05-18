@@ -13,7 +13,7 @@ import {
 import GoalCheckpointList from "./GoalCheckpointList";
 import GoalKanbanLinker from "./GoalKanbanLinker";
 import type { GoalDetail } from "@/lib/goals-bridge";
-import { timeAgo, safeTimeAgo } from "@/lib/utils";
+import { safeTimeAgo } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 
 interface GoalDetailPanelProps {
@@ -144,7 +144,7 @@ export default function GoalDetailPanel({
       showToast("Failed to delete goal", "error");
     }
     setDeleting(false);
-  }, [goal, onDelete, onClose]);
+  }, [goal, onDelete, onClose, showToast]);
 
   if (!goal) return null;
 

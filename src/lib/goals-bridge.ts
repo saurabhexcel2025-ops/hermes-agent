@@ -116,7 +116,7 @@ export function listGoals(filters?: {
     const total = (row.checkpoints_total as number) || 0;
     const done = (row.checkpoints_done as number) || 0;
     const progress_pct = total > 0 ? Math.round((done / total) * 100) : 0;
-    const { checkpoints_total, checkpoints_done, ...goal } = row;
+    const { checkpoints_total: _checkpoints_total, checkpoints_done: _checkpoints_done, ...goal } = row;
     return { ...goal, progress_pct } as unknown as GoalDetail;
   });
 }

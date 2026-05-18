@@ -11,10 +11,10 @@ import { useState, useEffect, useCallback } from "react";
 import {
   X, Send, Ban, Archive, Play, Link2, MessageSquare,
   Clock, AlertTriangle, Sparkles, RefreshCw, UserCheck, GitBranch,
-  Save, BookOpen, FileText,
+  Save, BookOpen, FileText, Loader2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { timeAgo, safeTimeAgo } from "@/lib/utils";
+import { safeTimeAgo } from "@/lib/utils";
 
 interface Comment {
   id: number;
@@ -62,14 +62,15 @@ interface KanbanTaskDetail {
   claim_expires_at: number | null;
   workspace_kind: string | null;
   workspace_path: string | null;
-  current_run_id: number | null;
+  // Note: current_run_id is declared below (optional) to maintain compatibility
+  // with page.tsx's local KanbanTaskDetail type which doesn't have it.
   comments: Comment[];
   parents: string[];
   children: string[];
   runs: Run[];
   events: Event[];
+  current_run_id?: number | null;
 }
-
 interface HermesKanbanDrawerProps {
   task: KanbanTaskDetail | null;
   onClose: () => void;
@@ -702,7 +703,7 @@ export default function HermesKanbanDrawer({
                 Claim expires
               </label>
               <span className="text-sm text-neon-orange font-mono">
-                {safeTimeAgo((task as any).claim_expires ?? task.claim_expires_at)}
+                {safeTimeAgo(task.claim_expires_at)}
               </span>
             </div>
           )}
