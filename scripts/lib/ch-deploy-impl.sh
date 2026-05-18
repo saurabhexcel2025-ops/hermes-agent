@@ -24,11 +24,10 @@ source "$CH_SCRIPTS_ROOT/lib/ch-port.sh"
 # shellcheck source=ch-env.sh
 source "$CH_SCRIPTS_ROOT/lib/ch-env.sh"
 
-# Atomic lock using mkdir (POSIX-guaranteed atomic — no race between check and write).
-# mkdir succeeds iff the directory did not exist; both creation and failure are
-# immediate and race-free.
-LOCK_DIR="${TMPDIR:-/tmp}/ch-deploy.lock.d"
-LOCK_FILE="$LOCK_DIR/pid"
+# Atomic lock using flock (kernel-level, auto-released on process exit).
+# No stale locks, no race windows, no cleanup needed — when the process exits,
+# the kernel releases the flock and closes the fd automatically.
+LOCK_FILE="${TMPDIR:-/tmp}/ch-deploy.lock"
 LOG_FILE="$HOME/.hermes/logs/ch-update.log"
 
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -47,56 +46,49 @@ ch_deploy_kill_tcp_listeners_on_port() {
 }
 
 ch_deploy_acquire_lock() {
-  # Clean up our own lock directory on exit (normal or error).
-  cleanup() {
-    rmdir "$LOCK_DIR" 2>/dev/null || true
-  }
-  trap cleanup EXIT
+  # Open/create the lock file on fd 200. This fd persists for the lifetime of
+  # this shell. When the process exits (normally or via kill -9), the kernel
+  # closes all fds and releases the flock. No EXIT trap needed.
+  exec 200>"$LOCK_FILE"
 
-  # ── Re-entrancy guard: if WE already own the lock (nested call in same PID),
-  #    allow it — the outer call is responsible for releasing it on exit.
-  if [ -d "$LOCK_DIR" ]; then
+  # Try non-blocking exclusive lock. flock -n fails immediately if another
+  # process holds the lock. Within the same process, flock on the same fd
+  # always succeeds — so re-entrant calls are safe with no special handling.
+  if ! flock -n 200; then
+    # Another process holds the lock. No PID file to read — flock's holder
+    # is tracked by the kernel. fuser can reveal the PID if we need it.
     local LOCK_PID
-    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
-    if [ "$LOCK_PID" = "$$" ]; then
-      return 0  # re-entrancy: we already own it
-    fi
-  fi
-
-  # Try to atomically claim the lock directory.
-  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    # Another process holds the lock — check if it's still alive.
-    local LOCK_PID
-    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
-    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+    LOCK_PID=$(fuser "$LOCK_FILE" 2>/dev/null | head -1 || echo "")
+    if [ -n "$LOCK_PID" ]; then
       ch_deploy_log_update "ERROR: Deploy already running (PID $LOCK_PID)"
       exit 1
     fi
-    # Stale lock — another process held it but is now gone. Remove and retry.
-    rmdir "$LOCK_DIR" 2>/dev/null || true
-    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-      ch_deploy_log_update "ERROR: Could not acquire deploy lock (retry race)"
+    # Process died but fd linger? Kernel should have released. Wait and retry once.
+    sleep 1
+    if ! flock -n 200; then
+      ch_deploy_log_update "ERROR: Could not acquire deploy lock"
       exit 1
     fi
   fi
 
-  # We own it — record our PID so the next claimant can identify us.
-  echo "$$" > "$LOCK_FILE"
+  # Lock held. No cleanup needed — kernel releases on process exit.
+  return 0
 }
 
 ch_deploy_cmd_restart() {
-  # Guard against concurrent restarts: if the lock is held by another live process,
-  # a restart is already in progress. Exit cleanly rather than racing to kill the
-  # server that the in-progress restart just started (the second restart would
-  # otherwise kill the server started by the first, leaving nothing running).
-  if [ -f "$LOCK_FILE" ]; then
-    local LOCK_PID
-    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
-    if [ -n "$LOCK_PID" ] && [ "$LOCK_PID" != "$$" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-      ch_deploy_log_update "Restart already in progress (PID $LOCK_PID) — exiting cleanly"
-      exit 0
-    fi
+  # Guard against concurrent restarts: try a non-blocking flock probe.
+  # If the lock is held by another process, a restart is already in progress.
+  # Exit cleanly — a second restart would kill the server the first just started.
+  exec 201>"$LOCK_FILE"
+  if ! flock -n 201; then
+    ch_deploy_log_update "Restart already in progress — exiting cleanly"
+    exec 201>&-
+    exit 0
   fi
+  # Release probe — the actual lock is acquired inside ch_deploy_restart_once
+  flock -u 201
+  exec 201>&-
+
   # Lock is acquired inside ch_deploy_restart_once so the lock covers the
   # entire restart operation (including the wait-for-ready loop), not just
   # the spawn of the detached subprocess.
@@ -280,22 +272,19 @@ ch_deploy_restart_once() {
 }
 
 ch_deploy_cmd_rebuild() {
-  # Guard against concurrent rebuilds: if the lock is held by another live process,
-  # a rebuild is already in progress. Exit cleanly rather than racing to kill the
-  # server that the in-progress rebuild just started.
-  if [ -f "$LOCK_FILE" ]; then
-    local LOCK_PID
-    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
-    if [ -n "$LOCK_PID" ] && [ "$LOCK_PID" != "$$" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-      ch_deploy_log_update "Rebuild already in progress (PID $LOCK_PID) — exiting cleanly"
-      exit 0
-    fi
+  # Guard against concurrent rebuilds: try a non-blocking flock probe.
+  # If the lock is held by another process, a rebuild is already in progress.
+  exec 201>"$LOCK_FILE"
+  if ! flock -n 201; then
+    ch_deploy_log_update "Rebuild already in progress — exiting cleanly"
+    exec 201>&-
+    exit 0
   fi
-  # Lock is acquired inside ch_deploy_restart_once (called at end) so the lock
-  # covers the full rebuild + restart sequence. The re-entrancy check in
-  # ch_deploy_acquire_lock handles the case where the outer ch_deploy_acquire_lock
-  # (called first) and inner ch_deploy_acquire_lock (inside ch_deploy_restart_once)
-  # both run in the same PID.
+  # Release probe — the actual lock is acquired inside ch_deploy_restart_once
+  # at the end of the rebuild flow.
+  flock -u 201
+  exec 201>&-
+
   ch_deploy_cmd_rebuild_impl
 }
 
