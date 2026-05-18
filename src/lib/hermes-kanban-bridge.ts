@@ -357,7 +357,6 @@ export async function addComment(taskId: string, text: string): Promise<void> {
  * For security, only allow updating title and body fields.
  */
 export function updateTaskMeta(id: string, updates: { title?: string; body?: string | null }): void {
-  const db = getDb();
   // Need write access — reopen DB in read-write mode
   if (_db) {
     // Close the read-only singleton and reopen in read-write

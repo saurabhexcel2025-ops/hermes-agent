@@ -37,12 +37,11 @@ jest.mock("@/lib/hermes-kanban-bridge", () => {
   };
 });
 
-const bridge = require("@/lib/hermes-kanban-bridge") as Record<string, jest.Mock>;
+import * as bridge from "@/lib/hermes-kanban-bridge";
+import * as routeModule from "@/app/api/orchestration/hermes-kanban/batch/route";
 
 function postBatch(body: unknown) {
-  const route = require("@/app/api/orchestration/hermes-kanban/batch/route") as {
-    POST: (req: Request) => Promise<{ status: number; json: () => Promise<unknown> }>;
-  };
+  const route = routeModule;
   const req = {
     url: "http://localhost/api/orchestration/hermes-kanban/batch",
     method: "POST",

@@ -93,12 +93,13 @@ function KanbanBoardContent() {
   // Batch action state
   const [batchLoading, setBatchLoading] = useState(false);
 
-  // Must be called at component top-level (React hooks rule). Store in ref so
-  // handleBatchAction (declared below) can reference it without TDZ.
-  const { selectedIds, clearSelectionRef } = (() => {
-    const ctx = useCardSelection();
-    return { selectedIds: ctx.selectedIds, clearSelectionRef: { current: ctx.clearSelection } };
-  })();
+  // Must be called at component top-level (React hooks rule).
+  // Store clearSelection in a ref so handleBatchAction (declared below) can reference it without TDZ.
+  const cardSelection = useCardSelection();
+  const selectedIds = cardSelection.selectedIds;
+  const clearSelectionRef = useRef(cardSelection.clearSelection);
+  // Keep ref updated in case clearSelection identity changes
+  clearSelectionRef.current = cardSelection.clearSelection;
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
