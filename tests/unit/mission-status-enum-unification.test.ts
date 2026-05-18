@@ -109,19 +109,12 @@ describe("MissionStatus enum unification", () => {
     expect(src).toContain("profileName");
   });
 
-  it("status enum migration file exists and is well-formed", () => {
+  it("baseline schema uses canonical mission status enum", () => {
     const src = readFileSync(
-      join(srcRoot, "lib", "db", "migrations", "005_mission_status_enum.sql"),
+      join(srcRoot, "lib", "db", "migrations", "001_baseline.sql"),
       "utf-8"
     );
-    expect(src).toMatch(/CREATE TABLE missions_new/);
     expect(src).toMatch(/CHECK \(status IN \('queued', 'dispatched', 'successful', 'failed'\)\)/);
-    expect(src).toMatch(/'pending'\s+THEN\s+'queued'/);
-    expect(src).toMatch(/'running'\s+THEN\s+'dispatched'/);
-    expect(src).toMatch(/'completed'\s+THEN\s+'successful'/);
-    expect(src).toMatch(/'cancelled'\s+THEN\s+'failed'/);
-    expect(src).toMatch(/DROP TABLE missions/);
-    expect(src).toMatch(/ALTER TABLE missions_new RENAME TO missions/);
   });
 
   it("no production source file imports a removed-from-enum literal as a MissionStatus", () => {

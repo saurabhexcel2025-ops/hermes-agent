@@ -9,8 +9,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
+import { getAgentLlmEndpoints } from "@/lib/hermes-agent-runtime";
 
-const HERMES_GATEWAY_URL = "http://127.0.0.1:8642/v1/chat/completions";
 const DEFAULT_MODEL = "hermes-agent";
 
 function handleError(error: unknown, context: string) {
@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isStreaming = stream !== false; // default to streaming
+    const { apiUrl } = getAgentLlmEndpoints();
 
     const gatewayBody = {
       model: model || DEFAULT_MODEL,
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     if (isStreaming) {
       // Streaming response — forward SSE to the client
-      const response = await fetch(HERMES_GATEWAY_URL, {
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(gatewayBody),
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Non-streaming — return JSON
-      const response = await fetch(HERMES_GATEWAY_URL, {
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(gatewayBody),

@@ -18,8 +18,6 @@
 #     Requires either a working `hermes` on PATH, or:
 #     INSTALL_HERMES=yes   — run upstream Hermes install + `hermes setup`, then exit (re-run this script after)
 #     INSTALL_HERMES=no    — continue without Hermes CLI (limited profile/gateway steps)
-#   INSTALL_HERMES_SKIP_RECONFIRM=1 — with INSTALL_HERMES=yes, skip second confirmation (automation only)
-#
 # Bundled Hermes profile templates (SOUL.md / AGENTS.md under HERMES_HOME/profiles/, default ~/.hermes):
 #   INSTALL_HERMES_PROFILE_TEMPLATES=yes — install missing template files (never overwrites existing)
 #   unset / no — skip in CI/non-interactive; interactive prompts [y/N] when unset
@@ -29,6 +27,8 @@
 # installer and `hermes setup`, then exits — run install.sh again to finish Control Hub setup.
 #
 # Override: INSTALL_DIR=/path/to/hub bash scripts/bootstrap/install.sh
+# Git branch for initial clone only: BRANCH=dev (default). Ongoing deploy pulls use
+# CH_UPDATE_GIT_BRANCH in .env.local (see scripts/application/ch-deploy.sh), not BRANCH.
 # Prerequisites: Node.js 18+, git. Hermes recommended (see prompts).
 # ═══════════════════════════════════════════════════════════════
 

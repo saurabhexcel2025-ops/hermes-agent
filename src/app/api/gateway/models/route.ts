@@ -6,6 +6,8 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { NextResponse } from "next/server";
+import { logApiError } from "@/lib/api-logger";
+import { fetchGateway } from "@/lib/gateway-client";
 
 const DEFAULT_MODELS = [
   "hermes-agent",
@@ -16,29 +18,25 @@ const DEFAULT_MODELS = [
 /** GET /api/gateway/models — List models from Hermes Gateway. */
 export async function GET() {
   try {
-    const res = await fetch("http://127.0.0.1:8642/v1/models", {
-      method: "GET",
-      signal: AbortSignal.timeout(3000),
-    });
+    const res = await fetchGateway("/v1/models", { method: "GET" });
 
     if (res.ok) {
-      const json = await res.json();
-      // OpenAI-compatible /v1/models returns { data: [{ id: "model-name", ... }] }
+      const json = (await res.json()) as {
+        data?: Array<{ id: string }> | string[];
+      };
       if (json.data && Array.isArray(json.data)) {
-        const models = json.data.map((m: { id: string }) => m.id).filter(Boolean);
+        const models = json.data
+          .map((m) => (typeof m === "string" ? m : m.id))
+          .filter(Boolean);
         if (models.length > 0) {
           return NextResponse.json({ data: { models } });
         }
       }
-      // Fallback: raw array of strings
-      if (Array.isArray(json.data)) {
-        return NextResponse.json({ data: { models: json.data } });
-      }
     }
 
-    // Gateway unreachable — return default model list
     return NextResponse.json({ data: { models: DEFAULT_MODELS } });
-  } catch {
+  } catch (error) {
+    logApiError("GET /api/gateway/models", "listing gateway models", error);
     return NextResponse.json({ data: { models: DEFAULT_MODELS } });
   }
 }

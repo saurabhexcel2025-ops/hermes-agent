@@ -102,6 +102,7 @@ const HERMES_DEFAULT_TOOLS: Omit<ToolDefinition, "id">[] = [
     config: { toolset: "code_execution" },
   },
   {
+    // Hermes-native tool (agent CLI); not a Control Hub UI page (Teams/Kanban UI was removed).
     name: "kanban",
     label: "Kanban Board",
     description: "Multi-agent coordination Kanban board",

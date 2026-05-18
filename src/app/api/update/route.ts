@@ -4,13 +4,7 @@ import { existsSync, writeFileSync, readFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 
 import { logApiError } from "@/lib/api-logger";
-import {
-  getCorrelationId,
-  requireChApiKey,
-  requireDeployApiEnabled,
-  requireNotReadOnly,
-  requireSignedRequest,
-} from "@/lib/api-auth";
+import { getCorrelationId, requireAuth, requireDeployApiEnabled, requireSignedRequest } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import { sanitizeGitBranch } from "@/lib/git-branch";
 
@@ -252,13 +246,10 @@ export async function POST(request: NextRequest) {
   const gated = requireDeployApiEnabled();
   if (gated) return gated;
 
-  const auth = requireChApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
   const signed = requireSignedRequest(request);
   if (signed) return signed;
-
-  const readOnly = requireNotReadOnly();
-  if (readOnly) return readOnly;
 
   try {
     const body = await request.json().catch(() => ({}));

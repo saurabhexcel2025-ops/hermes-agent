@@ -42,8 +42,8 @@ jest.mock("@/lib/story-weaver/prompts", () => ({
 }));
 
 jest.mock("@/lib/api-auth", () => ({
-  requireMcApiKey: jest.fn(() => null),
-  requireNotReadOnly: jest.fn(() => null),
+  requireAuth: jest.fn(() => null),
+  requireAuth: jest.fn(() => null),
 }));
 
 // Mock story-repository (NOT stories-repository - the file is story-repository.ts)

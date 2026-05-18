@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync, readFileSync } from "fs";
 import * as yaml from "js-yaml";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { updateModel, listModels } from "@/lib/models-repository";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 
@@ -103,9 +103,7 @@ function computeDiffs(
 }
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   let raw: unknown;

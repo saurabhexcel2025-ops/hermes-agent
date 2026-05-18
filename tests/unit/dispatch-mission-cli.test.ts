@@ -38,8 +38,17 @@ jest.mock("@/lib/paths", () => {
   };
 });
 
+jest.mock("@/lib/hermes-profile-paths", () => ({
+  resolveProfileHermesHome: jest.fn((profile: string) =>
+    profile === "default" ? "/tmp/hermes-test" : `/tmp/hermes-test/profiles/${profile}`
+  ),
+}));
+
 jest.mock("@/lib/hermes-agent-runtime", () => ({
-  getActiveHermesPaths: jest.fn(() => ({ profiles: "/tmp/hermes-test/profiles" })),
+  getActiveHermesPaths: jest.fn(() => ({
+    root: "/tmp/hermes-test",
+    profiles: "/tmp/hermes-test/profiles",
+  })),
   getAgentLlmEndpoints: jest.fn(() => ({ gatewayBase: "http://localhost:8080" })),
 }));
 
@@ -145,6 +154,7 @@ describe("HermesAgentBackend.dispatchMission spawn", () => {
     expect(call.scriptContent).toContain(`"failed"`);
 
     const env = (call.opts.env as Record<string, string>) ?? {};
+    expect(env.HERMES_HOME).toBe("/tmp/hermes-test/profiles/engineering");
     expect(env.CH_MISSION_PROMPT).toBe("do the thing");
     expect(env.CH_MISSION_ID).toBe(mission.id);
     expect(call.opts.detached).toBe(true);
@@ -165,6 +175,8 @@ describe("HermesAgentBackend.dispatchMission spawn", () => {
     expect(spawnCalls[0].scriptContent).not.toContain("--model");
     expect(spawnCalls[0].scriptContent).not.toContain("--provider");
     expect(spawnCalls[0].scriptContent).toContain("hermes chat");
+    const env = (spawnCalls[0].opts.env as Record<string, string>) ?? {};
+    expect(env.HERMES_HOME).toBe("/tmp/hermes-test");
   });
 
   it("returns a mission record with status='dispatched'", async () => {

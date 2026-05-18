@@ -10,6 +10,7 @@ function normRoot(root: string): string {
 export interface HermesPathBundle {
   root: string;
   env: string;
+  auth: string;
   soul: string;
   hermes: string;
   agents: string;
@@ -21,6 +22,11 @@ export interface HermesPathBundle {
   backups: string;
   cronJobs: string;
   memoryDb: string;
+  memoriesDir: string;
+  userMemory: string;
+  agentMemory: string;
+  activeProfile: string;
+  hindsightConfig: string;
 }
 
 export function buildHermesPathBundle(root: string): HermesPathBundle {
@@ -28,6 +34,7 @@ export function buildHermesPathBundle(root: string): HermesPathBundle {
   return {
     root: R,
     env: R + "/.env",
+    auth: R + "/auth.json",
     soul: R + "/SOUL.md",
     hermes: R + "/HERMES.md",
     agents: R + "/AGENTS.md",
@@ -39,5 +46,10 @@ export function buildHermesPathBundle(root: string): HermesPathBundle {
     backups: R + "/backups",
     cronJobs: R + "/cron/jobs.json",
     memoryDb: R + "/memory_store.db",
+    memoriesDir: R + "/memories",
+    userMemory: R + "/memories/USER.md",
+    agentMemory: R + "/memories/MEMORY.md",
+    activeProfile: R + "/active_profile",
+    hindsightConfig: R + "/hindsight/config.json",
   };
 }

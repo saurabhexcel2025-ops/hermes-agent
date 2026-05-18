@@ -4,7 +4,6 @@
 // Body: { direction?: "push" | "pull" } (default: "push")
 // ═══════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from "next/server";
-import { requireMcApiKey } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { getModelWithKey } from "@/lib/models-repository";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
@@ -56,8 +55,6 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = requireMcApiKey(request);
-  if (auth) return auth;
 
   let raw: unknown;
   try { raw = await request.json(); } catch {

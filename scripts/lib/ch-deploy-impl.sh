@@ -120,13 +120,18 @@ ch_deploy_restart_once() {
   NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
   export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
 
-  # ── 1. Kill zombie on port 3000 ───────────────────────────────────────────
+  # ── 1. Kill stale listener on configured PORT (from .env.local) ───────────
+  local ENV_PORT=""
+  if [ -f "$CH_APP_DIR/.env.local" ]; then
+    ENV_PORT="$(grep -E '^PORT=' "$CH_APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
+  fi
+  local STALE_PORT="${ENV_PORT:-42069}"
   local ZOMBIE_PIDS
-  ZOMBIE_PIDS=$(ss -tlnp sport = :3000 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
+  ZOMBIE_PIDS=$(ss -tlnp "sport = :$STALE_PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
   if [ -n "$ZOMBIE_PIDS" ]; then
     for zp in $ZOMBIE_PIDS; do
       if kill -0 "$zp" 2>/dev/null; then
-        log "Killing stale next-server on port 3000 (PID $zp)..."
+        log "Killing stale next-server on port $STALE_PORT (PID $zp)..."
         kill -9 "$zp" 2>/dev/null || true
       fi
     done

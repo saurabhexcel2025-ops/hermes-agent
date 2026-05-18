@@ -4,8 +4,7 @@
 
 /** Verify that the templates POST endpoint requires authentication. */
 
-const mockRequireMcApiKey = jest.fn();
-const mockRequireNotReadOnly = jest.fn();
+const mockRequireAuth = jest.fn();
 
 jest.mock("@/lib/paths", () => ({
   CH_DATA_DIR: "/tmp/ch-data",
@@ -19,8 +18,7 @@ jest.mock("@/lib/api-logger", () => ({
 }));
 
 jest.mock("@/lib/api-auth", () => ({
-  requireMcApiKey: mockRequireMcApiKey,
-  requireNotReadOnly: mockRequireNotReadOnly,
+  requireAuth: mockRequireAuth,
 }));
 
 jest.mock("@/lib/audit-log", () => ({
@@ -46,8 +44,7 @@ describe("POST /api/templates auth", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Default: no auth required (returns null = allowed)
-    mockRequireNotReadOnly.mockReturnValue(null);
-    mockRequireMcApiKey.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
   });
 
   it("rejects read-only mode", async () => {
@@ -55,7 +52,7 @@ describe("POST /api/templates auth", () => {
       { error: "Read-only mode" },
       { status: 403 }
     );
-    mockRequireNotReadOnly.mockReturnValue(readOnlyResponse);
+    mockRequireAuth.mockReturnValue(readOnlyResponse);
 
     const { POST } = await import("@/app/api/templates/route");
     const request = new NextRequest("http://localhost/api/templates", {
@@ -65,7 +62,7 @@ describe("POST /api/templates auth", () => {
     const res = await POST(request);
 
     expect(res.status).toBe(403);
-    expect(mockRequireNotReadOnly).toHaveBeenCalled();
+    expect(mockRequireAuth).toHaveBeenCalled();
   });
 
   it("rejects requests without valid API key", async () => {
@@ -73,7 +70,7 @@ describe("POST /api/templates auth", () => {
       { error: "Unauthorized" },
       { status: 401 }
     );
-    mockRequireMcApiKey.mockReturnValue(authResponse);
+    mockRequireAuth.mockReturnValue(authResponse);
 
     const { POST } = await import("@/app/api/templates/route");
     const request = new NextRequest("http://localhost/api/templates", {
@@ -83,13 +80,13 @@ describe("POST /api/templates auth", () => {
     const res = await POST(request);
 
     expect(res.status).toBe(401);
-    expect(mockRequireMcApiKey).toHaveBeenCalled();
+    expect(mockRequireAuth).toHaveBeenCalled();
   });
 
   it("allows requests with valid auth", async () => {
     // Both checks pass (return null)
-    mockRequireNotReadOnly.mockReturnValue(null);
-    mockRequireMcApiKey.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
 
     const { POST } = await import("@/app/api/templates/route");
     const request = new NextRequest("http://localhost/api/templates", {
@@ -99,8 +96,8 @@ describe("POST /api/templates auth", () => {
     const res = await POST(request);
 
     // Should proceed to create (not blocked by auth)
-    expect(mockRequireNotReadOnly).toHaveBeenCalled();
-    expect(mockRequireMcApiKey).toHaveBeenCalled();
+    expect(mockRequireAuth).toHaveBeenCalled();
+    expect(mockRequireAuth).toHaveBeenCalled();
     expect(res.status).toBe(200);
   });
 });

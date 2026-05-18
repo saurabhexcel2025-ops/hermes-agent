@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 
 import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { resolveSafeProfileName } from "@/lib/path-security";
 import {
   buildEnabledYamlLines,
@@ -19,9 +19,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { name } = await params;

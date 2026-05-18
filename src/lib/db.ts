@@ -7,6 +7,11 @@ import Database, { type Database as _DatabaseType } from "better-sqlite3";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
+import {
+  BASELINE_SCHEMA_VERSION,
+  needsBaselineRebuild,
+  rebuildToBaseline,
+} from "./db/upgrade";
 
 // ── Ensure data directory exists ───────────────────────────────
 
@@ -104,7 +109,6 @@ function setSchemaVersion(database: Database.Database, version: number): void {
 }
 
 function runMigrations(database: Database.Database): void {
-  // Ensure meta table exists first
   database.exec(`
     CREATE TABLE IF NOT EXISTS meta (
       key   TEXT PRIMARY KEY,
@@ -112,10 +116,29 @@ function runMigrations(database: Database.Database): void {
     );
   `);
 
-  const currentVersion = getSchemaVersion(database);
   const migrationsDir = join(__dirname, "db", "migrations");
+  const baselinePath = join(migrationsDir, "001_baseline.sql");
+  const baselineSql = existsSync(baselinePath)
+    ? readFileSync(baselinePath, "utf-8")
+    : "";
 
-  // Collect migration files
+  if (needsBaselineRebuild(database) && baselineSql) {
+    rebuildToBaseline(database, DB_PATH, baselineSql);
+    _db = null;
+    _bootstrapped = false;
+    const reopened = new Database(DB_PATH);
+    reopened.pragma("journal_mode = WAL");
+    reopened.pragma("foreign_keys = ON");
+    reopened.pragma("busy_timeout = 5000");
+    _db = reopened;
+    return;
+  }
+
+  const currentVersion = getSchemaVersion(database);
+  if (currentVersion >= BASELINE_SCHEMA_VERSION) {
+    return;
+  }
+
   const migrations: Array<{ num: number; sql: string }> = [];
   try {
     const files = readdirSync(migrationsDir)

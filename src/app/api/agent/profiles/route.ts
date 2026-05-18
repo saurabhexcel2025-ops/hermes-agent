@@ -4,7 +4,7 @@ import { readFileSync, existsSync, statSync, readdirSync, writeFileSync, mkdirSy
 import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import type { ApiResponse, AgentProfile } from "@/types/hermes";
 
@@ -89,7 +89,9 @@ function getProfileFiles(profileDir: string): AgentProfile["files"] {
         const stats = statSync(fullPath);
         size = stats.size;
         lastModified = stats.mtime.toISOString();
-      } catch {}
+      } catch (err) {
+        logApiError("GET /api/agent/profiles", `stat ${fullPath}`, err);
+      }
     }
     files.push({ key: def.key, name: def.name, path: fullPath, exists, size, lastModified });
   }
@@ -110,11 +112,15 @@ function countProfileSkills(profileDir: string): number {
             if (existsSync(fullPath + "/SKILL.md")) count++;
             else walk(fullPath);
           }
-        } catch {}
+        } catch (err) {
+          logApiError("GET /api/agent/profiles", `walk skills ${fullPath}`, err);
+        }
       }
     };
     walk(skillsDir);
-  } catch {}
+  } catch (err) {
+    logApiError("GET /api/agent/profiles", `count skills ${skillsDir}`, err);
+  }
   return count;
 }
 
@@ -185,9 +191,7 @@ export async function GET() {
 // ── POST — Create a new profile ──────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   try {

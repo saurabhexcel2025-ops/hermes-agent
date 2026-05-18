@@ -24,7 +24,6 @@ import {
   type SessionSource,
   type SessionStatus,
 } from "@/lib/session-repository";
-import { requireMcApiKey } from "@/lib/api-auth";
 import { ensureSyncLayer } from "@/lib/sync";
 
 // ── Debounced sync: fires at most once per 30s ───────────────
@@ -71,8 +70,6 @@ function parseQuery(
 }
 
 export async function GET(request: NextRequest) {
-  const limited = requireMcApiKey(request);
-  if (limited) return limited;
 
   try {
     const q = parseQuery(request);
@@ -109,8 +106,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const limited = requireMcApiKey(request);
-  if (limited) return limited;
 
   try {
     const body = await request.json() as {

@@ -27,3 +27,11 @@ Preset labels and filenames are defined in [`src/lib/hardware-cron.ts`](../src/l
 **Dependencies:** `bash`, `jq`, and `python3` (prefers `$HERMES_HOME/hermes-agent/venv/bin/python3` when executable).
 
 **Suggested schedule:** `0 1 * * *` (daily 01:00) with stderr appended to a file under `CH_HARDWARE_LOG_DIR`, matching the pattern enforced by the System Cron UI.
+
+**Crontab line shape** (set `LOG_DIR` so scripts write under `CH_HARDWARE_LOG_DIR`):
+
+```cron
+0 1 * * * LOG_DIR=$HOME/control-hub/data/logs $HOME/control-hub/data/scripts/ch-backup.sh >> $HOME/control-hub/data/logs/ch-backup.log 2>&1
+```
+
+Replace paths with your `CH_DATA_DIR` if set. The System Cron UI builds the same `>> …log 2>&1` suffix; export `LOG_DIR` in the line when a script reads it.

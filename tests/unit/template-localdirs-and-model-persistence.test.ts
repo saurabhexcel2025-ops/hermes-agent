@@ -2,12 +2,10 @@
 
 import { NextRequest } from "next/server";
 
-const mockRequireMcApiKey = jest.fn();
-const mockRequireNotReadOnly = jest.fn();
+const mockRequireAuth = jest.fn();
 
 jest.mock("@/lib/api-auth", () => ({
-  requireMcApiKey: mockRequireMcApiKey,
-  requireNotReadOnly: mockRequireNotReadOnly,
+  requireAuth: mockRequireAuth,
 }));
 
 jest.mock("@/lib/api-logger", () => ({
@@ -27,7 +25,6 @@ jest.mock("@/lib/paths", () => ({
     stories: "/tmp/ch-data/stories",
     recroom: "/tmp/ch-data/recroom",
     workspaces: "/tmp/ch-data/workspaces",
-    teams: "/tmp/ch-data/teams",
     auditLog: "/tmp/ch-data/audit",
     chScripts: "/tmp/ch-data/scripts",
     chHardwareLogs: "/tmp/ch-data/logs",
@@ -59,8 +56,8 @@ jest.mock("fs", () => ({
 describe("POST /api/templates — localDirs, model, suggestedSkills persistence", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockRequireMcApiKey.mockReturnValue(null);
-    mockRequireNotReadOnly.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
     mockExistsSync.mockReturnValue(true);
   });
 

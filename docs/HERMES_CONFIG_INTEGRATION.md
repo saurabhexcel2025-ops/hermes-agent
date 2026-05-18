@@ -1,29 +1,36 @@
-# hermes-config repository integration
+# Hermes config integration
 
 The separate **`hermes-config`** repository (operator-specific automation and dotfiles) is **not vendored inside Control Hub**. When that repo is present on a machine, use this checklist so paths stay consistent with Control Hub and Hermes.
 
-## Environment variables
+## How Control Hub resolves paths
 
 | Variable | Role |
 |----------|------|
-| `HERMES_HOME` / `AGENT_HOME` | Hermes install root used to **seed** `agents-registry.json` when it is first created; also used when resolving defaults. Control Hub’s **active** Hermes tree for APIs/UI comes from the registry entry selected in the app (see [CONTROL_HUB.md](CONTROL_HUB.md)). |
-| `CH_DATA_DIR` / `CONTROL_HUB_DATA_DIR` | Control Hub data root (default `~/control-hub/data`). Holds missions, templates, SQLite, and hardware-cron defaults unless overridden. Mission files must live here for nested Hermes `mark_job_run` updates. |
+| `HERMES_HOME` / `AGENT_HOME` | Active Hermes install root for APIs and sync (env-first). See `getHermesHome()` in [`src/lib/hermes-home.ts`](../src/lib/hermes-home.ts). |
+| `getHermesDefaultRoot()` | Root for **listing** profiles (`~/.hermes` or Docker `/opt/data`), even when `HERMES_HOME` points at `.../profiles/<name>`. |
+| `resolveProfileHermesHome(name)` | Full `HERMES_HOME` for a profile (used for subprocess spawns and per-profile file edits). |
+| `CH_DATA_DIR` / `CONTROL_HUB_DATA_DIR` | Control Hub data root (default `~/control-hub/data`). SQLite, missions JSON, hardware scripts. |
+
+After bootstrap/setup, [`scripts/tooling/discover-agents.mjs`](../scripts/tooling/discover-agents.mjs) writes `CH_DATA_DIR/hermes-detection.json` with `hermesHome`, `defaultRoot`, `isProfileHome`, and `hermesAgentPath` for debugging.
+
+Legacy read-only fallback: `CH_DATA_DIR/agents-registry.json` (no longer written by Control Hub).
 
 ## What to verify in hermes-config scripts
 
 1. **No hard-coded `~/.hermes/control-hub/data`** unless you intentionally set `CH_DATA_DIR` to that path (legacy layout).
 
-2. **Backup/sync jobs** should include `~/control-hub/data` (or your explicit `CH_DATA_DIR`) alongside the local Hermes install root (`~/.hermes` or `HERMES_HOME`).
+2. **Backup/sync jobs** should include `~/control-hub/data` (or your explicit `CH_DATA_DIR`) alongside the Hermes install root (`HERMES_HOME`).
 
-3. **CI or deploy hooks** that invoke `curl` against Control Hub should target the real host/port; add signature headers if you configure `CH_REQUEST_SIGNING_SECRET`.
+3. **Cron Python bridge** — set `HERMES_AGENT_VENV_PYTHON` or ensure `hermes-agent/cron/jobs.py` exists under `HERMES_HOME` or `~/.local/share/hermes-agent`.
 
-4. **Config and behaviour files** that Hermes reads from disk must exist at the local Hermes install root configured via `HERMES_HOME`.
+4. **Config and behaviour files** that Hermes reads must exist under the resolved `HERMES_HOME` for that profile.
 
 ## Control Hub scripts in this repo
 
 | Script | Notes |
 |--------|-------|
-| `scripts/bootstrap/setup.sh` | Creates `CH_DATA_DIR` directories (default `~/control-hub/data`). |
+| `scripts/bootstrap/setup.sh` | Creates `CH_DATA_DIR` directories; runs `discover-agents.mjs`. |
 | `scripts/bootstrap/backup-hermes-config.sh` | Backs up `CH_DATA_DIR` when present, else legacy `HERMES_HOME/control-hub/data`. |
+| `scripts/hardware/ch-backup.sh` | Uses `$HERMES_HOME` and venv discovery under `$HERMES_HOME/hermes-agent`. |
 
 When you add or clone `hermes-config`, inventory its shell scripts and align any data paths with the table above.

@@ -32,8 +32,8 @@ jest.mock("@/lib/api-logger", () => ({ logApiError: jest.fn() }));
 jest.mock("@/lib/audit-log", () => ({ appendAuditLine: jest.fn() }));
 
 jest.mock("@/lib/api-auth", () => ({
-  requireMcApiKey: jest.fn(() => null),
-  requireNotReadOnly: jest.fn(() => null),
+  requireAuth: jest.fn(() => null),
+  requireAuth: jest.fn(() => null),
 }));
 
 jest.mock("@/lib/hermes-config-sync", () => ({
@@ -65,8 +65,8 @@ const audit = require("@/lib/audit-log") as { appendAuditLine: jest.Mock };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  auth.requireMcApiKey.mockReturnValue(null);
-  auth.requireNotReadOnly.mockReturnValue(null);
+  auth.requireAuth.mockReturnValue(null);
+  auth.requireAuth.mockReturnValue(null);
 });
 
 const SAMPLE = {
@@ -129,13 +129,13 @@ describe("/api/credentials", () => {
   });
 
   it("POST is gated by readonly", async () => {
-    auth.requireNotReadOnly.mockReturnValue({ status: 503, json: async () => ({}) });
+    auth.requireAuth.mockReturnValue({ status: 503, json: async () => ({}) });
     const res = await postCreds({ label: "x", provider: "anthropic", apiKey: "y" });
     expect(res.status).toBe(503);
   });
 
   it("POST is gated by api-key auth", async () => {
-    auth.requireMcApiKey.mockReturnValue({ status: 401, json: async () => ({}) });
+    auth.requireAuth.mockReturnValue({ status: 401, json: async () => ({}) });
     const res = await postCreds({ label: "x", provider: "anthropic", apiKey: "y" });
     expect(res.status).toBe(401);
   });

@@ -47,12 +47,11 @@ let readOnlyGate: { status: number; json: () => Promise<unknown> } | null = null
 
 jest.mock("@/lib/api-auth", () => ({
   getCorrelationId: () => "cid-test",
-  requireChApiKey: () => null,
+  requireAuth: () => readOnlyGate,
   requireDeployApiEnabled: () =>
     deployApiEnabled
       ? null
       : { status: 403, json: () => Promise.resolve({ error: "off" }) },
-  requireNotReadOnly: () => readOnlyGate,
   requireSignedRequest: () => null,
 }));
 

@@ -8,17 +8,25 @@ import os
 import sys
 import signal
 import time
+from pathlib import Path
 
-sys.path.insert(0, os.path.expanduser("~/.hermes/hermes-agent"))
+HERMES_HOME = Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))).expanduser()
+AGENT_PKG = HERMES_HOME / "hermes-agent"
+if AGENT_PKG.is_dir():
+    sys.path.insert(0, str(AGENT_PKG))
+else:
+    fallback = Path.home() / ".local" / "share" / "hermes-agent"
+    if fallback.is_dir():
+        sys.path.insert(0, str(fallback))
 
 def main():
     from hindsight import start_server
 
     # Read API key from .env
     api_key = ""
-    env_path = os.path.expanduser("~/.hermes/.env")
-    if os.path.exists(env_path):
-        with open(env_path) as f:
+    env_path = HERMES_HOME / ".env"
+    if env_path.is_file():
+        with open(env_path, encoding="utf-8") as f:
             for line in f:
                 if line.strip().startswith("HINDSIGHT_LLM_API_KEY="):
                     api_key = line.split("=", 1)[1].strip().strip('"').strip("'")

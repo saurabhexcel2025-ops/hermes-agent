@@ -25,7 +25,24 @@ npm test
 npm run test:coverage
 ```
 
-Config: [`jest.config.js`](../jest.config.js) at repo root.
+Config: [`jest.config.js`](../jest.config.js) at repo root. Coverage thresholds apply globally and with a higher bar for **`src/lib/**`** (pages and `src/app/**` routes are excluded from `collectCoverageFrom`).
+
+### Hermes pathing (unit)
+
+- [`tests/unit/hermes-package-path.test.ts`](../tests/unit/hermes-package-path.test.ts) — `resolveHermesAgentPackage()` candidate order (no hardcoded machine paths).
+- [`tests/unit/hermes-profile-paths.test.ts`](../tests/unit/hermes-profile-paths.test.ts) — `getHermesDefaultRoot()`, `resolveProfileHermesHome()` (standard, profile subdir, profile-as-home, Docker root).
+- [`tests/unit/dispatch-mission-cli.test.ts`](../tests/unit/dispatch-mission-cli.test.ts) — mission dispatch sets `HERMES_HOME` on subprocess env for non-default profiles.
+
+### SQLite baseline upgrade tests
+
+- [`tests/unit/db-baseline.test.ts`](../tests/unit/db-baseline.test.ts) — in-memory schema smoke.
+- [`tests/unit/db-upgrade.integration.test.ts`](../tests/unit/db-upgrade.integration.test.ts) — on-disk legacy DB → `rebuildToBaseline` preserves credentials, models, cron, sessions.
+
+**Dual DB paths:** `npm run prebuild` writes `{repo}/data/control-hub.db`; runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). Prebuild deletes the repo DB when `schema_version !== 1`.
+
+### Bootstrap test gate
+
+[`scripts/bootstrap/setup.sh`](../scripts/bootstrap/setup.sh) runs `npm test` when **`CH_SETUP_RUN_TESTS=1`** or **`CI=true`**. Omit on slow laptops; use CI or set the env var before release checks.
 
 ## End-to-end tests (Playwright)
 
@@ -40,6 +57,7 @@ npm run test:e2e
 
 - **`PORT`:** `playwright.config.ts` uses `process.env.PORT` (default `3000`). CI sets `PORT=3000`.
 - **`PLAYWRIGHT_SMOKE=1`:** When set, only [`tests/e2e/smoke.spec.ts`](../tests/e2e/smoke.spec.ts) runs (used in CI for speed). Omit it for the **full** E2E suite (navigation matrix, config sections, Story Weaver, etc.).
+- **Pre-release:** Run the full navigation matrix locally (`npm run test:e2e` without `PLAYWRIGHT_SMOKE`) before merging `dev` → `main`. CI does not run the full matrix on every push.
 
 ### Navigation matrix and sidebar
 
@@ -77,4 +95,18 @@ Other workflows: **gitleaks** (secret scan).
 
 ## Auth in route tests
 
-Many Jest suites mock **`@/lib/api-auth`** (`requireMcApiKey`, `requireNotReadOnly`). Mirror that pattern when adding new API route tests.
+Many Jest suites mock **`@/lib/api-auth`** (`requireAuth` returns `null` when allowed). Mirror that pattern when adding new mutating API route tests.
+
+## Hermes pathing — manual verification matrix
+
+Run before merging Hermes multi-profile changes (complements unit tests above):
+
+| Scenario | Setup | Expected |
+|----------|--------|----------|
+| Standard install | `HERMES_HOME=~/.hermes`, profile `coder` | Per-profile files under `profiles/coder/`; cron sync finds `hermes-agent` |
+| Profile-as-home | `HERMES_HOME=~/.hermes/profiles/coder` | No double `profiles/` in API paths; `hermes-detection.json` has `isProfileHome: true` |
+| Custom Docker root | `HERMES_HOME=/opt/data` | Profiles under `/opt/data/profiles/*`; `defaultRoot` matches |
+| Mission + cron | Dispatch mission; Hermes updates `CH_DATA_DIR/missions/*.json` | Status visible in UI |
+| Gateway override | `HERMES_GATEWAY_URL` set | Health/chat use custom URL |
+
+After `setup.sh`, inspect `CH_DATA_DIR/hermes-detection.json` for `valid`, `hermesAgentPath`, and `defaultRoot`.

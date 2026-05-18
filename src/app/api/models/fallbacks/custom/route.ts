@@ -3,7 +3,7 @@
 // ══════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import { addFallbackEntry, listFallbackChain, getFallbackConfig } from "@/lib/fallbacks-repository";
@@ -19,9 +19,7 @@ const customFallbackSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   let raw: unknown;

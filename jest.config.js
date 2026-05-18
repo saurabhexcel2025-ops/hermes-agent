@@ -23,10 +23,16 @@ const config = {
   ],
   coverageThreshold: {
     global: {
-      branches: 5,
-      functions: 2,
-      lines: 5,
-      statements: 5,
+      branches: 8,
+      functions: 5,
+      lines: 10,
+      statements: 10,
+    },
+    "src/lib/": {
+      branches: 12,
+      functions: 8,
+      lines: 15,
+      statements: 15,
     },
   },
   testMatch: [

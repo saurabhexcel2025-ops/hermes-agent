@@ -17,11 +17,13 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { spawn } from "child_process";
 import * as yaml from "js-yaml";
 import { PATHS } from "../paths";
 import { getActiveHermesPaths, getAgentLlmEndpoints } from "../hermes-agent-runtime";
+import { resolveProfileHermesHome } from "../hermes-profile-paths";
 import { callLLM as genericCallLLM } from "../llm";
 import {
   AgentProfile,
@@ -148,7 +150,7 @@ async function ensureProfileAuth(
 ): Promise<void> {
   if (!apiKey || !profileName || profileName === "default") return;
 
-  const profilePath = join(getActiveHermesPaths().profiles, profileName);
+  const profilePath = resolveProfileHermesHome(profileName);
   const authPath = join(profilePath, "auth.json");
   const envPath = join(profilePath, ".env");
 
@@ -208,6 +210,8 @@ interface SpawnHermesChatInput {
   statusFile: string;
   outputFile: string;
   sessionFile: string;
+  /** Explicit HERMES_HOME for the subprocess (Hermes #18594). */
+  hermesHome: string;
 }
 
 /**
@@ -235,7 +239,7 @@ export function spawnHermesChatWithStatusCallback(input: SpawnHermesChatInput): 
     `if [ "$ec" -eq 0 ]; then printf '{"status":"successful","exit_code":%s,"completed_at":"%s"}\n' "$ec" "$(date -u +%FT%TZ)" > ${shellQuote(input.statusFile)}; else printf '{"status":"failed","exit_code":%s,"completed_at":"%s","error":"hermes chat exited %s"}\n' "$ec" "$(date -u +%FT%TZ)" "$ec" > ${shellQuote(input.statusFile)}; fi`,
   ];
 
-  const scriptPath = `/tmp/hermes_mission_${input.missionId}.sh`;
+  const scriptPath = join(tmpdir(), `hermes_mission_${input.missionId}.sh`);
   writeFileSync(scriptPath, scriptLines.join("\n"));
 
   const child = spawn("bash", [scriptPath], {
@@ -244,6 +248,7 @@ export function spawnHermesChatWithStatusCallback(input: SpawnHermesChatInput): 
     stdio: "ignore",
     env: {
       ...process.env,
+      HERMES_HOME: input.hermesHome,
       CH_MISSION_PROMPT: input.prompt,
       CH_MISSION_ID: input.missionId,
     },
@@ -323,7 +328,7 @@ const HERMES_DEFAULT_TOOLS: Omit<ToolDefinition, "id">[] = [
 // ── Profile directory helpers ───────────────────────────────────
 
 function profileDir(profileId: string): string {
-  return join(getActiveHermesPaths().profiles, profileId);
+  return resolveProfileHermesHome(profileId);
 }
 
 function hermesProfileToAgentProfile(
@@ -488,6 +493,9 @@ export class HermesAgentBackend implements AgentBackend {
       await ensureProfileAuth(input.profileName ?? "default", resolved.apiKey);
     }
 
+    const profileName = input.profileName ?? "default";
+    const profileHome = resolveProfileHermesHome(profileName);
+
     const cliArgv = buildHermesChatArgv({
       profileName: input.profileName,
       modelId: resolved.modelId || undefined,
@@ -502,6 +510,7 @@ export class HermesAgentBackend implements AgentBackend {
       statusFile,
       outputFile,
       sessionFile,
+      hermesHome: profileHome,
     });
 
     return mission;

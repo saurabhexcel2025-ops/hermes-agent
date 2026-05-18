@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getModel, updateModel, deleteModel } from "@/lib/models-repository";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import { zodErrorResponse, modelPutSchema } from "@/lib/api-schemas";
 import { syncDefaultsToHermesConfig } from "@/lib/hermes-config-sync";
@@ -27,9 +27,7 @@ export async function GET(_request: NextRequest, ctx: Ctx) {
 }
 
 export async function PUT(request: NextRequest, ctx: Ctx) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { id } = await ctx.params;
@@ -57,9 +55,7 @@ export async function PUT(request: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(request: NextRequest, ctx: Ctx) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { id } = await ctx.params;

@@ -21,20 +21,24 @@ A command-centre [Next.js](https://nextjs.org/) dashboard for [Hermes Agent](htt
 | **Personalities / skills / tools** | Profile-aware management |
 | **Gateway / logs** | Connection status and log tail |
 | **Story Weaver** | Rec Room interactive fiction |
-|| **Teams** | Multi-agent team roles under `src/app/orchestration/teams/` |
+| **Orchestration chat** | Gateway-backed chat under `/orchestration/chat` |
 
 ---
 
 ## Quick start
 
+**Shell scripts require bash** (Linux, macOS, WSL, or Git Bash on Windows). Hermes Agent also offers a [native Windows installer](https://hermes-agent.nousresearch.com/docs/getting-started/installation); Control Hub bootstrap scripts are bash-only today.
+
 ```bash
 git clone https://github.com/Daniel-Parke/hermes-control-hub.git
 cd hermes-control-hub
-bash scripts/bootstrap/setup.sh    # PORT + .env.local, npm install, optional Hermes; see script header
+bash scripts/bootstrap/setup.sh    # PORT + .env.local, npm install, build; see script header
 npm run dev              # http://localhost:<PORT> from .env.local (setup picks 42069–42100)
 ```
 
 Use `npm run dev:network` for LAN HMR (`CH_ALLOWED_DEV_ORIGINS` is set during setup).
+
+For a full greenfield install (clone + optional Hermes + Hindsight prompt), use `bash scripts/bootstrap/install.sh` instead of setup alone.
 
 ---
 
@@ -42,7 +46,7 @@ Use `npm run dev:network` for LAN HMR (`CH_ALLOWED_DEV_ORIGINS` is set during se
 
 - **Node.js 20+** (matches [CI](.github/workflows/ci.yml))
 - **Hermes Agent** (optional for a standalone UI): the app resolves the local install from **`HERMES_HOME`** / **`AGENT_HOME`** (default `~/.hermes`).
-- **Optional:** PostgreSQL + pgvector and Python for [Hindsight](docs/DEPLOY.md)—`bash scripts/bootstrap/setup-hindsight.sh` or follow prompts in **`scripts/bootstrap/setup.sh`**.
+- **Optional:** PostgreSQL + pgvector and Python for [Hindsight](docs/DEPLOY.md)—`bash scripts/bootstrap/setup-hindsight.sh`, or follow prompts in **`scripts/bootstrap/install.sh`** (full bootstrap only).
 
 ---
 

@@ -10,16 +10,17 @@ import { join } from "path";
 
 const repoRoot = join(__dirname, "..", "..");
 
-describe("Migration 013 — mission settings columns", () => {
-  it("migration file exists", () => {
-    const p = join(repoRoot, "src", "lib", "db", "migrations", "013_mission_model_provider.sql");
+describe("Baseline — mission settings columns", () => {
+  it("baseline schema includes mission model/settings columns", () => {
+    const p = join(repoRoot, "src", "lib", "db", "migrations", "001_baseline.sql");
     const sql = readFileSync(p, "utf-8");
-    expect(sql).toContain("ALTER TABLE missions ADD COLUMN model_id");
-    expect(sql).toContain("ALTER TABLE missions ADD COLUMN provider");
-    expect(sql).toContain("ALTER TABLE missions ADD COLUMN profile_name");
-    expect(sql).toContain("ALTER TABLE missions ADD COLUMN mission_time_minutes");
-    expect(sql).toContain("ALTER TABLE missions ADD COLUMN timeout_minutes");
-    expect(sql).toContain("ALTER TABLE missions ADD COLUMN schedule");
+    expect(sql).toContain("model_id");
+    expect(sql).toContain("provider");
+    expect(sql).toContain("profile_name");
+    expect(sql).toContain("mission_time_minutes");
+    expect(sql).toContain("timeout_minutes");
+    expect(sql).toContain("schedule");
+    expect(sql).toContain("cron_job_id");
   });
 
   it("Mission interface has new fields (types.ts)", () => {
@@ -75,7 +76,7 @@ describe("Migration 013 — mission settings columns", () => {
   });
 
   it("Missions page handleEdit restores model/provider/settings", () => {
-    const p = join(repoRoot, "src", "app", "orchestration", "missions", "page.tsx");
+    const p = join(repoRoot, "src", "app", "orchestration", "missions", "hooks", "useMissionsPage.ts");
     const content = readFileSync(p, "utf-8");
     expect(content).toContain("setNewModel(m.modelId");
     expect(content).toContain("setNewProvider(m.provider");

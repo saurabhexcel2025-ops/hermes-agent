@@ -70,68 +70,47 @@ control-hub/
 
 │   │   │   └── ...                 # Other endpoints
 
-│   │   ├── agent/
-
-│   │   │   ├── agents/            # Agents page (profile CRUD)
-
-│   │   │   └── tools/              # Tools Manager
-
 │   │   ├── page.tsx                # Dashboard
 
-│   │   ├── orchestration/teams/ # Team management
-│   │   ├── missions/page.tsx      # Missions page
+│   │   ├── (main)/                 # sessions, memory, gateway, logs
 
-│   │   ├── cron/page.tsx           # Cron manager
+│   │   ├── orchestration/          # cron, missions, chat
 
-│   │   ├── sessions/page.tsx       # Session browser
+│   │   ├── operations/             # agents, skills, tools, personalities
 
-│   │   ├── memory/             # Memory CRUD
+│   │   ├── config/                 # Config editor + models hub
 
-│   │   ├── config/             # Config editor
-
-│   │   ├── recroom/            # Rec Room — creative activities
-
-│   │   │   └── story-weaver/     # Interactive fiction
+│   │   ├── recroom/story-weaver/   # Story Weaver
 
 │   │   └── layout.tsx              # Root layout with sidebar
 
 │   ├── components/
 
-│   │   ├── recroom/            # Rec Room shared components
+│   │   ├── layout/                 # Sidebar, PageHeader, AppPageShell
 
-│   │   │   ├── PromptBuilder.tsx   # Universal prompt input
-
-│   │   │   ├── OutputViewer.tsx    # Output renderer
-
-│   │   │   ├── ActivityCard.tsx    # Activity preview card
-
-│   │   │   ├── ActivityLayout.tsx  # Page wrapper
-
-│   │   │   └── SaveLoadManager.tsx # Save/load/export
-
-│   │   ├── ui/                     # Primitives (Button, Card, Modal, etc.)
-
-│   │   └── layout/                 # Sidebar, PageHeader
+│   │   ├── missions/, cron/, models/, memory/, story-weaver/, ui/
 
 │   ├── lib/
 
-│   │   ├── api.ts                  # Typed fetch wrappers
+│   │   ├── db.ts, db/migrations/   # SQLite + baseline schema
 
-│   │   ├── agent-registry.ts       # agents-registry.json (active Hermes installs)
+│   │   ├── hermes-home.ts          # HERMES_HOME resolution
 
-│   │   ├── hermes-agent-runtime.ts # Resolved paths for active install
+│   │   ├── hermes-agent-runtime.ts # Active Hermes paths + gateway URLs
 
-│   │   ├── schema/                 # Mission + template Zod schemas (in-repo)
+│   │   ├── *-repository.ts         # missions, cron, models, credentials, …
+
+│   │   ├── sync/                   # Background sync + SyncScheduler
+
+│   │   ├── backends/hermes.ts      # Mission dispatch
+
+│   │   ├── api-fetch.ts            # Shared client fetch helper
+
+│   │   ├── schema/                 # Mission + template Zod schemas
 
 │   │   ├── config-schema.ts        # Config section definitions
 
-│   │   ├── theme.ts                # Shared theme maps
-
-│   │   ├── utils.ts                # timeAgo, timeUntil, formatBytes
-
-│   │   └── recroom/
-
-│   │       └── prompt-templates.ts # LLM system prompts per activity
+│   │   ├── theme.ts, utils.ts, …
 
 │   └── types/
 
@@ -205,8 +184,9 @@ control-hub/
 
 - `src/lib/paths.ts` — `PATHS` (Control Hub–owned dirs), `CH_DATA_DIR`, `getChScriptsDir()`, `getChHardwareLogDir()`, `getDiscordHomeChannel()`
 - `src/lib/hermes-agent-runtime.ts` — `getActiveHermesPaths()`, `getActiveHermesHome()`, `getAgentLlmEndpoints()`
-- `src/lib/models-repository.ts` — `getDefaultModel()`, `getModel()`, `getModelWithKey()`, `setDefaultModel()`, `listModels()` (registry-backed model registry)
-- `src/lib/agent-registry.ts` — persisted `agents-registry.json` under `CH_DATA_DIR`
+- `src/lib/hermes-home.ts` — `getHermesHome()` (env-first; read-only `agents-registry.json` fallback)
+- `src/lib/models-repository.ts` — `getDefaultModel()`, `getModel()`, `getModelWithKey()`, `setDefaultModel()`, `listModels()` (SQLite registry)
+- `src/lib/db.ts` — SQLite connection, migrations, `getGatewayPlatforms()`
 
 §
 
@@ -365,7 +345,7 @@ Control Hub is a command centre, not a file manager. The operator opens the dash
 
 §
 
-**Sidebar sections:** Main (Dashboard, Missions, Teams, Cron, Sessions, Memory, Gateway, Logs, Config) | Agents (Agents) | Operations (Skills, Tools, Personalities) | pinned above **All Settings**: HERMES.md, Environment | Config Sections
+**Sidebar sections:** Main (Dashboard, Sessions, Memory, Gateway, Logs) | Orchestration (Cron, Missions, Chat) | Operations (Agents, Skills, Tools, Personalities) | Rec Room (Story Weaver) | Config (Models, HERMES.md, Environment + YAML sections)
 
 §
 

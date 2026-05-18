@@ -12,30 +12,49 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 
 | Route | Methods | Purpose |
 |---|---|---|
-| `/api/agent/profiles` | `GET`, `POST`, `PUT`, `DELETE` | Hermes profile management. |
 | `/api/agent/files` | `GET` | List agent behavior files. |
 | `/api/agent/files/[key]` | `GET`, `PUT` | Read/update one behavior file. |
 | `/api/agent/personality` | `PUT` | Update selected personality config. |
-| `/api/agent/profiles` | `GET` | List available Hermes profiles. |
-| `/api/agents` | `GET` | Inspect running Hermes agent processes (implementation uses host process listing; behaviour differs by OS). |
+| `/api/agent/profiles` | `GET`, `POST`, `PUT`, `DELETE` | Hermes profile management. |
+| `/api/agent/profiles/[id]` | `GET`, `PUT`, `DELETE` | One Hermes profile. |
+| `/api/agents` | `GET` | Inspect running Hermes agent processes (OS-dependent). |
 | `/api/config` | `GET`, `PUT` | Read/update parsed config content. |
-| `/api/models` | `GET`, `POST` | Models registry (SQLite); list / create. |
-| `/api/models/[id]` | `GET`, `PUT`, `DELETE` | One model row. |
-| `/api/models/defaults` | `GET`, `PUT` | Default model per task slot (`agent`, `hindsight`, …). |
 | `/api/credentials` | `GET`, `POST` | API key credentials (masked list). |
 | `/api/credentials/[id]` | `GET`, `PUT`, `DELETE` | One credential. |
 | `/api/cron` | `GET`, `POST`, `PUT`, `DELETE` | Manage **agent** cron jobs (Hermes `jobs.json` for the active install). |
-| `/api/cron/hardware` | `GET`, `POST`, `PUT`, `DELETE` | **System** cron (system crontab): scripts/logs under `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR`; separate from agent `jobs.json`. |
-| `/api/cron/hardware/meta` | `GET` | `{ scriptsDir, logDir }` from [`getChScriptsDir()`](../src/lib/paths.ts) / [`getChHardwareLogDir()`](../src/lib/paths.ts). The System Cron UI builds script paths only from `scriptsDir`. |
+| `/api/cron/hardware` | `GET`, `POST`, `PUT`, `DELETE` | **System** cron (system crontab): scripts/logs under `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR`. |
+| `/api/cron/hardware/meta` | `GET` | `{ scriptsDir, logDir }` from [`getChScriptsDir()`](../src/lib/paths.ts) / [`getChHardwareLogDir()`](../src/lib/paths.ts). |
+| `/api/fs/git/branches` | `GET` | List git branches for a workspace path. |
+| `/api/fs/list` | `GET` | List directory entries (path-validated). |
 | `/api/gateway` | `GET` | Read gateway/platform status. |
+| `/api/gateway/health` | `GET` | Gateway health probe (`/v1/models`). |
+| `/api/gateway/models` | `GET` | List models from gateway. |
 | `/api/logs` | `GET` | Read recent Hermes logs. |
 | `/api/memory` | `GET`, `POST`, `PUT`, `DELETE` | Manage holographic memory facts. |
 | `/api/memory/hindsight` | `GET`, `POST` | Query/retain hindsight memory records. |
-| `/api/missions` | `GET`, `POST` | List and dispatch missions. |
+| `/api/missions` | `GET`, `POST`, `PUT`, `DELETE` | Mission CRUD + dispatch (SQLite). |
 | `/api/missions/health` | `GET` | Mission subsystem health view. |
+| `/api/models` | `GET`, `POST` | Models registry (SQLite); list / create. |
+| `/api/models/[id]` | `GET`, `PUT`, `DELETE` | One model row. |
+| `/api/models/[id]/diff` | `GET` | Diff model row vs Hermes config. |
+| `/api/models/[id]/pull` | `POST` | Pull model from Hermes into DB. |
+| `/api/models/[id]/push` | `POST` | Push model from DB to Hermes. |
+| `/api/models/defaults` | `GET`, `PUT` | Default model per task slot (`agent`, `hindsight`, …). |
+| `/api/models/fallbacks` | `GET`, `POST` | Fallback chain entries. |
+| `/api/models/fallbacks/[id]` | `PUT`, `DELETE` | One fallback entry. |
+| `/api/models/fallbacks/config` | `GET`, `PUT` | Fallback chain configuration. |
+| `/api/models/fallbacks/custom` | `POST` | Add custom fallback entry. |
+| `/api/models/fallbacks/import` | `POST` | Import fallbacks from Hermes. |
+| `/api/models/fallbacks/reorder` | `PUT` | Reorder fallback chain. |
+| `/api/models/fallbacks/sync` | `POST` | Sync fallbacks with Hermes. |
+| `/api/models/fallbacks/toggle` | `PUT` | Enable/disable fallback entry. |
+| `/api/models/import` | `POST` | Import models from Hermes config. |
+| `/api/models/sync/drift` | `GET` | Report model drift between DB and Hermes. |
+| `/api/models/sync/pull` | `POST` | Pull models from Hermes into DB. |
+| `/api/models/sync/push` | `POST` | Push models from DB to Hermes. |
 | `/api/monitor` | `GET` | Aggregated system monitoring snapshot. |
+| `/api/orchestration/chat` | `POST` | Proxy chat to Hermes gateway. |
 | `/api/personalities` | `GET`, `POST`, `PUT`, `DELETE` | Manage personality records. |
-| `/api/profiles` | `GET`, `POST` | List and create Control Hub profiles. |
 | `/api/sessions` | `GET` | List sessions with filters. |
 | `/api/sessions/[id]` | `GET` | Read one session transcript. |
 | `/api/skills` | `GET` | List skills inventory. |
@@ -43,11 +62,11 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/skills/[name]/toggle` | `PUT` | Enable/disable a skill for a profile. |
 | `/api/skills/[...path]` | `GET` | Read files under a skill tree. |
 | `/api/status` | `GET` | Basic readiness endpoint. |
-| `/api/stories` | `POST` | Create/update Story Weaver data. |
-| `/api/teams` | `GET`, `POST`, `PUT`, `DELETE` | Manage teams. |
-| `/api/templates` | `GET`, `POST` | List and create mission templates. |
+| `/api/stories` | `GET`, `POST`, `PUT`, `DELETE` | Story Weaver CRUD. |
+| `/api/sync` | `GET`, `POST` | Background sync control and status. |
+| `/api/templates` | `GET`, `POST`, `PUT`, `DELETE` | Mission template CRUD. |
 | `/api/tools` | `GET`, `PUT` | Read/update toolset configuration. |
-| `/api/update` | `GET`, `POST` | Check release status (`?branch=`, `?branches=1`). `POST` body: `action` = `restart` \| `rebuild` \| `update`; optional `branch` for `rebuild` and `update`. Spawns `scripts/application/ch-deploy.sh` in the background. |
+| `/api/update` | `GET`, `POST` | Check release status (`?branch=`, `?branches=1`). `POST` body: `action` = `restart` \| `rebuild` \| `update`; optional `branch`. Spawns `scripts/application/ch-deploy.sh`. |
 
 ## System cron notes
 

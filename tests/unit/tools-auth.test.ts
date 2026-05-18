@@ -3,8 +3,7 @@
 // These tests verify auth middleware is correctly wired on tool routes.
 // /api/tools only has GET and POST — PUT is tested via POST(action="configure").
 
-const mockRequireMcApiKey = jest.fn();
-const mockRequireNotReadOnly = jest.fn();
+const mockRequireAuth = jest.fn();
 const mockReadFileSync = jest.fn();
 const mockWriteFileSync = jest.fn();
 const mockExistsSync = jest.fn();
@@ -47,7 +46,6 @@ jest.mock("@/lib/paths", () => ({
     stories: "/tmp/ch-data/stories",
     recroom: "/tmp/ch-data/recroom",
     workspaces: "/tmp/ch-data/workspaces",
-    teams: "/tmp/ch-data/teams",
     auditLog: "/tmp/ch-data/audit",
     chScripts: "/tmp/ch-data/scripts",
     chHardwareLogs: "/tmp/ch-data/logs",
@@ -61,8 +59,7 @@ jest.mock("@/lib/api-logger", () => ({
 }));
 
 jest.mock("@/lib/api-auth", () => ({
-  requireMcApiKey: mockRequireMcApiKey,
-  requireNotReadOnly: mockRequireNotReadOnly,
+  requireAuth: mockRequireAuth,
 }));
 
 import { NextRequest } from "next/server";
@@ -75,8 +72,7 @@ describe("POST /api/tools configure action auth", () => {
 
   it("rejects when read-only mode is active", async () => {
     const readOnlyResponse = new Response("Read only", { status: 403 });
-    mockRequireNotReadOnly.mockReturnValue(readOnlyResponse);
-    mockRequireMcApiKey.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(readOnlyResponse);
 
     const req = new NextRequest("http://localhost/api/tools", {
       method: "POST",
@@ -85,13 +81,13 @@ describe("POST /api/tools configure action auth", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    expect(mockRequireNotReadOnly).toHaveBeenCalled();
+    expect(mockRequireAuth).toHaveBeenCalled();
   });
 
   it("rejects when API key is missing/invalid", async () => {
-    mockRequireNotReadOnly.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
     const authResponse = new Response("Unauthorized", { status: 401 });
-    mockRequireMcApiKey.mockReturnValue(authResponse);
+    mockRequireAuth.mockReturnValue(authResponse);
 
     const req = new NextRequest("http://localhost/api/tools", {
       method: "POST",
@@ -100,12 +96,11 @@ describe("POST /api/tools configure action auth", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(401);
-    expect(mockRequireMcApiKey).toHaveBeenCalled();
+    expect(mockRequireAuth).toHaveBeenCalled();
   });
 
   it("proceeds when auth passes", async () => {
-    mockRequireNotReadOnly.mockReturnValue(null);
-    mockRequireMcApiKey.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
 
     const req = new NextRequest("http://localhost/api/tools", {
       method: "POST",

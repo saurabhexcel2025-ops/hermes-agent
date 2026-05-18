@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
 // Shared API fetch helper — single canonical implementation
-// Eliminates the duplicated apiFetch() in kanban/page.tsx and teams/page.tsx.
 // ═══════════════════════════════════════════════════════════════
 
 /**
@@ -11,7 +10,7 @@
  * - Throws on non-2xx with the server's error message
  *
  * @example
- *   const data = await apiFetch("/api/teams");
+ *   const { data } = await apiFetch("/api/monitor");
  *   await apiFetch("/api/missions", { method: "POST", body: JSON.stringify({...}) });
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic JSON fetch returns arbitrary shapes

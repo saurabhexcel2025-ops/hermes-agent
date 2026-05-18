@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { listCredentials, createCredential, deleteCredential } from "@/lib/credentials-repository";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import { zodErrorResponse, credentialPostSchema } from "@/lib/api-schemas";
 import { syncCredentialToHermesEnv } from "@/lib/hermes-config-sync";
@@ -24,9 +24,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   let raw: unknown;

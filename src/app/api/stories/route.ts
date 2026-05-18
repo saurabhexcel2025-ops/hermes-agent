@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { getStoryPrompt } from "@/lib/story-weaver/prompts";
 import { callLLM } from "@/lib/llm";
 import {
@@ -119,9 +119,7 @@ function buildMasterPrompt(config: Record<string, unknown>): string {
 // ── POST Handler ─────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   try {
@@ -384,7 +382,9 @@ async function handleGenerateChapter(body: Record<string, unknown>): Promise<Nex
         [{ role: "system", content: summarySystem }, { role: "user", content: `PREVIOUS SUMMARY:\n${rollingSummary}\n\nNEW CHAPTER (Chapter ${nextNum}):\n${content}\n\nUpdate the rolling summary.` }],
         { temperature: 0.7, maxTokens: 1024 }
       )).content);
-    } catch {}
+    } catch (err) {
+      logApiError("POST /api/stories", "rolling summary after chapter", err);
+    }
 
     const allComplete = updatedChapters.every((c) => c.status === "complete");
     const updated = updateStory(storyId as string, {
@@ -548,7 +548,9 @@ async function handleEditChapter(body: Record<string, unknown>): Promise<NextRes
         [{ role: "system", content: summarySystem }, { role: "user", content: `Create a rolling summary:\n\n${chaptersUpToN}` }],
         { temperature: 0.7, maxTokens: 1024 }
       )).content);
-    } catch {}
+    } catch (err) {
+      logApiError("POST /api/stories", "rolling summary rebuild", err);
+    }
 
     const updated = updateStory(storyId as string, {
       chapters: updatedChapters,

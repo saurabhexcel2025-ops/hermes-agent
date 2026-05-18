@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
+import { listMissions } from "@/lib/mission-repository";
+import { listCronJobs } from "@/lib/cron-repository";
 import { PATHS } from "@/lib/paths";
-import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { fetchGateway } from "@/lib/gateway-client";
 import { logApiError } from "@/lib/api-logger";
 
-const DATA_DIR = PATHS.missions;
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 interface HealthReport {
@@ -29,7 +30,6 @@ interface HealthReport {
 
 export async function GET() {
   try {
-    const CRON_PATH = getActiveHermesPaths().cronJobs;
     const report: HealthReport = {
       status: "healthy",
       timestamp: new Date().toISOString(),
@@ -38,63 +38,72 @@ export async function GET() {
       gateway: { running: false },
     };
 
-    // Check missions
-    if (existsSync(DATA_DIR)) {
-      const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
-      report.missions.total = files.length;
+    const missions = listMissions();
+    report.missions.total = missions.length;
 
-      for (const file of files) {
-        try {
-          const m = JSON.parse(readFileSync(DATA_DIR + "/" + file, "utf-8"));
-          if (m.status === "queued" || m.status === "dispatched") {
-            report.missions.active++;
-            const age = Date.now() - new Date(m.createdAt).getTime();
-            if (age > STALE_THRESHOLD_MS) {
-              report.missions.stuck.push({
-                id: m.id,
-                name: m.name,
-                age: Math.round(age / 60000) + "m",
-                status: m.status,
-              });
+    for (const m of missions) {
+      if (m.status === "queued" || m.status === "dispatched") {
+        report.missions.active++;
+        const age = Date.now() - new Date(m.createdAt).getTime();
+        if (age > STALE_THRESHOLD_MS) {
+          report.missions.stuck.push({
+            id: m.id,
+            name: m.name,
+            age: Math.round(age / 60000) + "m",
+            status: m.status,
+          });
+        }
+      }
+
+      // Supplement dispatched missions with on-disk status files (Hermes dispatch artifacts)
+      if (m.status === "dispatched") {
+        const statusPath = join(PATHS.missions, `${m.id}.status.json`);
+        if (existsSync(statusPath)) {
+          try {
+            const disk = JSON.parse(readFileSync(statusPath, "utf-8")) as {
+              status?: string;
+              completed_at?: string;
+            };
+            if (disk.completed_at) {
+              report.gateway.lastTick = disk.completed_at;
             }
+            if (disk.status === "successful" || disk.status === "failed") {
+              // MissionSync will update SQLite; health still flags long-running dispatched
+            }
+          } catch (error) {
+            logApiError("GET /api/missions/health", `status file ${m.id}`, error);
           }
-        } catch {}
+        }
       }
     }
 
-    // Check cron jobs
-    if (existsSync(CRON_PATH)) {
-      try {
-        const data = JSON.parse(readFileSync(CRON_PATH, "utf-8"));
-        const jobs = Array.isArray(data.jobs) ? data.jobs : [];
-        report.cron.total = jobs.length;
+    const cronJobs = listCronJobs();
+    report.cron.total = cronJobs.length;
 
-        for (const job of jobs) {
-          if (job.state === "running") {
-            report.cron.running++;
-            // Check if running too long
-            if (job.last_run_at) {
-              const runAge = Date.now() - new Date(job.last_run_at).getTime();
-              if (runAge > STALE_THRESHOLD_MS) {
-                report.cron.stuck.push({
-                  id: job.id,
-                  name: job.name || job.id,
-                  state: "running too long (" + Math.round(runAge / 60000) + "m)",
-                });
-              }
-            }
+    for (const job of cronJobs) {
+      if (job.state === "running") {
+        report.cron.running++;
+        if (job.last_run_at) {
+          const runAge = Date.now() - new Date(job.last_run_at).getTime();
+          if (runAge > STALE_THRESHOLD_MS) {
+            report.cron.stuck.push({
+              id: job.id,
+              name: job.name || job.id,
+              state: "running too long (" + Math.round(runAge / 60000) + "m)",
+            });
           }
         }
-      } catch {}
+      }
     }
 
-    // Check gateway
     try {
-      const ps = execSync('ps aux | grep "gateway run" | grep -v grep | wc -l', { encoding: "utf-8", timeout: 5000 });
-      report.gateway.running = parseInt(ps.trim()) > 0;
-    } catch {}
+      const res = await fetchGateway("/v1/models", { method: "GET", timeoutMs: 5000 });
+      report.gateway.running = res.ok;
+    } catch (error) {
+      logApiError("GET /api/missions/health", "gateway probe", error);
+      report.gateway.running = false;
+    }
 
-    // Determine overall status
     if (report.missions.stuck.length > 0 || report.cron.stuck.length > 0) {
       report.status = "degraded";
     }

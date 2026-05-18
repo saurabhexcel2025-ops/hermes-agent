@@ -6,7 +6,7 @@
 # Control Hub data to a portable directory or git repo.
 #
 # Usage:
-#   bash scripts/backup-hermes-config.sh [target_dir]
+#   bash scripts/bootstrap/backup-hermes-config.sh [target_dir]
 #
 # If no target_dir is given, creates ~/hermes-backup-YYYYMMDD/
 # ═══════════════════════════════════════════════════════════════

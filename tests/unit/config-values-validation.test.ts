@@ -7,8 +7,7 @@ const mockReadFileSync = jest.fn();
 const mockWriteFileSync = jest.fn();
 const mockExistsSync = jest.fn();
 const mockMkdirSync = jest.fn();
-const mockRequireMcApiKey = jest.fn();
-const mockRequireNotReadOnly = jest.fn();
+const mockRequireAuth = jest.fn();
 
 jest.mock("fs", () => ({
   readFileSync: mockReadFileSync,
@@ -49,7 +48,6 @@ jest.mock("@/lib/paths", () => ({
     stories: "/tmp/ch-data/stories",
     recroom: "/tmp/ch-data/recroom",
     workspaces: "/tmp/ch-data/workspaces",
-    teams: "/tmp/ch-data/teams",
     auditLog: "/tmp/ch-data/audit",
     chScripts: "/tmp/ch-data/scripts",
     chHardwareLogs: "/tmp/ch-data/logs",
@@ -63,8 +61,7 @@ jest.mock("@/lib/api-logger", () => ({
 }));
 
 jest.mock("@/lib/api-auth", () => ({
-  requireMcApiKey: mockRequireMcApiKey,
-  requireNotReadOnly: mockRequireNotReadOnly,
+  requireAuth: mockRequireAuth,
 }));
 
 jest.mock("@/lib/audit-log", () => ({
@@ -78,8 +75,8 @@ describe("PUT /api/config values validation regression", () => {
     jest.clearAllMocks();
     mockReadFileSync.mockReturnValue("agent:\n  personality: technical\n");
     mockExistsSync.mockReturnValue(true);
-    mockRequireMcApiKey.mockReturnValue(null);
-    mockRequireNotReadOnly.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
+    mockRequireAuth.mockReturnValue(null);
   });
 
   it("rejects when values is a string", async () => {

@@ -1,7 +1,7 @@
 /** @jest-environment node */
 
 // Regression test: /api/stories POST handler must require auth checks
-// Bug: stories route was missing requireNotReadOnly() and requireMcApiKey()
+// Bug: stories route was missing requireAuth() and requireAuth()
 
 jest.mock("fs", () => ({
   existsSync: jest.fn(),
@@ -28,7 +28,6 @@ jest.mock("@/lib/paths", () => ({
     templates: "/tmp/ch-data/templates",
     recroom: "/tmp/ch-data/recroom",
     workspaces: "/tmp/ch-data/workspaces",
-    teams: "/tmp/ch-data/teams",
     auditLog: "/tmp/ch-data/audit",
     chScripts: "/tmp/ch-data/scripts",
     chHardwareLogs: "/tmp/ch-data/logs",

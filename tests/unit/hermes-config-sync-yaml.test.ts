@@ -14,13 +14,7 @@ import * as yaml from "js-yaml";
 
 let fakeRoot: string;
 
-const repoRoot = join(__dirname, "..", "..");
-const initialPath = join(repoRoot, "src", "lib", "db", "migrations", "001_initial_schema.sql");
-const missionExtPath = join(repoRoot, "src", "lib", "db", "migrations", "004_mission_extensions.sql");
-const statusEnumPath = join(repoRoot, "src", "lib", "db", "migrations", "005_mission_status_enum.sql");
-const modelsPath = join(repoRoot, "src", "lib", "db", "migrations", "006_models_credentials.sql");
-const migration012Path = join(repoRoot, "src", "lib", "db", "migrations", "012_models_framework_fallback.sql");
-const hermesOnlyPath = join(repoRoot, "src", "lib", "db", "migrations", "014_hermes_only.sql");
+import { execBaselineSchema } from "../helpers/baseline-db";
 
 let testDb: import("better-sqlite3").Database | null = null;
 
@@ -70,14 +64,7 @@ beforeEach(() => {
     ":memory:"
   );
   testDb.pragma("foreign_keys = ON");
-  testDb.exec(readFileSync(initialPath, "utf-8"));
-  testDb.exec(readFileSync(missionExtPath, "utf-8"));
-  testDb.exec(readFileSync(statusEnumPath, "utf-8"));
-  testDb.exec(readFileSync(modelsPath, "utf-8"));
-  // Apply migration 012 to add framework_id and model_defaults
-  testDb.exec(readFileSync(migration012Path, "utf-8"));
-  // Apply migration 014 to reverse framework scaffolding (Hermes-only)
-  testDb.exec(readFileSync(hermesOnlyPath, "utf-8"));
+  execBaselineSchema(testDb);
 });
 
 afterEach(() => {

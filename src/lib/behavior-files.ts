@@ -30,13 +30,13 @@ export function getBehaviorFiles(): Record<string, BehaviorFileEntry> {
     },
     user: {
       name: "USER.md",
-      path: H.root + "/memories/USER.md",
+      path: H.userMemory,
       description: "User priorities and preferences",
       category: "user",
     },
     memory: {
       name: "MEMORY.md",
-      path: H.root + "/memories/MEMORY.md",
+      path: H.agentMemory,
       description: "Agent persistent knowledge and memories",
       category: "user",
     },

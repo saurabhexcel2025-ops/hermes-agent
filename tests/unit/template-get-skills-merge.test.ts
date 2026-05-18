@@ -24,7 +24,6 @@ jest.mock("@/lib/paths", () => ({
     stories: "/tmp/ch-data/stories",
     recroom: "/tmp/ch-data/recroom",
     workspaces: "/tmp/ch-data/workspaces",
-    teams: "/tmp/ch-data/teams",
     auditLog: "/tmp/ch-data/audit",
     chScripts: "/tmp/ch-data/scripts",
     chHardwareLogs: "/tmp/ch-data/logs",

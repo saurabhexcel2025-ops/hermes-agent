@@ -42,7 +42,7 @@ jest.mock("@/lib/api-logger", () => ({ logApiError: jest.fn() }));
 
 jest.mock("@/lib/api-auth", () => ({
   requireAuth: jest.fn(() => null),
-  requireNotReadOnly: jest.fn(() => null),
+  requireAuth: jest.fn(() => null),
 }));
 jest.mock("@/lib/audit-log", () => ({ appendAuditLine: jest.fn() }));
 
@@ -54,12 +54,6 @@ jest.mock("@/lib/backends", () => ({
     cancelMission: jest.fn(),
     getMissionStatus: jest.fn(),
   },
-}));
-
-jest.mock("@/lib/jobs-repository", () => ({
-  readJobsFile: jest.fn(),
-  writeJobsFile: jest.fn(),
-  withJobsFileLock: jest.fn(),
 }));
 
 // Mock mission-repository using require() factory

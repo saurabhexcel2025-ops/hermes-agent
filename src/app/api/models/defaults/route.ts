@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getModelDefaults, setDefaultModel } from "@/lib/models-repository";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import { zodErrorResponse, setDefaultPutSchema } from "@/lib/api-schemas";
 import type { TaskType } from "@/lib/hermes-providers";
@@ -22,9 +22,7 @@ export async function GET(_request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   let raw: unknown;

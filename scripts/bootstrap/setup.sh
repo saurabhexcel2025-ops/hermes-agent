@@ -15,6 +15,7 @@
 #
 # Environment:
 #   CI=1 or CH_INSTALL_NONINTERACTIVE=1 — non-interactive; set PORT or auto-pick 42069–42100
+#   CH_SETUP_RUN_TESTS=1 — run `npm test` during setup (CI runs tests automatically)
 #   CH_INSTALL_ADVANCED=1 — prompt for CH_DATA_DIR, HERMES_HOME, branch, API key (interactive only)
 # ═══════════════════════════════════════════════════════════════
 
@@ -124,7 +125,6 @@ mkdir -p "$CH_DATA_ROOT/templates"
 mkdir -p "$CH_DATA_ROOT/operations"
 mkdir -p "$CH_DATA_ROOT/recroom"
 mkdir -p "$CH_DATA_ROOT/stories"
-mkdir -p "$CH_DATA_ROOT/teams" 2>/dev/null || true
 mkdir -p "$CH_DATA_ROOT/workspaces" 2>/dev/null || true
 mkdir -p "$CH_DATA_ROOT/audit" 2>/dev/null || true
 mkdir -p "$CH_DATA_ROOT/scripts" 2>/dev/null || true
@@ -143,9 +143,14 @@ if [ "$HERMES_CONFIGURED" = true ]; then
 fi
 echo "✓ Control Hub data directories created at $CH_DATA_ROOT"
 
-# ── Discover local Hermes installs (agents.discovery.json) ───
+# ── Discover local Hermes install (hermes-detection.json) ───
 if command -v node &>/dev/null && [ -f "$REPO_ROOT/scripts/tooling/discover-agents.mjs" ]; then
     CH_DATA_DIR="$CH_DATA_ROOT" node "$REPO_ROOT/scripts/tooling/discover-agents.mjs" || true
+    if [ -f "$CH_DATA_ROOT/hermes-detection.json" ]; then
+        if ! grep -q '"valid": true' "$CH_DATA_ROOT/hermes-detection.json" 2>/dev/null; then
+            echo "⚠  Hermes install not detected at HERMES_HOME — set HERMES_HOME in .env.local (see .env.example)"
+        fi
+    fi
 fi
 
 # ── Scripts executable ───────────────────────────────────────
@@ -161,13 +166,18 @@ echo "Installing dependencies..."
 npm install
 echo "✓ Dependencies installed"
 
-# ── Tests ────────────────────────────────────────────────────
-echo ""
-echo "Running tests..."
-if npm test -- --passWithNoTests 2>/dev/null; then
-    echo "✓ All tests passed"
+# ── Tests (optional — default skip for faster local setup) ───
+if [ "${CH_SETUP_RUN_TESTS:-}" = "1" ] || [ "${CI:-}" = "true" ]; then
+    echo ""
+    echo "Running tests..."
+    if npm test -- --passWithNoTests 2>/dev/null; then
+        echo "✓ All tests passed"
+    else
+        echo "⚠  Some tests failed — check output above"
+    fi
 else
-    echo "⚠  Some tests failed — check output above"
+    echo ""
+    echo "ℹ  Skipping tests (set CH_SETUP_RUN_TESTS=1 or CI=true to run during setup)"
 fi
 
 # ── Build ─────────────────────────────────────────────────────

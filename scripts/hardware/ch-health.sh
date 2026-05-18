@@ -2,7 +2,7 @@
 # ch-health.sh — Control Hub health check
 # Run by hardware cron: health monitoring for Control Hub services.
 
-LOG_DIR="${LOG_DIR:-$HOME/.hermes/logs}"
+LOG_DIR="${LOG_DIR:-${CH_HARDWARE_LOG_DIR:-${CH_DATA_DIR:-$HOME/control-hub/data}/logs}}"
 LOG_FILE="${LOG_DIR}/ch-health.log"
 
 log() {

@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, statSync } from "fs";
 
+import { buildProfileHermesPathBundle } from "./hermes-profile-paths";
+
 /**
  * How Hermes profile config treats skills.enabled for Control Hub.
  *
@@ -212,35 +214,28 @@ export function findSkillsEnabledBlockLineRange(
 /**
  * Resolve config.yaml path for a given profile.
  */
-export function configPathForProfile(home: string, profile: string): string {
-  return profile === "default"
-    ? home + "/config.yaml"
-    : home + "/profiles/" + profile + "/config.yaml";
+export function configPathForProfile(_home: string, profile: string): string {
+  return buildProfileHermesPathBundle(profile).config;
 }
 
 /**
- * Resolve skills root directory for a given profile, falling back to default.
+ * Resolve skills root directory for a given profile, falling back to default root skills.
  */
-export function skillsRootForProfile(home: string, profile: string): string {
-  if (profile === "default") return home + "/skills";
-  const profileSkills = home + "/profiles/" + profile + "/skills";
-  return existsSync(profileSkills) ? profileSkills : home + "/skills";
+export function skillsRootForProfile(_home: string, profile: string): string {
+  const bundle = buildProfileHermesPathBundle(profile);
+  if (profile === "default" || existsSync(bundle.skills)) {
+    return bundle.skills;
+  }
+  return buildProfileHermesPathBundle("default").skills;
 }
 
 /**
  * Find the SKILL.md file for a given skill name across profile directories.
  */
-export function findSkillFile(skillName: string, home: string, profile: string): string | null {
-  const searchDirs: string[] = [];
-
-  if (profile === "default") {
-    searchDirs.push(home + "/skills");
-  } else {
-    const profileSkillsDir = home + "/profiles/" + profile + "/skills";
-    if (existsSync(profileSkillsDir)) {
-      searchDirs.push(profileSkillsDir);
-    }
-    searchDirs.push(home + "/skills");
+export function findSkillFile(skillName: string, _home: string, profile: string): string | null {
+  const searchDirs: string[] = [buildProfileHermesPathBundle(profile).skills];
+  if (profile !== "default") {
+    searchDirs.push(buildProfileHermesPathBundle("default").skills);
   }
 
   for (const baseDir of searchDirs) {

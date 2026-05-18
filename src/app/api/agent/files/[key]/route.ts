@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "fs";
 
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
+import {
+  buildProfileHermesPathBundle,
+  resolveProfileHermesHome,
+} from "@/lib/hermes-agent-runtime";
 import { getBehaviorFiles } from "@/lib/behavior-files";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 
 /** Resolve file path for a given key and optional profile */
@@ -26,20 +29,21 @@ function resolveFilePath(
   const profile = prof.profile;
 
   if (profile === "default") {
-    return { path: fileConfig.path, name: fileConfig.name, description: fileConfig.description };
+    const entry = getBehaviorFiles()[key];
+    if (!entry) return null;
+    return { path: entry.path, name: entry.name, description: entry.description };
   }
 
-  // Profile-specific paths (segment is allowlisted; no traversal)
-  const root = getActiveHermesHome();
-  const profileDir = root + "/profiles/" + profile;
+  const bundle = buildProfileHermesPathBundle(profile);
   const pathMap: Record<string, string> = {
-    soul: profileDir + "/SOUL.md",
-    agents: profileDir + "/AGENTS.md",
-    user: profileDir + "/memories/USER.md",
-    memory: profileDir + "/memories/MEMORY.md",
-    env: root + "/.env", // .env is global, not per-profile
-    hermes: profileDir + "/HERMES.md",
-    config: root + "/config.yaml",
+    soul: bundle.soul,
+    agents: bundle.agents,
+    user: bundle.userMemory,
+    memory: bundle.agentMemory,
+    env: bundle.env,
+    hermes: bundle.hermes,
+    config: bundle.config,
+    auth: bundle.auth,
   };
 
   const resolvedPath = pathMap[key];
@@ -103,9 +107,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { key } = await params;
@@ -135,13 +137,17 @@ export async function PUT(
 
     // Optional backup
     if (backup && existsSync(resolved.path)) {
-      const backupDir = getActiveHermesHome() + "/backups";
+      const prof = resolveSafeProfileName(profile);
+      const profileHome = prof.ok ? resolveProfileHermesHome(prof.profile) : resolveProfileHermesHome("default");
+      const backupDir = profileHome + "/backups";
       if (!existsSync(backupDir)) mkdirSync(backupDir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const backupName = `${key}-${ts}.md`;
       try {
         writeFileSync(backupDir + "/" + backupName, readFileSync(resolved.path, "utf-8"));
-      } catch {}
+      } catch (err) {
+        logApiError("PUT /api/agent/files/[key]", `backup ${resolved.path}`, err);
+      }
     }
 
     writeFileSync(resolved.path, content, "utf-8");

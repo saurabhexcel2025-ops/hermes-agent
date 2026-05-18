@@ -36,11 +36,13 @@ resolve_python() {
   local h="$1"
   local p
   for p in \
+    "${HERMES_AGENT_VENV_PYTHON:-}" \
     "$h/hermes-agent/venv/bin/python3" \
     "$h/hermes-agent/.venv/bin/python3" \
+    "$(dirname "$h")/hermes-agent/venv/bin/python3" \
     "${HOME:-}/.local/share/hermes-agent/venv/bin/python3" \
     "/usr/bin/python3"; do
-    if [[ -x "$p" ]]; then
+    if [[ -n "$p" && -x "$p" ]]; then
       echo "$p"
       return 0
     fi

@@ -6,7 +6,7 @@
 # Run this on an existing Control Hub installation.
 #
 # Usage:
-#   bash scripts/setup-hindsight.sh
+#   bash scripts/bootstrap/setup-hindsight.sh
 #
 # Requires:
 #   - sudo access (for PostgreSQL installation)
@@ -18,7 +18,7 @@ set -e
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # ── Helpers ──────────────────────────────────────────────────
 RED='\033[0;31m'

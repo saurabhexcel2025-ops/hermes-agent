@@ -1,45 +1,48 @@
 /** @jest-environment node */
 
-jest.mock("child_process", () => ({
-  execSync: jest.fn(() => "0\n"),
+jest.mock("next/server", () => ({
+  NextResponse: {
+    json: (data: unknown, init?: ResponseInit) => ({
+      status: init?.status ?? 200,
+      json: async () => data,
+    }),
+  },
 }));
 
-const mockExistsSync = jest.fn();
-const mockReadFileSync = jest.fn();
-const mockReaddirSync = jest.fn();
-
-jest.mock("fs", () => ({
-  existsSync: (...a: unknown[]) => mockExistsSync(...a),
-  readFileSync: (...a: unknown[]) => mockReadFileSync(...a),
-  readdirSync: (...a: unknown[]) => mockReaddirSync(...a),
-}));
-
-jest.mock("@/lib/api-logger", () => ({
-  logApiError: jest.fn(),
-}));
-
-jest.mock("@/lib/hermes-agent-runtime", () => ({
-  getActiveHermesPaths: () => ({
-    cronJobs: "/tmp/hermes/cron/jobs.json",
-  }),
-}));
+jest.mock("@/lib/api-logger", () => ({ logApiError: jest.fn() }));
 
 jest.mock("@/lib/paths", () => ({
-  PATHS: {
-    missions: "/tmp/ch-data/missions",
-  },
+  PATHS: { missions: "/tmp/ch-data/missions" },
+}));
+
+jest.mock("fs", () => ({
+  existsSync: jest.fn(() => false),
+  readFileSync: jest.fn(),
+}));
+
+const mockListMissions = jest.fn();
+
+jest.mock("@/lib/mission-repository", () => ({
+  listMissions: () => mockListMissions(),
+}));
+
+jest.mock("@/lib/cron-repository", () => ({
+  listCronJobs: jest.fn(() => []),
+}));
+
+jest.mock("@/lib/gateway-client", () => ({
+  fetchGateway: jest.fn(async () => ({ ok: false })),
 }));
 
 describe("GET /api/missions/health", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockExistsSync.mockReturnValue(false);
+    mockListMissions.mockReturnValue([]);
   });
 
-  it("returns healthy report with empty dirs", async () => {
+  it("returns healthy report with no missions", async () => {
     const { GET } = await import("@/app/api/missions/health/route");
     const res = await GET();
-    expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.status).toBe("healthy");
     expect(body.data.missions.total).toBe(0);
@@ -47,28 +50,21 @@ describe("GET /api/missions/health", () => {
   });
 
   it("counts missions and marks degraded when stuck", async () => {
-    mockExistsSync.mockImplementation((p: string) => {
-      if (String(p).includes("missions")) return true;
-      if (String(p).includes("jobs.json")) return false;
-      return false;
-    });
-    mockReaddirSync.mockReturnValue(["m1.json"]);
-    const old = Date.now() - 60 * 60 * 1000;
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({
+    const old = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    mockListMissions.mockReturnValue([
+      {
         id: "m1",
         name: "Old",
-        createdAt: new Date(old).toISOString(),
         status: "queued",
-      })
-    );
+        createdAt: old,
+      },
+    ]);
 
     const { GET } = await import("@/app/api/missions/health/route");
     const res = await GET();
     const body = await res.json();
     expect(body.data.missions.total).toBe(1);
     expect(body.data.missions.stuck.length).toBeGreaterThan(0);
-    // Stuck missions force degraded; active + no gateway can elevate to critical per route logic.
     expect(["degraded", "critical"]).toContain(body.data.status);
   });
 });

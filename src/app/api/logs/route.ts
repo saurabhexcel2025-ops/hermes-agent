@@ -9,7 +9,7 @@ import {
   compareLogFileNames,
   sanitizeLogBasename,
 } from "@/lib/log-files";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { ApiResponse } from "@/types/hermes";
 import type { LogFileMeta } from "@/lib/log-files";
 
@@ -140,9 +140,7 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { searchParams } = new URL(request.url);

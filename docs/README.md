@@ -7,7 +7,7 @@
 | [DEPLOY.md](DEPLOY.md) | Deploy, **`ch-deploy`**, TLS, Docker, ports, scripts layout |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [TESTING.md](TESTING.md) | Jest, Playwright, CI, and navigation-matrix upkeep |
-| [HARDWARE-CRON.md](HARDWARE-CRON.md) | Hardware cron presets (`scripts/hardware/`), including Hindsight backup |
+| [SYSTEM-CRON.md](SYSTEM-CRON.md) | System cron presets (`scripts/hardware/`), including Hindsight backup |
 | [SUPPORT.md](SUPPORT.md) | Where to get help; upstream vs this repo |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
@@ -15,8 +15,6 @@
 | [HERMES_CONFIG_INTEGRATION.md](HERMES_CONFIG_INTEGRATION.md) | Hermes `config.yaml` integration |
 | [PLATFORM_VISION.md](PLATFORM_VISION.md) | Architecture and product direction |
 | [Pull request template](../.github/pull_request_template.md) | PR checklist (GitHub prefill) |
-| [internal/README.md](internal/README.md) | Internal / scratch notes |
-
 ## Mission and template schemas
 
 Versioned Zod schemas live under [`src/lib/schema/`](../src/lib/schema/). JSON Schema mirrors live in `src/lib/schema/json/`. Maintainer notes:
