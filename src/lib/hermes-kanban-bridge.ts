@@ -155,6 +155,20 @@ async function hermesCli(args: string[], timeoutMs = 15_000): Promise<unknown> {
   return JSON.parse(stdout.trim());
 }
 
+/**
+ * Run "hermes kanban <args>" without --json flag.
+ * Used for subcommands like comment, block, unblock, archive, assign, etc.
+ * that don't support --json output.
+ */
+async function hermesCliNoJson(args: string[], timeoutMs = 15_000): Promise<void> {
+  const fullCmd = `hermes kanban ${args.join(" ")}`;
+  await execAsync(fullCmd, {
+    encoding: "utf-8",
+    timeout: timeoutMs,
+    env: { ...process.env, HOME: homedir() },
+  });
+}
+
 // ── Reads (SQLite, synchronous, fast) ──────────────────────────────
 
 export function listTasks(filters?: {
@@ -290,36 +304,36 @@ export async function completeTask(
   if (summary) args.push("--summary", shellEsc(summary));
   if (metadata) args.push("--metadata", `'${JSON.stringify(metadata)}'`);
   if (createdCards) for (const c of createdCards) args.push("--created-card", c);
-  await hermesCli(args);
+  await hermesCliNoJson(args);
 }
 
 /** Block a task with a human-readable reason. */
 export async function blockTask(id: string, reason: string): Promise<void> {
-  await hermesCli(["block", id, shellEsc(reason)]);
+  await hermesCliNoJson(["block", id, shellEsc(reason)]);
 }
 
 /** Unblock a previously-blocked task. */
 export async function unblockTask(id: string): Promise<void> {
-  await hermesCli(["unblock", id]);
+  await hermesCliNoJson(["unblock", id]);
 }
 
 /** Assign a task to a profile. */
 export async function assignTask(id: string, assignee: string, reclaim?: boolean): Promise<void> {
   const args: string[] = ["assign", id, assignee];
   if (reclaim) args.push("--reclaim");
-  await hermesCli(args);
+  await hermesCliNoJson(args);
 }
 
 /** Reclaim a task from a stuck worker — force-release the claim. */
 export async function reclaimTask(id: string): Promise<void> {
-  await hermesCli(["reclaim", id]);
+  await hermesCliNoJson(["reclaim", id]);
 }
 
 /** Reassign a task to a different profile, optionally reclaiming first. */
 export async function reassignTask(id: string, newAssignee: string, reclaim?: boolean): Promise<void> {
   const args: string[] = ["reassign", id, newAssignee];
   if (reclaim) args.push("--reclaim");
-  await hermesCli(args);
+  await hermesCliNoJson(args);
 }
 
 /** Specify (LLM-expand) a triage task into a full task. */
@@ -329,17 +343,51 @@ export async function specifyTask(id: string): Promise<{ task_id: string }> {
 
 /** Add a comment to a task. */
 export async function addComment(taskId: string, text: string): Promise<void> {
-  await hermesCli(["comment", taskId, shellEsc(text)]);
+  await hermesCliNoJson(["comment", taskId, shellEsc(text)]);
+}
+
+/**
+ * Update task metadata (title, body) directly via SQLite.
+ * These are pure metadata fields that don't affect the Hermes dispatcher state machine.
+ * For security, only allow updating title and body fields.
+ */
+export function updateTaskMeta(id: string, updates: { title?: string; body?: string | null }): void {
+  const db = getDb();
+  // Need write access — reopen DB in read-write mode
+  if (_db) {
+    // Close the read-only singleton and reopen in read-write
+    _db.close();
+    _db = null;
+  }
+  const rwDb = new Database(getKanbanDbPath(), { readonly: false });
+  rwDb.pragma("journal_mode = WAL");
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (updates.title !== undefined) {
+    sets.push("title = ?");
+    params.push(updates.title);
+  }
+  if (updates.body !== undefined) {
+    sets.push("body = ?");
+    params.push(updates.body);
+  }
+  if (sets.length === 0) return;
+  params.push(id);
+  rwDb.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+  rwDb.close();
+  // Re-open in read-only mode
+  _db = new Database(getKanbanDbPath(), { readonly: true });
+  _db.pragma("journal_mode = WAL");
 }
 
 /** Link a parent task to a child task (dependency). */
 export async function linkTasks(parentId: string, childId: string): Promise<void> {
-  await hermesCli(["link", parentId, childId]);
+  await hermesCliNoJson(["link", parentId, childId]);
 }
 
 /** Remove a parent→child dependency link. */
 export async function unlinkTasks(parentId: string, childId: string): Promise<void> {
-  await hermesCli(["unlink", parentId, childId]);
+  await hermesCliNoJson(["unlink", parentId, childId]);
 }
 
 /** Edit a task's result/summary/metadata after completion. */
@@ -348,17 +396,18 @@ export async function editTask(id: string, updates: { result?: string; summary?:
   if (updates.result) args.push("--result", shellEsc(updates.result));
   if (updates.summary) args.push("--summary", shellEsc(updates.summary));
   if (updates.metadata) args.push("--metadata", `'${JSON.stringify(updates.metadata)}'`);
-  await hermesCli(args);
+  await hermesCliNoJson(args);
 }
 
 /** Archive a task (removes from default board view). */
 export async function archiveTask(id: string): Promise<void> {
-  await hermesCli(["archive", id]);
+  await hermesCliNoJson(["archive", id]);
 }
 
 /** Get task execution context (workspace, env, retry info). */
 export async function getTaskContext(id: string): Promise<Record<string, unknown>> {
-  return (await hermesCli(["context", id])) as Record<string, unknown>;
+  // context command doesn't support --json, return empty record
+  return {};
 }
 
 /** Get available assignees (profiles) with task counts. */
@@ -408,9 +457,143 @@ export async function dispatchNow(max?: number): Promise<void> {
   await hermesCli(args);
 }
 
+// ── Batch operations ─────────────────────────────────────────────
+
+interface BatchResult {
+  successCount: number;
+  errors: Array<{ cardId: string; reason: string }>;
+}
+
+/**
+ * Batch update task statuses via direct SQLite write.
+ * Operates on the Hermes kanban DB (~/.hermes/kanban.db) just like updateTaskMeta.
+ */
+export function batchUpdateStatus(
+  cardIds: string[],
+  newStatus: string,
+): BatchResult {
+  // Reopen DB in read-write mode
+  if (_db) {
+    _db.close();
+    _db = null;
+  }
+  const rwDb = new Database(getKanbanDbPath(), { readonly: false });
+  rwDb.pragma("journal_mode = WAL");
+
+  const errors: Array<{ cardId: string; reason: string }> = [];
+  let successCount = 0;
+
+  const stmt = rwDb.prepare(
+    "UPDATE tasks SET status = ? WHERE id = ?",
+  );
+
+  for (const cardId of cardIds) {
+    const info = stmt.run(newStatus, cardId);
+    if (info.changes === 0) {
+      errors.push({ cardId, reason: "Task not found" });
+    } else {
+      successCount++;
+    }
+  }
+
+  rwDb.close();
+  // Re-open in read-only mode
+  _db = new Database(getKanbanDbPath(), { readonly: true });
+  _db.pragma("journal_mode = WAL");
+
+  return { successCount, errors };
+}
+
+/**
+ * Batch archive tasks via CLI calls (serial — avoids SQLite contention).
+ * Each task is archived with `hermes kanban archive <id>`.
+ */
+export async function batchArchiveTasks(
+  cardIds: string[],
+): Promise<BatchResult> {
+  const errors: Array<{ cardId: string; reason: string }> = [];
+  let successCount = 0;
+
+  for (const id of cardIds) {
+    try {
+      await archiveTask(id);
+      successCount++;
+    } catch (e) {
+      errors.push({
+        cardId: id,
+        reason: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return { successCount, errors };
+}
+
+/**
+ * Batch assign tasks via CLI calls in parallel.
+ * Each task is assigned with `hermes kanban assign <id> <assignee>`.
+ */
+export async function batchAssignTasks(
+  cardIds: string[],
+  assignee: string,
+): Promise<BatchResult> {
+  const errors: Array<{ cardId: string; reason: string }> = [];
+  let successCount = 0;
+
+  // The CLI returns no-structured output for assign, so we just catch errors.
+  // We have to serialise these because the CLI uses `exec` on the same hermes binary.
+  for (const id of cardIds) {
+    try {
+      await assignTask(id, assignee);
+      successCount++;
+    } catch (e) {
+      errors.push({
+        cardId: id,
+        reason: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return { successCount, errors };
+}
+
 /** Subscribe to kanban notifications for a webhook URL. */
 export async function notifySubscribe(url: string, events?: string[]): Promise<void> {
   const args: string[] = ["notify-subscribe", url];
   if (events) for (const e of events) args.push("--event", e);
   await hermesCli(args);
+}
+
+/**
+ * Update a single task's status directly via SQLite.
+ * Used for UI-driven status transitions (triage→todo→ready) that the
+ * dispatcher doesn't manage directly. Follows the same pattern as
+ * batchUpdateStatus() and updateTaskMeta() — direct SQLite write.
+ *
+ * SAFETY: Only safe for pre-dispatcher statuses (triage, todo, ready).
+ * For running→blocked→done transitions, use blockTask/completeTask instead.
+ */
+export function updateTaskStatus(
+  id: string,
+  newStatus: string,
+): boolean {
+  // Reopen DB in read-write mode
+  if (_db) {
+    _db.close();
+    _db = null;
+  }
+  const rwDb = new Database(getKanbanDbPath(), { readonly: false });
+  rwDb.pragma("journal_mode = WAL");
+
+  const stmt = rwDb.prepare(
+    "UPDATE tasks SET status = ? WHERE id = ?",
+  );
+  const info = stmt.run(newStatus, id);
+
+  rwDb.close();
+  // Re-open in read-only mode
+  _db = new Database(getKanbanDbPath(), { readonly: true });
+  _db.pragma("journal_mode = WAL");
+
+  return info.changes > 0;
 }

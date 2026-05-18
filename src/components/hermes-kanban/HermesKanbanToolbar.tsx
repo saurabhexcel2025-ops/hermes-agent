@@ -2,12 +2,14 @@
 // Kanban Toolbar — Search, filters, actions
 // ═══════════════════════════════════════════════════════════════
 // Features: search, assignee filter, status filter, tenant filter,
-// archived toggle, specify-all-triage, nudge dispatcher, board dropdown.
+// archived toggle, specify-all-triage, nudge dispatcher, board dropdown,
+// and card-selection count + clear.
 
 "use client";
 
-import { Search, Zap, Archive, Sparkles, Layout } from "lucide-react";
+import { Search, Zap, Archive, Sparkles, Layout, X } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { useCardSelection } from "./CardSelectionContext";
 
 interface HermesKanbanToolbarProps {
   search: string;
@@ -26,6 +28,10 @@ interface HermesKanbanToolbarProps {
   boards?: Array<{ slug: string; name: string }>;
   activeBoard?: string;
   onBoardChange?: (slug: string) => void;
+  /** Number of currently selected cards. */
+  selectedCount?: number;
+  /** Clears card selection. */
+  onClearSelection?: () => void;
 }
 
 const STATUS_OPTIONS = [
@@ -56,9 +62,27 @@ export default function HermesKanbanToolbar({
   boards,
   activeBoard,
   onBoardChange,
+  selectedCount = 0,
+  onClearSelection,
 }: HermesKanbanToolbarProps) {
+  const { clearSelection: clearCtx } = useCardSelection();
+  const handleClear = onClearSelection ?? clearCtx;
   return (
     <div className="flex items-center gap-3 flex-wrap">
+      {/* Selection count + clear */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-neon-cyan/10 border border-neon-cyan/30 rounded-lg text-sm font-mono text-neon-cyan shrink-0">
+          <span>{selectedCount} selected</span>
+          <button
+            onClick={handleClear}
+            className="w-4 h-4 flex items-center justify-center rounded hover:bg-neon-cyan/20 text-neon-cyan/60 hover:text-neon-cyan transition-colors"
+            title="Clear selection"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       {/* Board switcher */}
       {boards && boards.length > 0 && onBoardChange && (
         <div className="flex items-center gap-1.5">

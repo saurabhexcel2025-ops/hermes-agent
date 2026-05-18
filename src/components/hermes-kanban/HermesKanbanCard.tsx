@@ -39,6 +39,11 @@ interface HermesKanbanCardProps {
   runCount?: number;
   /** Index within the column for drag ordering. */
   _index?: number;
+  /** Whether this card is currently selected. */
+  isSelected?: boolean;
+  /** Called when the checkbox is toggled. Cards stop propagation so clicks on the
+   *  checkbox do NOT open the drawer. */
+  onToggleSelect?: () => void;
 }
 
 const priorityColors: Record<number, string> = {
@@ -68,6 +73,8 @@ export default function HermesKanbanCard({
   commentCount,
   runCount,
   _index = 0,
+  isSelected = false,
+  onToggleSelect,
 }: HermesKanbanCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const shortId = task.id.slice(0, 8);
@@ -110,11 +117,24 @@ export default function HermesKanbanCard({
         hover:bg-white/10
         ${isBlocked ? "border-neon-red/30" : "border-white/10 hover:border-white/20"}
         ${hasFailures ? "ring-1 ring-neon-orange/40" : ""}
+        ${isSelected ? "border-neon-cyan/60 bg-neon-cyan/5 ring-1 ring-neon-cyan/30" : ""}
       `}
     >
-      {/* Top row: ID, priority, warnings */}
+      {/* Top row: checkbox, ID, priority, warnings */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
+          {/* Selection checkbox */}
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              onClick={(e) => e.stopPropagation()}
+              className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-neon-cyan cursor-pointer
+                focus:ring-neon-cyan/40 focus:ring-1 focus:outline-none
+                accent-neon-cyan shrink-0 mt-0.5"
+            />
+          )}
           <span className="text-[10px] font-mono text-white/30 uppercase tracking-wider shrink-0">
             #{shortId}
           </span>

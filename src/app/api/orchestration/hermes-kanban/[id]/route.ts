@@ -36,7 +36,7 @@ export async function GET(
   }
 }
 
-/** PATCH /api/orchestration/hermes-kanban/[id] — edit task result/summary/metadata. */
+/** PATCH /api/orchestration/hermes-kanban/[id] — edit task result/summary/metadata/title/body. */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -47,9 +47,23 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { result, summary, metadata } = body;
+    const { result, summary, metadata, title, body: taskBody, status } = body;
 
-    await bridge.editTask(id, { result, summary, metadata });
+    // Title and body updates go through direct SQLite write (metadata-only, state-safe)
+    if (title !== undefined || taskBody !== undefined) {
+      bridge.updateTaskMeta(id, { title, body: taskBody });
+    }
+
+    // Status updates for pre-dispatcher transitions (triage/todo/ready)
+    if (status !== undefined) {
+      bridge.updateTaskStatus(id, status);
+    }
+
+    // Result/summary/metadata go through CLI edit
+    if (result !== undefined || summary !== undefined || metadata !== undefined) {
+      await bridge.editTask(id, { result, summary, metadata });
+    }
+
     return NextResponse.json({ data: { id, updated: true } });
   } catch (error) {
     return handleError(error, `PATCH [id] ${(await params).id}`);

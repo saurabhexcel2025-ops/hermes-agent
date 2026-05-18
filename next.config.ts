@@ -8,7 +8,17 @@ const extraOrigins = (process.env.CH_ALLOWED_DEV_ORIGINS || "")
   .map((s) => s.trim())
   .filter(Boolean)
   // Strip scheme prefix — Next.js allowedDevOrigins expects bare host:port, not full URLs
-  .map((s) => s.replace(/^https?:\/\//, ""));
+  .map((s) => s.replace(/^https?:\/\//, ""))
+  // Also add bare host without port (HMR WebSocket connections arrive without port)
+  .flatMap((s) => {
+    const results = [s];
+    const [host] = s.split(":");
+    // If the entry had a port and the bare host isn't already in the list
+    if (s !== host && host) {
+      results.push(host);
+    }
+    return results;
+  });
 
 const nextConfig: NextConfig = {
   experimental: {

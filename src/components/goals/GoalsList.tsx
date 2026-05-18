@@ -296,15 +296,17 @@ export default function GoalsList({
             const StatusIcon = STATUS_ICONS[goal.status] || PlayCircle;
             const cardStyle = STATUS_BG[goal.status] || STATUS_BG.active;
             const barColor = PROGRESS_BAR_COLORS[goal.status] || PROGRESS_BAR_COLORS.active;
-            // Approximate progress based on status for list view
+            // Use actual progress_pct from API, fallback to status-based estimate
             const approxProgress =
-              goal.status === "completed"
-                ? 100
-                : goal.status === "in_progress"
-                  ? 50
-                  : goal.status === "archived"
-                    ? 100
-                    : 0;
+              typeof goal.progress_pct === "number"
+                ? goal.progress_pct
+                : goal.status === "completed"
+                  ? 100
+                  : goal.status === "in_progress"
+                    ? 50
+                    : goal.status === "archived"
+                      ? 100
+                      : 0;
 
             return (
               <button

@@ -21,6 +21,8 @@ export interface Goal {
   created_at: number;
   updated_at: number;
   completed_at: number | null;
+  /** Computed progress percentage 0-100, always present in list results. */
+  progress_pct: number;
 }
 
 export interface GoalCheckpoint {

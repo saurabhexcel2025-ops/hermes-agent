@@ -9,6 +9,7 @@
 import { useState, useCallback } from "react";
 import { Plus, X, Check, Sparkles } from "lucide-react";
 import HermesKanbanCard from "./HermesKanbanCard";
+import { useCardSelection } from "./CardSelectionContext";
 
 interface KanbanTask {
   id: string;
@@ -34,6 +35,8 @@ interface HermesKanbanColumnProps {
   onCreateCard: (status: string, title: string) => void;
   onDropCard?: (taskId: string, newStatus: string) => void;
   onSpecifyAll?: (status: string) => void;
+  /** Whether selection mode is active (board has any selected cards). */
+  selectionActive?: boolean;
 }
 
 function textToBorder(textClass: string): string {
@@ -54,7 +57,9 @@ export default function HermesKanbanColumn({
   onCreateCard,
   onDropCard,
   onSpecifyAll,
+  selectionActive = false,
 }: HermesKanbanColumnProps) {
+  const { isSelected, toggleCard, selectAll } = useCardSelection();
   const [showInlineInput, setShowInlineInput] = useState(false);
   const [inlineTitle, setInlineTitle] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
@@ -105,6 +110,22 @@ export default function HermesKanbanColumn({
   const borderClass = textToBorder(color);
   const isTriage = status === "triage";
 
+  // Select-all state: checked if all visible tasks selected, indeterminate if some
+  const allIds = tasks.map((t) => t.id);
+  const selectedCount = allIds.filter((id) => isSelected(id)).length;
+  const selectAllChecked = tasks.length > 0 && selectedCount === tasks.length;
+  const selectAllIndeterminate = selectedCount > 0 && selectedCount < tasks.length;
+
+  const handleSelectAllChange = () => {
+    if (selectAllChecked) {
+      // Deselect all in this column: toggle each one off
+      allIds.forEach((id) => { if (isSelected(id)) toggleCard(id); });
+    } else {
+      // Select all in this column
+      selectAll(allIds);
+    }
+  };
+
   return (
     <div
       onDragOver={handleDragOver}
@@ -127,6 +148,19 @@ export default function HermesKanbanColumn({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          {/* Select-all checkbox — shown when selection is active */}
+          {(selectionActive || selectedCount > 0) && tasks.length > 0 && (
+            <input
+              type="checkbox"
+              checked={selectAllChecked}
+              ref={(el) => { if (el) el.indeterminate = selectAllIndeterminate; }}
+              onChange={handleSelectAllChange}
+              className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-neon-cyan cursor-pointer
+                focus:ring-neon-cyan/40 focus:ring-1 focus:outline-none
+                accent-neon-cyan shrink-0"
+              title={`Select all ${label} tasks`}
+            />
+          )}
           {/* Specify all button — triage column only */}
           {onSpecifyAll && isTriage && tasks.length > 0 && (
             <button
@@ -195,6 +229,8 @@ export default function HermesKanbanColumn({
               key={task.id}
               task={task}
               onClick={() => onCardClick(task)}
+              isSelected={isSelected(task.id)}
+              onToggleSelect={() => toggleCard(task.id)}
             />
           ))
         )}

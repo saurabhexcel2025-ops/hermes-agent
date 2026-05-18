@@ -20,6 +20,14 @@ import HermesKanbanToolbar from "@/components/hermes-kanban/HermesKanbanToolbar"
 import HermesKanbanDrawer from "@/components/hermes-kanban/HermesKanbanDrawer";
 import HermesKanbanCreateModal from "@/components/hermes-kanban/HermesKanbanCreateModal";
 import HermesKanbanEmptyState from "@/components/hermes-kanban/HermesKanbanEmptyState";
+import {
+  CardSelectionProvider,
+  useCardSelection,
+} from "@/components/hermes-kanban/CardSelectionContext";
+import {
+  BatchActionToolbar,
+  type BatchOperationPayload,
+} from "@/components/hermes-kanban/BatchActionToolbar";
 
 interface KanbanTask {
   id: string;
@@ -63,7 +71,7 @@ interface BoardOption {
   name: string;
 }
 
-export default function HermesKanbanPage() {
+function KanbanBoardContent() {
   const { showToast } = useToast();
 
   // ── State ──────────────────────────────────────────────
@@ -81,6 +89,16 @@ export default function HermesKanbanPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+
+  // Batch action state
+  const [batchLoading, setBatchLoading] = useState(false);
+
+  // Must be called at component top-level (React hooks rule). Store in ref so
+  // handleBatchAction (declared below) can reference it without TDZ.
+  const { selectedIds, clearSelectionRef } = (() => {
+    const ctx = useCardSelection();
+    return { selectedIds: ctx.selectedIds, clearSelectionRef: { current: ctx.clearSelection } };
+  })();
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -193,10 +211,12 @@ export default function HermesKanbanPage() {
         // Hermes CLI only supports --triage, no --status flag.
         // Triage -> lands in triage column; all others -> lands in "ready" (CLI default)
         const landed = status === "triage" ? "triage" : "ready";
-        const hint = status !== "triage" && status !== "ready"
-          ? ` (use drawer to move to ${status})`
-          : "";
-        showToast(`Task created in ${landed}${hint}`, "success");
+        const needsMove = status !== "triage" && status !== "ready";
+        if (needsMove) {
+          showToast(`Task created in ${landed} — open the drawer to set status to ${status}`, "success");
+        } else {
+          showToast(`Task created in ${landed}`, "success");
+        }
         fetchTasks();
       }
     } catch {
@@ -212,15 +232,45 @@ export default function HermesKanbanPage() {
     );
 
     try {
-      // Map status transitions to CLI actions via the [id] PATCH route
-      const res = await fetch(`/api/orchestration/hermes-kanban/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: newStatus }),
-      });
-      if (!res.ok) {
-        showToast("Failed to move task", "error");
-        fetchTasks(); // revert
+      const base = `/api/orchestration/hermes-kanban/${taskId}`;
+      let res: Response | null = null;
+
+      if (newStatus === "done" || newStatus === "completed") {
+        res = await fetch(`${base}/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } else if (newStatus === "blocked") {
+        res = await fetch(`${base}/block`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "Moved via drag-and-drop" }),
+        });
+      } else if (newStatus === "archived") {
+        res = await fetch(base, { method: "DELETE" });
+      } else if (newStatus === "triage" || newStatus === "todo" || newStatus === "ready") {
+        // Pre-dispatcher statuses: update directly via PATCH status endpoint
+        res = await fetch(base, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+        });
+      } else if (newStatus === "running") {
+        // Don't allow manual transition to running (dispatcher handles it)
+        showToast("Use the dispatcher to put tasks in Running", "info");
+        fetchTasks();
+        return;
+      } else {
+        showToast(`Unknown status: ${newStatus}`, "info");
+        fetchTasks();
+        return;
+      }
+
+      if (!res || !res.ok) {
+        const json = res ? await res.json().catch(() => ({})) : {};
+        showToast(json.error || `Failed to move to ${newStatus}`, "error");
+        fetchTasks(); // revert optimistic update
       }
     } catch {
       fetchTasks(); // revert on error
@@ -272,6 +322,68 @@ export default function HermesKanbanPage() {
     fetchTasks();
   }, [showToast, fetchTasks]);
 
+  // ── Batch card actions ────────────────────────────────
+  const handleBatchAction = useCallback(
+    async (payload: BatchOperationPayload) => {
+      setBatchLoading(true);
+      try {
+        const body: Record<string, unknown> = {
+          cardIds: payload.selectedIds,
+          operation:
+            payload.type === "change-status"
+              ? { type: "statusChange", status: payload.newStatus }
+              : payload.type === "archive"
+                ? { type: "archive" }
+                : { type: "assign", userId: payload.assigneeId },
+        };
+
+        const res = await fetch("/api/orchestration/hermes-kanban/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          showToast(json.error || "Batch operation failed", "error");
+          return;
+        }
+
+        const { successCount, failureCount, errors } = json as {
+          successCount: number;
+          failureCount: number;
+          errors: Array<{ cardId: string; reason: string }>;
+        };
+
+        if (failureCount === 0) {
+          showToast(`${successCount} card${successCount !== 1 ? "s" : ""} updated`, "success");
+        } else if (successCount === 0) {
+          showToast(`Failed: ${errors.map((e) => e.reason).join("; ")}`, "error");
+        } else {
+          // partial success — show detailed per-card errors
+          const errorSummary = errors
+            .slice(0, 3)
+            .map((e) => `${e.cardId}: ${e.reason}`)
+            .join("; ");
+          const more = errors.length > 3 ? ` (+${errors.length - 3} more)` : "";
+          showToast(
+            `${successCount} updated, ${failureCount} failed: ${errorSummary}${more}`,
+            "error"
+          );
+        }
+
+        clearSelectionRef.current();
+        fetchTasks();
+      } catch {
+        showToast("Network error — please try again", "error");
+      } finally {
+        setBatchLoading(false);
+      }
+    },
+    [showToast, fetchTasks, clearSelectionRef]
+  );
+
   // ── Local search filter ───────────────────────────────
   const filteredTasks = useMemo(() => {
     if (!searchQuery) return tasks;
@@ -284,6 +396,15 @@ export default function HermesKanbanPage() {
         (t.assignee && t.assignee.toLowerCase().includes(q)),
     );
   }, [tasks, searchQuery]);
+
+  const selectedCount = selectedIds.size;
+
+  // Convert assignee profile names to User objects for the BatchActionToolbar
+  const batchUsers = assignees.map((profile) => ({
+    id: profile,
+    name: profile,
+    email: `${profile}@local`,
+  }));
 
   return (
     <div className="flex flex-col h-full">
@@ -323,8 +444,23 @@ export default function HermesKanbanPage() {
           boards={boards}
           activeBoard={activeBoard}
           onBoardChange={handleBoardChange}
+          selectedCount={selectedCount}
+          onClearSelection={clearSelectionRef.current}
         />
       </div>
+
+      {/* Batch action toolbar — shown when cards are selected */}
+      {selectedCount > 0 && (
+        <div className="px-6 pt-3">
+          <BatchActionToolbar
+            selectedIds={Array.from(selectedIds)}
+            users={batchUsers}
+            onClearSelection={clearSelectionRef.current}
+            onBatchAction={handleBatchAction}
+            loading={batchLoading}
+          />
+        </div>
+      )}
 
       {/* Board */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -358,5 +494,13 @@ export default function HermesKanbanPage() {
         onCreate={handleCreateTask}
       />
     </div>
+  );
+}
+
+export default function HermesKanbanPage() {
+  return (
+    <CardSelectionProvider>
+      <KanbanBoardContent />
+    </CardSelectionProvider>
   );
 }

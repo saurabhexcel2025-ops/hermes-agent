@@ -137,11 +137,27 @@ export default function HermesKanbanDrawer({
   const apiCall = useCallback(
     async (action: string, extra: Record<string, unknown> = {}) => {
       if (!task) return;
+      const base = `/api/orchestration/hermes-kanban/${task.id}`;
+
+      // Map actions to the correct sub-endpoint
+      const routes: Record<string, { method: string; url: string; body?: Record<string, unknown> }> = {
+        comment: { method: "POST", url: `${base}/comment`, body: { text: extra.text as string } },
+        complete: { method: "POST", url: `${base}/complete`, body: { summary: extra.summary, metadata: extra.metadata, createdCards: extra.createdCards } },
+        block: { method: "POST", url: `${base}/block`, body: { reason: extra.reason as string } },
+        unblock: { method: "POST", url: `${base}/block`, body: { action: "unblock" } },
+        archive: { method: "DELETE", url: base },
+        assign: { method: "POST", url: `${base}/assign`, body: { assignee: extra.assignee as string, reclaim: extra.reclaim as boolean } },
+        link: { method: "POST", url: `${base}/link`, body: { parentId: extra.parentId as string, childId: extra.childId as string } },
+      };
+
+      const route = routes[action];
+      if (!route) return;
+
       try {
-        const res = await fetch("/api/orchestration/hermes-kanban", {
-          method: "POST",
+        const res = await fetch(route.url, {
+          method: route.method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, taskId: task.id, ...extra }),
+          ...(route.body ? { body: JSON.stringify(route.body) } : {}),
         });
         if (res.ok) onUpdate(task.id, {});
       } catch {
@@ -208,22 +224,20 @@ export default function HermesKanbanDrawer({
       setEditTitle(false);
       return;
     }
-    // Patch the task via edit
+    // Patch the task via the [id] PATCH route — title update is metadata-only, state-safe
     try {
       const res = await fetch(`/api/orchestration/hermes-kanban/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "edit",
-          result: task.result,
-          summary: task.summary,
+          title: titleBuffer.trim(),
         }),
       });
       if (res.ok) onUpdate(task.id, {});
+      setEditTitle(false);
     } catch {
       // silently fail
     }
-    setEditTitle(false);
   }, [task, titleBuffer, onUpdate]);
 
   const handleBlock = useCallback(async () => {
