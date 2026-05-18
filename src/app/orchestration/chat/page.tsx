@@ -79,11 +79,16 @@ export default function ChatPage() {
   useEffect(() => {
     const checkGateway = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8642/v1/models", {
+        const res = await fetch("/api/gateway/health", {
           method: "GET",
           signal: AbortSignal.timeout(3000),
         });
-        setGatewayOnline(res.ok);
+        if (res.ok) {
+          const json = await res.json();
+          setGatewayOnline(json.data?.online === true);
+        } else {
+          setGatewayOnline(false);
+        }
       } catch {
         setGatewayOnline(false);
       }
