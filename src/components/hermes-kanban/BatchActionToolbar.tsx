@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // Batch Action Toolbar — Floating action bar shown when cards
-// are selected. Change Status, Archive, and Assign actions are
-// wired to the POST /api/cards/batch endpoint.
+// are selected. Change Status, Archive, and Assign actions.
 // ═══════════════════════════════════════════════════════════════
 
 "use client";
@@ -45,50 +44,13 @@ function StatusDropdown({
   onSelect: (status: CardStatus) => void;
   onClose: () => void;
 }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const dropdownRef = { current: null as HTMLDivElement | null };
-
   return (
-    <div
-      ref={dropdownRef}
-      style={{
-        position: "absolute",
-        top: "100%",
-        left: 0,
-        marginTop: "4px",
-        background: "white",
-        border: "1px solid #e5e7eb",
-        borderRadius: "8px",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-        minWidth: "160px",
-        zIndex: 1000,
-        overflow: "hidden",
-      }}
-    >
+    <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-white/10 rounded-lg shadow-xl min-w-[160px] z-[1000] overflow-hidden">
       {STATUS_OPTIONS.map((option) => (
         <button
           key={option.value}
-          onClick={() => {
-            setIsOpen(false);
-            onSelect(option.value);
-          }}
-          style={{
-            display: "block",
-            width: "100%",
-            padding: "10px 16px",
-            textAlign: "left",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontSize: "14px",
-            color: "#374151",
-          }}
-          onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLButtonElement).style.background = "#f3f4f6")
-          }
-          onMouseLeave={(e) =>
-            ((e.currentTarget as HTMLButtonElement).style.background = "none")
-          }
+          onClick={() => { onClose(); onSelect(option.value); }}
+          className="block w-full px-4 py-2.5 text-left text-sm text-white/80 hover:bg-white/10 transition-colors border-none cursor-pointer"
         >
           {option.label}
         </button>
@@ -110,80 +72,31 @@ function ArchiveConfirmDialog({
 }) {
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 2000,
-      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000]"
     >
       <div
         role="dialog"
         aria-modal="true"
-        style={{
-          background: "white",
-          borderRadius: "12px",
-          padding: "24px",
-          maxWidth: "400px",
-          width: "90%",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-        }}
+        className="bg-gray-900 border border-white/10 rounded-xl p-6 max-w-[400px] w-[90%] shadow-2xl"
       >
-        <h2
-          style={{
-            margin: "0 0 12px 0",
-            fontSize: "18px",
-            fontWeight: 600,
-            color: "#111827",
-          }}
-        >
+        <h2 className="m-0 mb-3 text-lg font-semibold text-white">
           Archive {selectedCount} {selectedCount === 1 ? "item" : "items"}?
         </h2>
-        <p
-          style={{
-            margin: "0 0 24px 0",
-            fontSize: "14px",
-            color: "#6b7280",
-            lineHeight: 1.5,
-          }}
-        >
+        <p className="m-0 mb-6 text-sm text-white/50 leading-relaxed">
           Archived items will be removed from your board. You can restore them
           from the archive later.
         </p>
-        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+        <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            style={{
-              padding: "8px 16px",
-              fontSize: "14px",
-              fontWeight: 500,
-              border: "1px solid #e5e7eb",
-              borderRadius: "6px",
-              background: "white",
-              color: "#374151",
-              cursor: "pointer",
-            }}
+            className="px-4 py-2 text-sm font-medium border border-white/20 rounded-lg bg-transparent text-white/70 hover:bg-white/10 cursor-pointer transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            style={{
-              padding: "8px 16px",
-              fontSize: "14px",
-              fontWeight: 500,
-              border: "none",
-              borderRadius: "6px",
-              background: "#ef4444",
-              color: "white",
-              cursor: "pointer",
-            }}
+            className="px-4 py-2 text-sm font-medium border-none rounded-lg bg-neon-red text-white hover:bg-neon-red/80 cursor-pointer transition-colors"
           >
             Archive
           </button>
@@ -215,39 +128,15 @@ function UserPickerModal({
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 2000,
-      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000]"
     >
       <div
         role="dialog"
         aria-modal="true"
-        style={{
-          background: "white",
-          borderRadius: "12px",
-          padding: "24px",
-          maxWidth: "480px",
-          width: "90%",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-        }}
+        className="bg-gray-900 border border-white/10 rounded-xl p-6 max-w-[480px] w-[90%] shadow-2xl"
       >
-        <h2
-          style={{
-            margin: "0 0 16px 0",
-            fontSize: "18px",
-            fontWeight: 600,
-            color: "#111827",
-          }}
-        >
+        <h2 className="m-0 mb-4 text-lg font-semibold text-white">
           Assign to user
         </h2>
 
@@ -256,36 +145,12 @@ function UserPickerModal({
           placeholder="Search by name or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            fontSize: "14px",
-            border: "1px solid #e5e7eb",
-            borderRadius: "8px",
-            marginBottom: "16px",
-            boxSizing: "border-box",
-            outline: "none",
-          }}
+          className="w-full px-3 py-2.5 text-sm bg-white/5 border border-white/10 rounded-lg mb-4 text-white placeholder-white/30 outline-none focus:border-neon-cyan/50 transition-colors box-border"
         />
 
-        <div
-          style={{
-            maxHeight: "300px",
-            overflowY: "auto",
-            border: "1px solid #e5e7eb",
-            borderRadius: "8px",
-            marginBottom: "16px",
-          }}
-        >
+        <div className="max-h-[300px] overflow-y-auto border border-white/10 rounded-lg mb-4">
           {filteredUsers.length === 0 ? (
-            <div
-              style={{
-                padding: "24px",
-                textAlign: "center",
-                color: "#6b7280",
-                fontSize: "14px",
-              }}
-            >
+            <div className="p-6 text-center text-white/40 text-sm">
               No users found
             </div>
           ) : (
@@ -293,72 +158,28 @@ function UserPickerModal({
               <div
                 key={user.id}
                 onClick={() => setSelectedUserId(user.id)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "12px",
-                  cursor: "pointer",
-                  borderBottom: "1px solid #f3f4f6",
-                  background:
-                    selectedUserId === user.id ? "#eff6ff" : "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedUserId !== user.id)
-                    (e.currentTarget as HTMLDivElement).style.background =
-                      "#f9fafb";
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedUserId !== user.id)
-                    (e.currentTarget as HTMLDivElement).style.background =
-                      "transparent";
-                }}
+                className={`flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-white/5 last:border-b-0 transition-colors ${
+                  selectedUserId === user.id
+                    ? "bg-neon-cyan/10"
+                    : "hover:bg-white/5"
+                }`}
               >
-                <div
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "50%",
-                    background: "#3b82f6",
-                    color: "white",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    flexShrink: 0,
-                  }}
-                >
+                <div className="w-9 h-9 rounded-full bg-neon-purple text-white flex items-center justify-center text-sm font-medium shrink-0">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#111827" }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate">
                     {user.name}
                   </div>
-                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                  <div className="text-xs text-white/40 truncate">
                     {user.email}
                   </div>
                 </div>
                 {selectedUserId === user.id && (
-                  <div
-                    style={{
-                      marginLeft: "auto",
-                      width: "20px",
-                      height: "20px",
-                      borderRadius: "50%",
-                      background: "#3b82f6",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
+                  <div className="w-5 h-5 rounded-full bg-neon-cyan flex items-center justify-center shrink-0">
                     <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      stroke="white"
-                      strokeWidth="2"
+                      width="12" height="12" viewBox="0 0 12 12"
+                      fill="none" stroke="white" strokeWidth="2"
                     >
                       <polyline points="2,6 5,9 10,3" />
                     </svg>
@@ -369,35 +190,21 @@ function UserPickerModal({
           )}
         </div>
 
-        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+        <div className="flex gap-3 justify-end">
           <button
             onClick={onClose}
-            style={{
-              padding: "8px 16px",
-              fontSize: "14px",
-              fontWeight: 500,
-              border: "1px solid #e5e7eb",
-              borderRadius: "6px",
-              background: "white",
-              color: "#374151",
-              cursor: "pointer",
-            }}
+            className="px-4 py-2 text-sm font-medium border border-white/20 rounded-lg bg-transparent text-white/70 hover:bg-white/10 cursor-pointer transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => selectedUserId && onSelect(selectedUserId)}
             disabled={!selectedUserId}
-            style={{
-              padding: "8px 16px",
-              fontSize: "14px",
-              fontWeight: 500,
-              border: "none",
-              borderRadius: "6px",
-              background: selectedUserId ? "#3b82f6" : "#9ca3af",
-              color: "white",
-              cursor: selectedUserId ? "pointer" : "not-allowed",
-            }}
+            className={`px-4 py-2 text-sm font-medium border-none rounded-lg transition-colors ${
+              selectedUserId
+                ? "bg-neon-cyan text-white hover:bg-neon-cyan/80 cursor-pointer"
+                : "bg-white/10 text-white/30 cursor-not-allowed"
+            }`}
           >
             Assign
           </button>
@@ -458,61 +265,26 @@ export function BatchActionToolbar({
     });
   }
 
-  const btnBase: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: "8px 12px",
-    fontSize: "13px",
-    fontWeight: 500,
-    border: "1px solid rgba(255,255,255,0.2)",
-    borderRadius: "6px",
-    background: loading ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.1)",
-    color: loading ? "rgba(255,255,255,0.4)" : "white",
-    cursor: loading ? "not-allowed" : "pointer",
-    transition: "background 0.15s, color 0.15s",
-  };
-
   return (
     <>
       <div
         role="toolbar"
         aria-label="Batch actions"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          padding: "12px 16px",
-          background: "#1f2937",
-          borderRadius: "10px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-        }}
+        className="flex items-center gap-2 px-4 py-3 bg-gray-800 rounded-xl shadow-lg border border-white/10"
       >
-        <span
-          style={{
-            fontSize: "13px",
-            fontWeight: 600,
-            color: "white",
-            marginRight: "4px",
-          }}
-        >
+        <span className="text-sm font-semibold text-white mr-1 flex items-center gap-1.5">
           {loading && (
-            <Loader2
-              className="inline w-3 h-3 mr-1.5 animate-spin"
-              style={{ verticalAlign: "middle" }}
-            />
+            <Loader2 className="inline w-3 h-3 animate-spin" style={{ verticalAlign: "middle" }} />
           )}
           {selectedIds.length} selected
         </span>
 
         {/* Change Status */}
-        <div style={{ position: "relative" }}>
+        <div className="relative">
           <button
-            onClick={() =>
-              !loading && setActiveDropdown(activeDropdown === "status" ? null : "status")
-            }
+            onClick={() => !loading && setActiveDropdown(activeDropdown === "status" ? null : "status")}
             disabled={loading}
-            style={btnBase}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-white/20 rounded-lg bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronDown className="w-3 h-3" />
             Change Status
@@ -529,7 +301,7 @@ export function BatchActionToolbar({
         <button
           onClick={() => !loading && setShowArchiveConfirm(true)}
           disabled={loading}
-          style={btnBase}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-white/20 rounded-lg bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <Archive className="w-3.5 h-3.5" />
           Archive
@@ -539,24 +311,20 @@ export function BatchActionToolbar({
         <button
           onClick={() => !loading && setShowUserPicker(true)}
           disabled={loading}
-          style={btnBase}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-white/20 rounded-lg bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <User className="w-3.5 h-3.5" />
           Assign
         </button>
 
-        <div style={{ flex: 1 }} />
+        <div className="flex-1" />
 
         {/* Clear */}
         <button
           onClick={onClearSelection}
           disabled={loading}
           aria-label="Clear selection"
-          style={{
-            ...btnBase,
-            background: "transparent",
-            border: "none",
-          }}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-transparent border-none text-white/50 hover:text-white/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <X className="w-3 h-3" />
           Clear

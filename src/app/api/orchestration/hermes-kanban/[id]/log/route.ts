@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-// Hermes Kanban API — Task context viewer
+// Hermes Kanban API — Worker log viewer
 // ═══════════════════════════════════════════════════════════════
-// GET /api/orchestration/hermes-kanban/[id]/context
+// GET /api/orchestration/hermes-kanban/[id]/log
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +17,7 @@ function handleError(error: unknown, context: string) {
   );
 }
 
-/** GET /api/orchestration/hermes-kanban/[id]/context — Full worker context for a task. */
+/** GET /api/orchestration/hermes-kanban/[id]/log — Worker execution log for a task. */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -27,9 +27,9 @@ export async function GET(
 
   try {
     const { id } = await params;
-    const context = await bridge.getTaskContext(id);
-    return NextResponse.json({ data: { context } });
+    const log = await bridge.getTaskLogs(id);
+    return NextResponse.json({ data: { log } });
   } catch (error) {
-    return handleError(error, `GET [id]/context ${(await params).id}`);
+    return handleError(error, `GET [id]/log ${(await params).id}`);
   }
 }

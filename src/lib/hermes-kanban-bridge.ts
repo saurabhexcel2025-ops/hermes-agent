@@ -341,6 +341,11 @@ export async function specifyTask(id: string): Promise<{ task_id: string }> {
   return (await hermesCli(["specify", id])) as { task_id: string };
 }
 
+/** Decompose (LLM-breakdown) a triage task into child tasks routed to specialist profiles. */
+export async function decomposeTask(id: string): Promise<{ task_id: string }> {
+  return (await hermesCli(["decompose", id])) as { task_id: string };
+}
+
 /** Add a comment to a task. */
 export async function addComment(taskId: string, text: string): Promise<void> {
   await hermesCliNoJson(["comment", taskId, shellEsc(text)]);
@@ -404,10 +409,23 @@ export async function archiveTask(id: string): Promise<void> {
   await hermesCliNoJson(["archive", id]);
 }
 
-/** Get task execution context (workspace, env, retry info). */
-export async function getTaskContext(id: string): Promise<Record<string, unknown>> {
-  // context command doesn't support --json, return empty record
-  return {};
+/** Get task execution context (title + body + parent results + comments) as raw text. */
+export async function getTaskContext(id: string): Promise<string> {
+  // context command doesn't support --json, capture stdout text directly
+  const { stdout } = await execAsync(
+    `hermes kanban context ${shellEsc(id)}`,
+    { timeout: 15000 },
+  );
+  return stdout.trim();
+}
+
+/** Get worker execution log for a task (from kanban/logs/). */
+export async function getTaskLogs(id: string): Promise<string> {
+  const { stdout } = await execAsync(
+    `hermes kanban log ${shellEsc(id)}`,
+    { timeout: 10000 },
+  );
+  return stdout.trim();
 }
 
 /** Get available assignees (profiles) with task counts. */

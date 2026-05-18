@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-// Hermes Kanban API — Task context viewer
+// Hermes Kanban API — Decompose a triage task (LLM breakdown)
 // ═══════════════════════════════════════════════════════════════
-// GET /api/orchestration/hermes-kanban/[id]/context
+// POST /api/orchestration/hermes-kanban/[id]/decompose
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,8 +17,8 @@ function handleError(error: unknown, context: string) {
   );
 }
 
-/** GET /api/orchestration/hermes-kanban/[id]/context — Full worker context for a task. */
-export async function GET(
+/** POST /api/orchestration/hermes-kanban/[id]/decompose — LLM-breakdown a triage task into child tasks. */
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -27,9 +27,9 @@ export async function GET(
 
   try {
     const { id } = await params;
-    const context = await bridge.getTaskContext(id);
-    return NextResponse.json({ data: { context } });
+    const result = await bridge.decomposeTask(id);
+    return NextResponse.json({ data: result });
   } catch (error) {
-    return handleError(error, `GET [id]/context ${(await params).id}`);
+    return handleError(error, `POST [id]/decompose ${(await params).id}`);
   }
 }

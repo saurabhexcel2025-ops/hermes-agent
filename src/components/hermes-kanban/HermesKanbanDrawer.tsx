@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   X, Send, Ban, Archive, Play, Link2, MessageSquare,
   Clock, AlertTriangle, Sparkles, RefreshCw, UserCheck, GitBranch,
-  Save,
+  Save, BookOpen, FileText,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { timeAgo, safeTimeAgo } from "@/lib/utils";
@@ -62,6 +62,7 @@ interface KanbanTaskDetail {
   claim_expires_at: number | null;
   workspace_kind: string | null;
   workspace_path: string | null;
+  current_run_id: number | null;
   comments: Comment[];
   parents: string[];
   children: string[];
@@ -117,6 +118,18 @@ export default function HermesKanbanDrawer({
 
   // Specify loading
   const [specifying, setSpecifying] = useState(false);
+  // Decompose loading
+  const [decomposing, setDecomposing] = useState(false);
+
+  // Context viewer state
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextData, setContextData] = useState<string | null>(null);
+  const [showContextModal, setShowContextModal] = useState(false);
+
+  // Log viewer state
+  const [logLoading, setLogLoading] = useState(false);
+  const [logData, setLogData] = useState<string | null>(null);
+  const [showLogModal, setShowLogModal] = useState(false);
 
   // Metadata viewer
   const [expandedRunMeta, setExpandedRunMeta] = useState<number | null>(null);
@@ -298,6 +311,66 @@ export default function HermesKanbanDrawer({
     setSpecifying(false);
   }, [task, specifying, onUpdate]);
 
+  const handleDecompose = useCallback(async () => {
+    if (!task || decomposing) return;
+    setDecomposing(true);
+    try {
+      const res = await fetch(
+        `/api/orchestration/hermes-kanban/${task.id}/decompose`,
+        { method: "POST" },
+      );
+      if (res.ok) {
+        // Re-fetch task detail after decompose completes
+        setTimeout(() => onUpdate(task.id, {}), 2000);
+      }
+    } catch {
+      // fail silently
+    }
+    setDecomposing(false);
+  }, [task, decomposing, onUpdate]);
+
+  const handleViewContext = useCallback(async () => {
+    if (!task || contextLoading) return;
+    setContextLoading(true);
+    setContextData(null);
+    setShowContextModal(true);
+    try {
+      const res = await fetch(
+        `/api/orchestration/hermes-kanban/${task.id}/context`,
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setContextData(json.data?.context || "No context available");
+      } else {
+        setContextData("Failed to load context");
+      }
+    } catch {
+      setContextData("Failed to load context");
+    }
+    setContextLoading(false);
+  }, [task, contextLoading]);
+
+  const handleViewLog = useCallback(async () => {
+    if (!task || logLoading) return;
+    setLogLoading(true);
+    setLogData(null);
+    setShowLogModal(true);
+    try {
+      const res = await fetch(
+        `/api/orchestration/hermes-kanban/${task.id}/log`,
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setLogData(json.data?.log || "No log available");
+      } else {
+        setLogData("Failed to load log");
+      }
+    } catch {
+      setLogData("Failed to load log");
+    }
+    setLogLoading(false);
+  }, [task, logLoading]);
+
   if (!task) return null;
 
   const shortId = task.id.slice(0, 8);
@@ -335,14 +408,24 @@ export default function HermesKanbanDrawer({
           </div>
           <div className="flex items-center gap-2">
             {isTriage && (
-              <button
-                onClick={handleSpecify}
-                disabled={specifying}
-                className="flex items-center gap-1 text-[10px] font-mono text-neon-purple bg-neon-purple/10 px-2 py-1 rounded hover:bg-neon-purple/20 disabled:opacity-50 transition-colors"
-              >
-                <Sparkles className="w-3 h-3" />
-                {specifying ? "Specifying..." : "Specify"}
-              </button>
+              <>
+                <button
+                  onClick={handleSpecify}
+                  disabled={specifying}
+                  className="flex items-center gap-1 text-[10px] font-mono text-neon-purple bg-neon-purple/10 px-2 py-1 rounded hover:bg-neon-purple/20 disabled:opacity-50 transition-colors"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  {specifying ? "Specifying..." : "Specify"}
+                </button>
+                <button
+                  onClick={handleDecompose}
+                  disabled={decomposing}
+                  className="flex items-center gap-1 text-[10px] font-mono text-neon-cyan bg-neon-cyan/10 px-2 py-1 rounded hover:bg-neon-cyan/20 disabled:opacity-50 transition-colors"
+                >
+                  <GitBranch className="w-3 h-3" />
+                  {decomposing ? "Decomposing..." : "Decompose"}
+                </button>
+              </>
             )}
             <button
               onClick={onClose}
@@ -475,6 +558,33 @@ export default function HermesKanbanDrawer({
               </Button>
             )}
           </div>
+
+          {/* Context & Log viewer buttons — available for non-triage, non-archived tasks */}
+          {!isTriage && !isArchived && (
+            <div className="flex items-center gap-2 flex-wrap border-t border-white/5 pt-3 mt-1">
+              <span className="text-xs font-mono text-white/30 uppercase tracking-wider mr-1">Debug:</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={BookOpen}
+                onClick={handleViewContext}
+                disabled={contextLoading}
+              >
+                {contextLoading ? "Loading..." : "Context"}
+              </Button>
+              {(task.current_run_id || (task.runs && task.runs.length > 0)) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={FileText}
+                  onClick={handleViewLog}
+                  disabled={logLoading}
+                >
+                  {logLoading ? "Loading..." : "View Log"}
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* Reassign input */}
           {showReassign && (
@@ -819,6 +929,60 @@ export default function HermesKanbanDrawer({
             <span>Created: {safeTimeAgo(task.created_at)}</span>
             <span>Updated: {safeTimeAgo(task.updated_at ?? task.created_at)}</span>
           </div>
+
+          {/* Context viewer modal */}
+          {showContextModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowContextModal(false)} />
+              <div className="relative w-[600px] max-w-[90vw] max-h-[80vh] bg-gray-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                  <span className="text-xs font-mono text-white/50 uppercase tracking-wider">Task Context</span>
+                  <button onClick={() => setShowContextModal(false)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="p-4 overflow-y-auto max-h-[calc(80vh-52px)]">
+                  {contextLoading ? (
+                    <div className="flex items-center gap-2 text-white/40">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span className="text-xs">Loading context...</span>
+                    </div>
+                  ) : (
+                    <pre className="text-xs text-white/70 font-mono whitespace-pre-wrap leading-relaxed">
+                      {contextData || "No context available"}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Log viewer modal */}
+          {showLogModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowLogModal(false)} />
+              <div className="relative w-[700px] max-w-[90vw] max-h-[80vh] bg-gray-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                  <span className="text-xs font-mono text-white/50 uppercase tracking-wider">Worker Log</span>
+                  <button onClick={() => setShowLogModal(false)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="p-4 overflow-y-auto max-h-[calc(80vh-52px)]">
+                  {logLoading ? (
+                    <div className="flex items-center gap-2 text-white/40">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span className="text-xs">Loading log...</span>
+                    </div>
+                  ) : (
+                    <pre className="text-xs text-white/70 font-mono whitespace-pre-wrap leading-relaxed">
+                      {logData || "No log available"}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

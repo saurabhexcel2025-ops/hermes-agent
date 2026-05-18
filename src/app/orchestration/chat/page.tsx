@@ -11,7 +11,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   MessageCircle, Send, Plus, Trash2,
-  Bot, User, Loader2,
+  Bot, User, Loader2, AlertTriangle,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
@@ -73,6 +73,26 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Gateway connectivity check
+  const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkGateway = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8642/v1/models", {
+          method: "GET",
+          signal: AbortSignal.timeout(3000),
+        });
+        setGatewayOnline(res.ok);
+      } catch {
+        setGatewayOnline(false);
+      }
+    };
+    checkGateway();
+    const id = setInterval(checkGateway, 30000);
+    return () => clearInterval(id);
+  }, []);
+
   // Get or create active session
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = useMemo(() => activeSession?.messages || [], [activeSession]);
@@ -108,6 +128,12 @@ export default function ChatPage() {
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || isStreaming || !activeSessionId) return;
+
+    // Don't send if gateway is confirmed offline
+    if (gatewayOnline === false) {
+      showToast("Gateway is offline — start it with: hermes gateway start", "error");
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: generateId(),
@@ -228,7 +254,7 @@ export default function ChatPage() {
     } finally {
       setIsStreaming(false);
     }
-  }, [input, isStreaming, activeSessionId, sessions, model, showToast]);
+  }, [input, isStreaming, activeSessionId, sessions, model, showToast, gatewayOnline]);
 
   // ── Keyboard shortcuts ────────────────────────────────
   const handleKeyDown = useCallback(
@@ -339,6 +365,25 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-24">
+                {/* Gateway offline banner */}
+                {gatewayOnline === false && (
+                  <div className="w-full max-w-md mb-6 p-4 bg-neon-red/10 border border-neon-red/20 rounded-lg text-left">
+                    <div className="flex items-center gap-2 text-neon-red mb-1">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm font-semibold">Gateway Offline</span>
+                    </div>
+                    <p className="text-xs text-white/60">
+                      The Hermes Gateway (port 8642) is not responding.
+                      Start it with: <code className="text-neon-cyan">hermes gateway start</code>
+                    </p>
+                  </div>
+                )}
+                {gatewayOnline === null && (
+                  <div className="flex items-center gap-2 mb-4">
+                    <Loader2 className="w-3 h-3 text-white/30 animate-spin" />
+                    <span className="text-xs text-white/30">Checking gateway connection...</span>
+                  </div>
+                )}
                 <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
                   <MessageCircle className="w-8 h-8 text-white/30" />
                 </div>
@@ -348,9 +393,11 @@ export default function ChatPage() {
                 <p className="text-sm text-white/40 mb-2 max-w-md">
                   Send a message to interact with your Hermes agent through the web interface.
                 </p>
-                <p className="text-xs text-white/20 font-mono">
-                  Connected via Gateway API Server at localhost:8642
-                </p>
+                {gatewayOnline !== false && (
+                  <p className="text-xs text-white/20 font-mono">
+                    Connected via Gateway API Server at localhost:8642
+                  </p>
+                )}
               </div>
             ) : (
               messages.map((msg) => (

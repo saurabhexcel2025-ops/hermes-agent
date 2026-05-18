@@ -146,6 +146,21 @@ export default function HermesKanbanColumn({
           <span className="text-xs font-mono text-white/30 bg-white/5 px-1.5 py-0.5 rounded">
             {tasks.length}
           </span>
+          {/* WIP limit indicator — configurable defaults */}
+          {(() => {
+            const wipLimit = status === "running" ? 5 : status === "blocked" ? 8 : null;
+            if (wipLimit === null || tasks.length === 0) return null;
+            const isOverWip = tasks.length > wipLimit;
+            return (
+              <span className={`text-[10px] font-mono ml-1 px-1 py-0.5 rounded ${
+                isOverWip
+                  ? "bg-neon-red/20 text-neon-red"
+                  : "bg-white/5 text-white/20"
+              }`}>
+                {tasks.length}/{wipLimit}
+              </span>
+            );
+          })()}
         </div>
         <div className="flex items-center gap-1">
           {/* Select-all checkbox — shown when selection is active */}
@@ -171,13 +186,16 @@ export default function HermesKanbanColumn({
               <Sparkles className="w-3 h-3" />
             </button>
           )}
-          <button
-            onClick={() => setShowInlineInput(true)}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-white/30 hover:text-white/60 transition-colors"
-            title={`Create task in ${label}`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
+          {/* Inline create — only for statuses that the Hermes CLI actually supports at creation */}
+          {(status === "triage" || status === "todo" || status === "ready") && (
+            <button
+              onClick={() => setShowInlineInput(true)}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-white/30 hover:text-white/60 transition-colors"
+              title={`Create task in ${label}`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
