@@ -612,26 +612,6 @@ export default function ChatPage() {
     [handleSend],
   );
 
-  // ── Clear session messages ─────────────────────────────────
-  const handleClearSession = useCallback(() => {
-    if (!activeSessionId) return;
-    // Kill any active stream before clearing
-    abortControllerRef.current?.abort();
-    const session = sessions.find((s) => s.id === activeSessionId);
-    if (!session || session.messages.length === 0) return;
-
-    const count = session.messages.length;
-
-    updateSession(activeSessionId, (s) => ({
-      ...s,
-      messages: [],
-      title: "New Chat",
-      updated_at: Date.now(),
-    }));
-
-    showToast(`${count} message${count !== 1 ? "s" : ""} cleared`, "info");
-  }, [activeSessionId, sessions, showToast, updateSession]);
-
   // ── Copy code block handler ────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -897,18 +877,8 @@ export default function ChatPage() {
                   ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
                 }}
               />
-              <div className="flex items-center gap-1">
-                {messages.length > 0 && (
-                  <button
-                    onClick={handleClearSession}
-                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white/30 hover:text-neon-red hover:border-neon-red/30 transition-colors"
-                    title="Clear conversation"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  onClick={isStreaming ? () => abortControllerRef.current?.abort() : handleSend}
+              <button
+                onClick={isStreaming ? () => abortControllerRef.current?.abort() : handleSend}
                   disabled={!input.trim() && !isStreaming}
                   className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${
                     isStreaming
@@ -922,7 +892,6 @@ export default function ChatPage() {
                     <Send className="w-4 h-4" />
                   )}
                 </button>
-              </div>
             </div>
           </div>
         </div>
