@@ -67,15 +67,15 @@ export default function MissionsList({ vm }: MissionsListProps) {
   const categoryMap = buildCategoryMap(categories);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div className="w-full max-w-none px-6 py-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Total", value: missions.length, border: "border-white/10", text: "text-white" },
           { label: "Active", value: missionCounts.active, border: "border-neon-orange/20", text: "text-neon-orange" },
           { label: "Completed", value: missionCounts.completed, border: "border-neon-green/20", text: "text-neon-green" },
           { label: "Failed", value: missionCounts.failed, border: "border-red-500/20", text: "text-red-400" },
         ].map((stat) => (
-          <div key={stat.label} className={`rounded-lg border ${stat.border} bg-dark-900/50 p-3`}>
+          <div key={stat.label} className={`rounded-lg border ${stat.border} bg-dark-900/50 p-4`}>
             <div className={`text-[10px] font-mono ${stat.text} uppercase`}>
               {stat.label}
             </div>
@@ -88,7 +88,7 @@ export default function MissionsList({ vm }: MissionsListProps) {
 
       {!showCreate && (
         <div className="mb-6" data-testid="missions-quick-templates">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap justify-between items-start gap-4 mb-3">
             <div>
               <h2 className="text-sm font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
                 <Zap className="w-3 h-3 text-neon-cyan" />
@@ -98,7 +98,7 @@ export default function MissionsList({ vm }: MissionsListProps) {
                 Prefill the mission form — review and dispatch when ready
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowCategoryManager(true)}
@@ -116,6 +116,12 @@ export default function MissionsList({ vm }: MissionsListProps) {
               </button>
             </div>
           </div>
+          {templateCategoryPills.length <= 1 && (
+            <p className="text-xs text-white/25 font-mono mb-4">
+              Category filters appear when you have templates in more than one
+              category.
+            </p>
+          )}
           {templateCategoryPills.length > 1 && (
             <>
               <p className="text-[10px] font-mono text-white/25 uppercase tracking-widest mb-2">

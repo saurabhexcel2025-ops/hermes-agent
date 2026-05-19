@@ -38,6 +38,11 @@ import CategoryCombobox, {
   type CategoryOption,
 } from "@/components/missions/CategoryCombobox";
 import LocalDirRow from "@/components/missions/LocalDirRow";
+import {
+  categoryAccentColor,
+  groupTemplatesByCategory,
+  type CategoryLike,
+} from "@/lib/mission-categories";
 import type { LocalDirEntry } from "@/types/hermes";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -159,6 +164,7 @@ export interface TemplateManagerModalProps {
   open: boolean;
   onClose: () => void;
   templates: MissionTemplate[];
+  categories: CategoryLike[];
   categoryFilter: string;
   onEditTemplate: (
     t: MissionTemplate & {
@@ -232,10 +238,13 @@ export function TemplateManagerModal({
   open,
   onClose,
   templates,
+  categories,
   categoryFilter,
   onEditTemplate,
   onDeleteTemplate,
 }: TemplateManagerModalProps) {
+  const grouped = groupTemplatesByCategory(templates, categories);
+
   return (
     <Modal
       open={open}
@@ -251,25 +260,23 @@ export function TemplateManagerModal({
       }
     >
       <div className="space-y-2">
-        {(() => {
-          const grouped = groupTemplates(templates);
-          return grouped.map(([cat, items]) => {
-            const color = CATEGORY_COLORS[cat] || "cyan";
-            const isExtra = !CATEGORY_ORDER.includes(cat);
-            return (
-              <CategoryAccordion
-                key={cat}
-                name={cat}
-                count={items.length}
-                color={isExtra ? "cyan" : color}
-                defaultOpen={
-                  categoryFilter === "all"
-                    ? cat === "Custom"
-                    : categoryFilter === cat
-                }
-              >
+        {grouped.map((group) => {
+          const filterKey = group.categoryId ?? "__uncategorized__";
+          const color = categoryAccentColor(group.color);
+          return (
+            <CategoryAccordion
+              key={filterKey}
+              name={group.label}
+              count={group.items.length}
+              color={color}
+              defaultOpen={
+                categoryFilter === "all"
+                  ? group.items.some((t) => t.isCustom)
+                  : categoryFilter === filterKey
+              }
+            >
                 <div className="space-y-1.5">
-                  {items.map((t) => (
+                  {group.items.map((t) => (
                     <div
                       key={t.id}
                       className="flex items-center justify-between p-2.5 rounded-lg border border-white/5 bg-dark-800/30 hover:border-white/10 transition-colors group"
@@ -307,8 +314,7 @@ export function TemplateManagerModal({
                 </div>
               </CategoryAccordion>
             );
-          });
-        })()}
+          })}
       </div>
     </Modal>
   );

@@ -5,7 +5,9 @@ import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
-import MissionCreateForm from "@/components/missions/MissionCreateForm";
+import MissionCreateForm, {
+  MissionComposerActions,
+} from "@/components/missions/MissionCreateForm";
 import CategoryManagerModal from "@/components/missions/CategoryManagerModal";
 import {
   TemplateEditorModal,
@@ -144,8 +146,23 @@ export default function MissionsPage() {
           setEditingId(null);
         }}
         title={sheetTitle}
+        subtitle="Category, task, and dispatch settings"
+        footer={
+          <MissionComposerActions
+            editingId={editingId}
+            missions={missions}
+            formState={formState}
+            onSubmit={handleCreate}
+            onSaveAsTemplate={handleSaveAsTemplate}
+            onClose={() => {
+              setShowCreate(false);
+              setEditingId(null);
+            }}
+            dispatching={dispatching}
+          />
+        }
       >
-        <div className="p-4">
+        <div className="px-6 py-5">
           <MissionCreateForm
             embedded
             editingId={editingId}
@@ -160,6 +177,7 @@ export default function MissionsPage() {
             categoryId={newCategoryId}
             onCategoryChange={setCategoryId}
             onCreateCategory={handleCreateCategory}
+            onManageCategories={() => setShowCategoryManager(true)}
             onSubmit={handleCreate}
             onSaveAsTemplate={handleSaveAsTemplate}
             onClose={() => {
@@ -184,6 +202,7 @@ export default function MissionsPage() {
         open={showTemplateManager}
         onClose={() => setShowTemplateManager(false)}
         templates={templates}
+        categories={categories}
         categoryFilter={categoryFilter}
         onEditTemplate={handleEditTemplate}
         onDeleteTemplate={handleDeleteTemplate}

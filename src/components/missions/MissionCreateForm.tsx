@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronRight, Send, Save } from "lucide-react";
+import { Send, Save } from "lucide-react";
 
 import Button from "@/components/ui/Button";
 import AutoTextarea from "@/components/ui/AutoTextarea";
@@ -13,6 +12,11 @@ import CategoryCombobox, {
   type CategoryOption,
 } from "@/components/missions/CategoryCombobox";
 import MissionPromptPreview from "@/components/missions/MissionPromptPreview";
+import SkillSelector from "@/components/ui/SkillSelector";
+import {
+  ComposerAccordion,
+  ComposerFieldLabel,
+} from "@/components/missions/MissionComposerLayout";
 import type { LocalDirEntry } from "@/types/hermes";
 
 export interface MissionFormState {
@@ -49,36 +53,81 @@ export interface MissionCreateFormProps {
   categoryId: string | null;
   onCategoryChange: (id: string | null) => void;
   onCreateCategory?: (name: string) => Promise<string | null>;
+  onManageCategories?: () => void;
   onSubmit: () => void;
   onSaveAsTemplate: () => void;
   onClose: () => void;
   dispatching: boolean;
 }
 
-function FormSection({
-  title,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
+const DISPATCH_MODES = [
+  { id: "save" as const, label: "Save Draft" },
+  { id: "now" as const, label: "Run Now" },
+  { id: "queue" as const, label: "Queue" },
+  { id: "cron" as const, label: "Recurring" },
+];
+
+export function MissionComposerActions({
+  editingId,
+  missions,
+  formState,
+  onSubmit,
+  onSaveAsTemplate,
+  onClose,
+  dispatching,
+}: Pick<
+  MissionCreateFormProps,
+  | "editingId"
+  | "missions"
+  | "formState"
+  | "onSubmit"
+  | "onSaveAsTemplate"
+  | "onClose"
+  | "dispatching"
+>) {
+  const existing = editingId
+    ? missions.find((m) => m.id === editingId)
+    : null;
+
+  const isReDispatch =
+    existing &&
+    (existing.status === "successful" || existing.status === "failed");
+
+  const isActiveEdit =
+    existing &&
+    (existing.status === "queued" || existing.status === "dispatched");
+
+  const submitLabel = (() => {
+    if (isReDispatch) return "Re-Dispatch Now";
+    if (isActiveEdit) return "Update Mission";
+    if (formState.newDispatch === "save") return "Save Mission";
+    if (formState.newDispatch === "now") return "Dispatch Now";
+    if (formState.newDispatch === "queue") return "Queue Mission";
+    return "Schedule Mission";
+  })();
+
   return (
-    <div className="rounded-lg border border-white/10 bg-dark-900/30 overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-mono text-white/40 uppercase tracking-widest hover:bg-white/[0.02]"
+    <div className="flex flex-wrap gap-2">
+      <Button
+        onClick={onSubmit}
+        disabled={
+          !formState.newName.trim() ||
+          !formState.newInstruction.trim() ||
+          dispatching
+        }
+        loading={dispatching}
       >
-        {title}
-        <ChevronRight
-          className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-90" : ""}`}
-        />
-      </button>
-      {open && <div className="px-3 pb-3 space-y-3 border-t border-white/5">{children}</div>}
+        <Send className="w-3.5 h-3.5" />
+        {submitLabel}
+      </Button>
+      {formState.newInstruction.trim() && (
+        <Button variant="secondary" onClick={onSaveAsTemplate}>
+          <Save className="w-3.5 h-3.5" /> Save as Template
+        </Button>
+      )}
+      <Button variant="ghost" onClick={onClose}>
+        Cancel
+      </Button>
     </div>
   );
 }
@@ -93,15 +142,12 @@ export default function MissionCreateForm({
   categoryId,
   onCategoryChange,
   onCreateCategory,
+  onManageCategories,
   onSubmit,
   onSaveAsTemplate,
   onClose,
   dispatching,
 }: MissionCreateFormProps) {
-  const [contextOpen, setContextOpen] = useState(false);
-  const [runtimeOpen, setRuntimeOpen] = useState(false);
-  const [dispatchOpen, setDispatchOpen] = useState(true);
-
   const existing = editingId
     ? missions.find((m) => m.id === editingId)
     : null;
@@ -115,7 +161,7 @@ export default function MissionCreateForm({
     (existing.status === "queued" || existing.status === "dispatched");
 
   const inner = (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {editingId && isReDispatch && (
         <div className="rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 p-3 text-xs text-neon-cyan/80 font-mono">
           A new mission will be created and dispatched immediately with your
@@ -129,63 +175,74 @@ export default function MissionCreateForm({
         </div>
       )}
 
-      <FormSection title="Overview" open={true} onToggle={() => {}}>
-        <CategoryCombobox
-          categories={categories}
-          value={categoryId}
-          onChange={onCategoryChange}
-          onCreateCategory={onCreateCategory}
+      {categories.length === 0 && (
+        <p className="text-xs font-mono text-neon-orange/80 bg-neon-orange/5 border border-neon-orange/20 rounded-lg px-3 py-2">
+          No categories loaded — run database migrations or{" "}
+          {onManageCategories ? (
+            <button
+              type="button"
+              onClick={onManageCategories}
+              className="text-neon-cyan underline"
+            >
+              manage categories
+            </button>
+          ) : (
+            "open category manager"
+          )}
+          .
+        </p>
+      )}
+
+      <CategoryCombobox
+        categories={categories}
+        value={categoryId}
+        onChange={onCategoryChange}
+        onCreateCategory={onCreateCategory}
+        onManageCategories={onManageCategories}
+      />
+
+      <div>
+        <ComposerFieldLabel>Mission Name</ComposerFieldLabel>
+        <input
+          value={formState.newName}
+          onChange={(e) => setFormField("newName", e.target.value)}
+          placeholder="e.g., Research quantum computing trends"
+          className="w-full h-9 bg-dark-800/50 border border-white/10 rounded-lg px-3 text-sm text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
         />
-        <div>
-          <label className="text-xs text-white/40 font-mono block mb-1">
-            Mission Name
-          </label>
-          <input
-            value={formState.newName}
-            onChange={(e) => setFormField("newName", e.target.value)}
-            placeholder="e.g., Research quantum computing trends"
-            className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
-          />
-        </div>
-      </FormSection>
+      </div>
 
-      <FormSection title="Task" open={true} onToggle={() => {}}>
-        <div>
-          <label className="text-xs text-white/40 font-mono block mb-1">
-            Goals (one per line)
-          </label>
-          <AutoTextarea
-            value={formState.newGoals}
-            onChange={(v) => setFormField("newGoals", v)}
-            minRows={2}
-            maxRows={8}
-            placeholder="Gather data&#10;Analyze findings&#10;Write report"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-white/40 font-mono block mb-1">
-            Instruction Prompt
-          </label>
-          <AutoTextarea
-            value={formState.newInstruction}
-            onChange={(v) => setFormField("newInstruction", v)}
-            minRows={4}
-            maxRows={16}
-            placeholder="The agent's task instructions..."
-          />
-        </div>
-      </FormSection>
+      <div>
+        <ComposerFieldLabel>Instruction Prompt</ComposerFieldLabel>
+        <AutoTextarea
+          value={formState.newInstruction}
+          onChange={(v) => setFormField("newInstruction", v)}
+          minRows={4}
+          maxRows={16}
+          placeholder="The agent's task instructions..."
+        />
+      </div>
 
-      <FormSection
+      <div>
+        <ComposerFieldLabel>Goals (one per line)</ComposerFieldLabel>
+        <AutoTextarea
+          value={formState.newGoals}
+          onChange={(v) => setFormField("newGoals", v)}
+          minRows={2}
+          maxRows={8}
+          placeholder="Gather data&#10;Analyze findings&#10;Write report"
+        />
+        <p className="text-[10px] text-white/25 font-mono mt-1.5">
+          Optional checklist the agent should complete alongside the instruction.
+        </p>
+      </div>
+
+      <ComposerAccordion
         title="Context & resources"
-        open={contextOpen}
-        onToggle={() => setContextOpen(!contextOpen)}
+        description="Background, files, references, and skills"
+        defaultOpen={false}
       >
         <div>
-          <label className="text-xs text-white/40 font-mono block mb-1">
-            Context Prompt{" "}
-            <span className="text-white/20">(optional)</span>
-          </label>
+          <ComposerFieldLabel optional>Context Prompt</ComposerFieldLabel>
           <AutoTextarea
             value={formState.newContext}
             onChange={(v) => setFormField("newContext", v)}
@@ -194,11 +251,9 @@ export default function MissionCreateForm({
             placeholder="Additional context for this run..."
           />
         </div>
+
         <div>
-          <label className="text-xs text-white/40 font-mono block mb-1">
-            Local Directories{" "}
-            <span className="text-white/20">(optional)</span>
-          </label>
+          <ComposerFieldLabel optional>Local Directories</ComposerFieldLabel>
           <div className="space-y-2">
             <LocalDirRow
               mode="draft"
@@ -245,16 +300,14 @@ export default function MissionCreateForm({
             ))}
           </div>
         </div>
+
         <div>
-          <label className="text-xs text-white/40 font-mono block mb-1">
-            Key References{" "}
-            <span className="text-white/20">(optional)</span>
-          </label>
+          <ComposerFieldLabel optional>Key References</ComposerFieldLabel>
           <div className="space-y-1.5">
             {formState.newReferences.map((ref, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 bg-dark-800/50 border border-neon-pink/20 rounded-lg px-3 py-1.5"
+                className="flex items-center gap-2 bg-dark-800/50 border border-neon-pink/20 rounded-lg px-3 py-1.5 h-9"
               >
                 <span className="text-xs font-mono text-neon-pink truncate flex-1">
                   {ref}
@@ -273,7 +326,7 @@ export default function MissionCreateForm({
                 </button>
               </div>
             ))}
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <input
                 value={formState.referenceInput}
                 onChange={(e) =>
@@ -290,7 +343,7 @@ export default function MissionCreateForm({
                   }
                 }}
                 placeholder="URL, doc path..."
-                className="flex-1 bg-dark-800/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-pink/50 font-mono"
+                className="flex-1 h-9 bg-dark-800/50 border border-white/10 rounded-lg px-3 text-xs text-white placeholder-white/20 outline-none focus:border-neon-pink/50 font-mono"
               />
               <button
                 type="button"
@@ -303,13 +356,26 @@ export default function MissionCreateForm({
                     setFormField("referenceInput", "");
                   }
                 }}
-                className="px-3 py-1.5 rounded-lg bg-neon-pink/10 border border-neon-pink/30 text-xs text-neon-pink font-mono"
+                className="h-9 px-3 rounded-lg bg-neon-pink/10 border border-neon-pink/30 text-xs text-neon-pink font-mono shrink-0"
               >
                 + Add
               </button>
             </div>
           </div>
         </div>
+
+        <div>
+          <ComposerFieldLabel optional>
+            Attached Skills (max 10)
+          </ComposerFieldLabel>
+          <SkillSelector
+            value={formState.newSkills}
+            onChange={(skills) => setFormField("newSkills", skills)}
+            profileId={formState.newProfile}
+            max={10}
+          />
+        </div>
+
         <MissionPromptPreview
           instruction={formState.newInstruction}
           context={formState.newContext}
@@ -320,14 +386,15 @@ export default function MissionCreateForm({
           missionTimeMinutes={formState.newMissionTime}
           timeoutMinutes={formState.newTimeout}
         />
-      </FormSection>
+      </ComposerAccordion>
 
-      <FormSection
+      <ComposerAccordion
         title="Runtime"
-        open={runtimeOpen}
-        onToggle={() => setRuntimeOpen(!runtimeOpen)}
+        description="Profile, model, scope, and timeout"
+        defaultOpen={false}
       >
         <AgentRuntimeDefaultsCard
+          variant="embedded"
           profileId={formState.newProfile}
           onProfileChange={(id) => setFormField("newProfile", id)}
           missionTimeMinutes={formState.newMissionTime}
@@ -340,39 +407,28 @@ export default function MissionCreateForm({
             setFormField("newModel", mid);
             setFormField("newProvider", prov);
           }}
-          timeoutHeading="Timeout (Advanced)"
-          skills={formState.newSkills}
-          onSkillsChange={(skills) => setFormField("newSkills", skills)}
+          timeoutHeading="Timeout"
         />
-        <p className="text-[10px] text-white/25 font-mono">
-          Profile defines agent role via SOUL/AGENTS under your Hermes home.
-        </p>
-      </FormSection>
+      </ComposerAccordion>
 
-      <FormSection
+      <ComposerAccordion
         title="Dispatch"
-        open={dispatchOpen}
-        onToggle={() => setDispatchOpen(!dispatchOpen)}
+        description="When and how this mission runs"
+        defaultOpen={false}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          {(["save", "now", "queue", "cron"] as const).map((mode) => (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {DISPATCH_MODES.map((mode) => (
             <button
-              key={mode}
+              key={mode.id}
               type="button"
-              onClick={() => setFormField("newDispatch", mode)}
-              className={`px-3 py-1 rounded-lg text-xs font-mono border transition-colors ${
-                formState.newDispatch === mode
+              onClick={() => setFormField("newDispatch", mode.id)}
+              className={`h-9 px-3 rounded-lg text-xs font-mono border transition-colors ${
+                formState.newDispatch === mode.id
                   ? "border-neon-cyan/50 bg-cyan-500/10 text-neon-cyan"
                   : "border-white/10 text-white/40 hover:text-white/60"
               }`}
             >
-              {mode === "save"
-                ? "Save Draft"
-                : mode === "now"
-                  ? "Run Now"
-                  : mode === "queue"
-                    ? "Queue"
-                    : "Recurring"}
+              {mode.label}
             </button>
           ))}
         </div>
@@ -386,37 +442,19 @@ export default function MissionCreateForm({
             onStartTimeChange={(t) => setFormField("scheduleStartTime", t)}
           />
         )}
-      </FormSection>
+      </ComposerAccordion>
 
-      <div className="flex flex-wrap gap-2 pt-2 sticky bottom-0 bg-dark-950/95 backdrop-blur py-3 border-t border-white/10 -mx-1 px-1">
-        <Button
-          onClick={onSubmit}
-          disabled={
-            !formState.newName.trim() ||
-            !formState.newInstruction.trim() ||
-            dispatching
-          }
-          loading={dispatching}
-        >
-          <Send className="w-3.5 h-3.5" />
-          {(() => {
-            if (isReDispatch) return "Re-Dispatch Now";
-            if (isActiveEdit) return "Update Mission";
-            if (formState.newDispatch === "save") return "Save Mission";
-            if (formState.newDispatch === "now") return "Dispatch Now";
-            if (formState.newDispatch === "queue") return "Queue Mission";
-            return "Schedule Mission";
-          })()}
-        </Button>
-        {formState.newInstruction.trim() && (
-          <Button variant="secondary" onClick={onSaveAsTemplate}>
-            <Save className="w-3.5 h-3.5" /> Save as Template
-          </Button>
-        )}
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
+      {!embedded && (
+        <MissionComposerActions
+          editingId={editingId}
+          missions={missions}
+          formState={formState}
+          onSubmit={onSubmit}
+          onSaveAsTemplate={onSaveAsTemplate}
+          onClose={onClose}
+          dispatching={dispatching}
+        />
+      )}
     </div>
   );
 

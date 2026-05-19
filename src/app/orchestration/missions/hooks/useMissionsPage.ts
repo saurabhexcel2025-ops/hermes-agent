@@ -225,14 +225,19 @@ export function useMissionsPage() {
         const cat = await createCategory(name);
         if (cat?.id) {
           await loadCategories();
+          showToast(`Category "${name}" created`, "success");
           return cat.id as string;
         }
+        showToast("Could not create category", "error");
       } catch (error) {
         console.error("Failed to create category:", error);
+        const msg =
+          error instanceof Error ? error.message : "Failed to create category";
+        showToast(msg, "error");
       }
       return null;
     },
-    [createCategory, loadCategories],
+    [createCategory, loadCategories, showToast],
   );
 
   const handleUpdateCategory = useCallback(
