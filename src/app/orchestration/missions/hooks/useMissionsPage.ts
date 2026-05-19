@@ -62,6 +62,13 @@ export function useMissionsPage() {
   const { showToast, toastElement } = useToast();
   const templateApplied = useRef(false);
   const expandedIdRef = useRef<string | null>(null);
+  const createFormRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToCreateForm = useCallback(() => {
+    requestAnimationFrame(() => {
+      createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
@@ -226,6 +233,8 @@ export function useMissionsPage() {
             setNewSkills(t.suggestedSkills || []);
             setShowCreate(true);
             templateApplied.current = true;
+            showToast(`Template loaded: ${t.name}`, "success");
+            scrollToCreateForm();
             window.history.replaceState({}, "", "/orchestration/missions");
           }
         }
@@ -233,7 +242,7 @@ export function useMissionsPage() {
     } catch (error) {
       console.error("Failed to load templates:", error);
     }
-  }, [fetchMissions, fetchTemplates]);
+  }, [fetchMissions, fetchTemplates, showToast, scrollToCreateForm]);
 
   const fetchDetail = useCallback(
     (id: string, showLoading = true) => {
@@ -565,6 +574,8 @@ export function useMissionsPage() {
     setNewName(t.name);
     applyTemplateToForm(t);
     setShowCreate(true);
+    showToast(`Template loaded: ${t.name}`, "success");
+    scrollToCreateForm();
   };
 
   const handleDelete = async (id: string) => {
@@ -674,6 +685,7 @@ export function useMissionsPage() {
     handleSaveAsTemplate,
     dispatching,
     handleTemplateSelect,
+    createFormRef,
     setShowTemplateManager,
     showTemplateManager,
     handleEditTemplate,

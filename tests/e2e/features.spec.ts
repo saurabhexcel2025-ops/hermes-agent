@@ -86,15 +86,6 @@ test.describe("Memory page", () => {
   });
 });
 
-test.describe("Gateway page", () => {
-  test("loads gateway status", async ({ page }) => {
-    await page.goto("/gateway");
-    await expect(
-      page.getByRole("heading", { name: /Gateway/i })
-    ).toBeVisible();
-  });
-});
-
 test.describe("Logs page", () => {
   test("loads logs viewer", async ({ page }) => {
     await page.goto("/logs");

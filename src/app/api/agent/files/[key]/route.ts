@@ -37,7 +37,7 @@ function resolveFilePath(
   const bundle = buildProfileHermesPathBundle(profile);
   const pathMap: Record<string, string> = {
     soul: bundle.soul,
-    agents: bundle.agents,
+    agent: bundle.agents,
     user: bundle.userMemory,
     memory: bundle.agentMemory,
     env: bundle.env,

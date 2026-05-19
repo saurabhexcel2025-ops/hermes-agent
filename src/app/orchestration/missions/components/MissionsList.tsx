@@ -57,6 +57,7 @@ export default function MissionsList({ vm }: MissionsListProps) {
     handleSaveAsTemplate,
     dispatching,
     handleTemplateSelect,
+    createFormRef,
     setShowTemplateManager,
     handleEdit,
     handleDelete,
@@ -86,10 +87,15 @@ export default function MissionsList({ vm }: MissionsListProps) {
       {!showCreate && (
         <div className="mb-6" data-testid="missions-quick-templates">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
-              <Zap className="w-3 h-3 text-neon-cyan" />
-              Quick Deploy - Choose a Template
-            </h2>
+            <div>
+              <h2 className="text-sm font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
+                <Zap className="w-3 h-3 text-neon-cyan" />
+                Quick load template
+              </h2>
+              <p className="text-xs text-white/30 mt-1 font-mono">
+                Prefill the mission form — review and dispatch when ready
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => setShowTemplateManager(true)}
@@ -99,6 +105,9 @@ export default function MissionsList({ vm }: MissionsListProps) {
               Edit Templates
             </button>
           </div>
+          <p className="text-[10px] font-mono text-white/25 uppercase tracking-widest mb-2">
+            Filter by category
+          </p>
           <div className="flex flex-wrap gap-2 mb-4">
             <button
               type="button"
@@ -167,20 +176,22 @@ export default function MissionsList({ vm }: MissionsListProps) {
         </div>
       )}
 
-      <MissionCreateForm
-        open={showCreate}
-        onClose={() => {
-          setShowCreate(false);
-          setEditingId(null);
-        }}
-        editingId={editingId}
-        missions={missions}
-        formState={formState}
-        setFormField={setFormField}
-        onSubmit={handleCreate}
-        onSaveAsTemplate={handleSaveAsTemplate}
-        dispatching={dispatching}
-      />
+      <div ref={createFormRef}>
+        <MissionCreateForm
+          open={showCreate}
+          onClose={() => {
+            setShowCreate(false);
+            setEditingId(null);
+          }}
+          editingId={editingId}
+          missions={missions}
+          formState={formState}
+          setFormField={setFormField}
+          onSubmit={handleCreate}
+          onSaveAsTemplate={handleSaveAsTemplate}
+          dispatching={dispatching}
+        />
+      </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="flex items-center gap-1 bg-dark-900/50 rounded-lg border border-white/10 p-1">

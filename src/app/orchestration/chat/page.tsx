@@ -186,7 +186,11 @@ export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [model, setModel] = useState(DEFAULT_MODEL);
-  const [availableModels, setAvailableModels] = useState<string[]>([DEFAULT_MODEL]);
+  const [gatewayModels, setGatewayModels] = useState<string[]>([DEFAULT_MODEL]);
+  const [registryModelIds, setRegistryModelIds] = useState<string[]>([]);
+  const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   // Current messages
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -219,22 +223,51 @@ export default function ChatPage() {
     saveSessions(sessions);
   }, [sessions]);
 
-  // ── Fetch dynamic models from gateway ──────────────────────
+  // ── Fetch registry + gateway models ──────────────────────
   useEffect(() => {
     const fetchModels = async () => {
+      setModelsLoading(true);
+      setModelsError(null);
+      const labels: Record<string, string> = {};
+      let registryIds: string[] = [];
+      let gateway: string[] = [DEFAULT_MODEL];
+
       try {
-        const res = await fetch("/api/gateway/models", {
-          signal: AbortSignal.timeout(3000),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          const models: string[] = json.data?.models || json.data || [];
-          if (models.length > 0) {
-            setAvailableModels(models);
+        const [registryRes, gatewayRes] = await Promise.all([
+          fetch("/api/models"),
+          fetch("/api/gateway/models", { signal: AbortSignal.timeout(5000) }),
+        ]);
+
+        if (registryRes.ok) {
+          const registryJson = await registryRes.json();
+          const records = registryJson.data?.models as Array<{
+            modelId: string;
+            name: string;
+          }> | undefined;
+          if (Array.isArray(records)) {
+            registryIds = records
+              .map((m) => m.modelId)
+              .filter((id): id is string => typeof id === "string" && id.length > 0);
+            for (const m of records) {
+              if (m.modelId) labels[m.modelId] = m.name;
+            }
           }
         }
+
+        if (gatewayRes.ok) {
+          const gatewayJson = await gatewayRes.json();
+          const ids: string[] = gatewayJson.data?.models || [];
+          if (ids.length > 0) gateway = ids;
+        } else {
+          setModelsError("Gateway models unavailable");
+        }
       } catch {
-        // Gateway not available — keep defaults
+        setModelsError("Failed to load models");
+      } finally {
+        setRegistryModelIds(registryIds);
+        setGatewayModels(gateway);
+        setModelLabels(labels);
+        setModelsLoading(false);
       }
     };
     fetchModels();
@@ -266,6 +299,14 @@ export default function ChatPage() {
   // Get active session
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = useMemo(() => activeSession?.messages || [], [activeSession]);
+  const sendModel = activeSession?.model ?? model;
+
+  // Restore per-session model when switching sessions
+  useEffect(() => {
+    if (activeSession) {
+      setModel(activeSession.model || DEFAULT_MODEL);
+    }
+  }, [activeSessionId, activeSession]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -281,6 +322,16 @@ export default function ChatPage() {
       );
     },
     [],
+  );
+
+  const handleModelChange = useCallback(
+    (nextModel: string) => {
+      setModel(nextModel);
+      if (activeSessionId) {
+        updateSession(activeSessionId, (s) => ({ ...s, model: nextModel }));
+      }
+    },
+    [activeSessionId, updateSession],
   );
 
   // ── New chat (creates session immediately) ─────────────────
@@ -412,7 +463,7 @@ export default function ChatPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [{ role: "user", content: text }],
-            model,
+            model: sendModel,
             stream: true,
           }),
           signal: controller.signal,
@@ -535,7 +586,7 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: apiMessages,
-          model,
+          model: sendModel,
           stream: true,
         }),
         signal: controller.signal,
@@ -599,7 +650,7 @@ export default function ChatPage() {
     } finally {
       if (gen === streamGenRef.current) setIsStreaming(false);
     }
-  }, [input, activeSessionId, sessions, model, showToast, gatewayOnline, updateSession]);
+  }, [input, activeSessionId, sessions, model, sendModel, showToast, gatewayOnline, updateSession]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────
   const handleKeyDown = useCallback(
@@ -629,11 +680,25 @@ export default function ChatPage() {
 
   // ── Models for dropdown ────────────────────────────────────
   const mergedModels = useMemo(() => {
-    // Dedupe gateway models, strip "hermes-agent" from them
-    const gatewaySet = new Set(availableModels.filter((m) => m !== "hermes-agent"));
-    // Always put Agent Default first
-    return ["hermes-agent", ...Array.from(gatewaySet)];
-  }, [availableModels]);
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    const add = (id: string) => {
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      merged.push(id);
+    };
+    add(DEFAULT_MODEL);
+    for (const id of registryModelIds) add(id);
+    for (const id of gatewayModels) {
+      if (id !== DEFAULT_MODEL) add(id);
+    }
+    return merged;
+  }, [registryModelIds, gatewayModels]);
+
+  const displayModelName = useCallback(
+    (id: string) => modelLabels[id] || formatModelName(id),
+    [modelLabels],
+  );
 
   // Only show sessions with messages in the sidebar
   const sessionList = useMemo(
@@ -655,14 +720,20 @@ export default function ChatPage() {
           <div className="flex items-center gap-2">
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 outline-none focus:border-neon-purple/50 transition-colors font-mono cursor-pointer appearance-none max-w-[220px]"
-              title="Select model"
+              onChange={(e) => handleModelChange(e.target.value)}
+              disabled={modelsLoading}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 outline-none focus:border-neon-purple/50 transition-colors font-mono cursor-pointer appearance-none max-w-[220px] disabled:opacity-50"
+              title={modelsError ?? "Select model"}
             >
               {mergedModels.map((m) => (
-                <option key={m} value={m}>{formatModelName(m)}</option>
+                <option key={m} value={m}>{displayModelName(m)}</option>
               ))}
             </select>
+            {modelsError && (
+              <span className="text-[10px] text-neon-orange/80 font-mono" title={modelsError}>
+                !
+              </span>
+            )}
             <Button
               variant="secondary"
               color="cyan"

@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Clock,
   Plus,
@@ -19,6 +19,7 @@ import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
 import { useCronJobs } from "@/hooks/useCronJobs";
 import { useSystemCronJobs } from "@/hooks/useSystemCronJobs";
+import { safeApiCall } from "@/lib/api-fetch";
 import JobCard, { CronJob } from "@/components/cron/JobCard";
 import JobFormModal from "@/components/cron/JobFormModal";
 import SystemCronCard from "@/components/cron/SystemCronCard";
@@ -212,6 +213,32 @@ export default function CronPage() {
 
   const agent = useCronJobs();
   const hardware = useSystemCronJobs();
+  const { loadJobs: loadHardwareJobs } = hardware;
+
+  useEffect(() => {
+    if (activeTab === "system") {
+      void loadHardwareJobs();
+    }
+  }, [activeTab, loadHardwareJobs]);
+
+  const handleSyncAll = useCallback(async () => {
+    setSyncing(true);
+    const [agentRes, hwRes] = await Promise.all([
+      safeApiCall("/api/cron", { method: "POST", body: { action: "sync" } }),
+      safeApiCall("/api/cron/hardware", { method: "POST", body: { action: "sync" } }),
+    ]);
+    agent.loadJobs();
+    await hardware.loadJobs();
+    setSyncing(false);
+    if (agentRes.ok && hwRes.ok) {
+      showToast("Agent and system cron synced", "success");
+    } else {
+      const parts: string[] = [];
+      if (!agentRes.ok) parts.push("agent");
+      if (!hwRes.ok) parts.push("system");
+      showToast(`Sync failed: ${parts.join(", ")}`, "error");
+    }
+  }, [agent, hardware, showToast]);
 
   // ── Derived state ─────────────────────────────────────────
 
@@ -236,48 +263,32 @@ export default function CronPage() {
                 <TabButton key={tab.key} tab={tab} activeTab={activeTab} onSelect={setActiveTab} />
               ))}
             </div>
-            {activeTab === "agent" && (
-              <ActionButtons
-                color="orange"
-                pauseBusy={pauseAllBusy}
-                hasJobs={!!agent.data?.total}
-                onPauseAll={async () => {
+            <ActionButtons
+              color={activeTab === "agent" ? "orange" : "cyan"}
+              pauseBusy={activeTab === "agent" ? pauseAllBusy : false}
+              hasJobs={
+                activeTab === "agent"
+                  ? !!agent.data?.total
+                  : hardware.jobs.length > 0
+              }
+              onPauseAll={async () => {
+                if (activeTab === "agent") {
                   setPauseAllBusy(true);
                   await agent.handlePauseAll();
                   setPauseAllBusy(false);
-                }}
-                onSync={async () => {
-                  setSyncing(true);
-                  await agent.handleSync();
-                  setSyncing(false);
-                }}
-                syncing={syncing}
-                onCreate={() => setShowCreate(true)}
-                createLabel="New Job"
-              />
-            )}
-            {activeTab === "system" && (
-              <>
-                {hardware.jobs.length === 0 && hardware.loading === false && (
-                  <button
-                    onClick={() => hardware.loadJobs()}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-cyan-500/20 text-cyan-400/60 hover:text-cyan-300 transition-colors"
-                  >
-                    Load jobs
-                  </button>
-                )}
-                <ActionButtons
-                  color="cyan"
-                  pauseBusy={false}
-                  hasJobs={hardware.jobs.length > 0}
-                  onPauseAll={() => hardware.handlePauseAll()}
-                  onSync={() => hardware.handleSync()}
-                  syncing={false}
-                  onCreate={() => setShowHardwareCreate(true)}
-                  createLabel="New Job"
-                />
-              </>
-            )}
+                } else {
+                  await hardware.handlePauseAll();
+                }
+              }}
+              onSync={() => void handleSyncAll()}
+              syncing={syncing}
+              onCreate={() =>
+                activeTab === "agent"
+                  ? setShowCreate(true)
+                  : setShowHardwareCreate(true)
+              }
+              createLabel="New Job"
+            />
           </div>
         }
       />

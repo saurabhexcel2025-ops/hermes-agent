@@ -7,7 +7,10 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   FileText, ToggleRight, ToggleLeft, X, ChevronDown, ChevronRight,
+  Edit3, Save, RotateCcw,
 } from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import { SearchInput } from "@/components/ui/Input";
@@ -90,6 +93,12 @@ export default function SkillsPage() {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [skillContent, setSkillContent] = useState<string>("");
 
+  // Skill editor
+  const [editingSkill, setEditingSkill] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editOriginal, setEditOriginal] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   // Optimistic toggle state — key: skillName, value: the effective (pending) enabled state
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
 
@@ -171,6 +180,58 @@ export default function SkillsPage() {
   );
 
   // ── Skill content preview ───────────────────────────────────────────────────
+
+  const openSkillEditor = async (skill: Skill) => {
+    setEditingSkill(skill.name);
+    setEditContent("");
+    setEditOriginal("");
+    try {
+      const res = await fetch(
+        `/api/skills/${encodeURIComponent(skill.name)}?profile=${selectedProfile}`,
+      );
+      const d = await res.json();
+      if (!res.ok) {
+        showToast(d?.error || "Failed to load skill", "error");
+        setEditingSkill(null);
+        return;
+      }
+      const content = d.data?.content || "";
+      setEditContent(content);
+      setEditOriginal(content);
+    } catch {
+      showToast("Failed to load skill", "error");
+      setEditingSkill(null);
+    }
+  };
+
+  const saveSkillEdit = async () => {
+    if (!editingSkill || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(
+        `/api/skills/${encodeURIComponent(editingSkill)}?profile=${selectedProfile}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: editContent }),
+        },
+      );
+      const d = await res.json();
+      if (!res.ok) {
+        throw new Error(d?.error || "Failed to save skill");
+      }
+      setEditOriginal(editContent);
+      showToast(`${editingSkill} saved`, "success");
+      if (expandedSkill === editingSkill) {
+        setSkillContent(editContent);
+      }
+      setEditingSkill(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save skill", "error");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const viewSkill = async (skill: Skill) => {
     if (expandedSkill === skill.name) {
@@ -268,6 +329,7 @@ export default function SkillsPage() {
                   toggling={toggling}
                   onToggleSkill={(skill) => toggleSkill(skill.name, true)}
                   onViewSkill={viewSkill}
+                  onEditSkill={openSkillEditor}
                 />
               )}
             </SkillSection>
@@ -312,12 +374,56 @@ export default function SkillsPage() {
                   toggling={toggling}
                   onToggleSkill={(skill) => toggleSkill(skill.name, false)}
                   onViewSkill={viewSkill}
+                  onEditSkill={openSkillEditor}
                 />
               )}
             </SkillSection>
           </div>
         )}
       </div>
+
+      <Modal
+        open={editingSkill !== null}
+        onClose={() => setEditingSkill(null)}
+        title={editingSkill ? `Edit: ${editingSkill}` : "Edit skill"}
+        icon={Edit3}
+        iconColor="text-neon-green"
+        size="lg"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={RotateCcw}
+              onClick={() => setEditContent(editOriginal)}
+              disabled={editContent === editOriginal}
+            >
+              Reset
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setEditingSkill(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              color="green"
+              size="sm"
+              icon={Save}
+              onClick={saveSkillEdit}
+              disabled={savingEdit || editContent === editOriginal}
+              loading={savingEdit}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <textarea
+          value={editContent}
+          onChange={(e) => setEditContent(e.target.value)}
+          className="w-full min-h-[320px] bg-dark-800 border border-white/10 rounded-lg p-4 text-sm text-white/80 font-mono resize-y focus:border-neon-green/50 focus:outline-none"
+          spellCheck={false}
+        />
+      </Modal>
     </AppPageShell>
   );
 }
@@ -368,6 +474,7 @@ interface SkillCategoryGridProps {
   toggling: Record<string, boolean>;
   onToggleSkill: (skill: Skill) => void;
   onViewSkill: (skill: Skill) => void;
+  onEditSkill: (skill: Skill) => void;
 }
 
 function SkillCategoryGrid({
@@ -381,6 +488,7 @@ function SkillCategoryGrid({
   toggling,
   onToggleSkill,
   onViewSkill,
+  onEditSkill,
 }: SkillCategoryGridProps) {
   return (
     <div className="space-y-5">
@@ -406,6 +514,7 @@ function SkillCategoryGrid({
                     isPending={skill.name in toggling}
                     onToggle={() => onToggleSkill(skill)}
                     onView={() => onViewSkill(skill)}
+                    onEdit={() => onEditSkill(skill)}
                     expandedContent={
                       expandedSkill === skill.name ? skillContent : undefined
                     }
@@ -495,6 +604,7 @@ interface SkillCardProps {
   isPending: boolean;
   onToggle: () => void;
   onView: () => void;
+  onEdit: () => void;
   expandedContent?: string;
 }
 
@@ -505,6 +615,7 @@ function SkillCard({
   isPending,
   onToggle,
   onView,
+  onEdit,
   expandedContent,
 }: SkillCardProps) {
   return (
@@ -581,6 +692,14 @@ function SkillCard({
           </div>
 
           <button
+            type="button"
+            onClick={onEdit}
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-white/10 text-white/30 hover:border-neon-green/30 hover:text-neon-green transition-all"
+          >
+            <Edit3 className="w-3 h-3" /> Edit
+          </button>
+          <button
+            type="button"
             onClick={onView}
             className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-all ${
               isExpanded

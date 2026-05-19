@@ -45,7 +45,6 @@ export const mainSections: SidebarSection[] = [
       { icon: Zap, label: "Dashboard", href: "/", color: "cyan" },
       { icon: Clock, label: "Sessions", href: "/sessions", color: "orange" },
       { icon: Database, label: "Memory", href: "/memory", color: "pink" },
-      { icon: Globe, label: "Gateway", href: "/gateway", color: "cyan" },
       { icon: ScrollText, label: "Logs", href: "/logs", color: "cyan" },
     ],
   },

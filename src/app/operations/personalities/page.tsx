@@ -73,7 +73,7 @@ function PersonalityCard({
     <div
       className={`rounded-xl border transition-all ${
         isActive
-          ? "border-neon-cyan/50 bg-neon-cyan/5 shadow-[0_0_20px_rgb(var(--ch-rgb-neon-cyan)_/_0.15)] animate-pulse"
+          ? "border-neon-cyan/50 bg-neon-cyan/5"
           : "border-white/10 bg-dark-900/50 hover:border-white/20"
       }`}
     >
@@ -354,22 +354,38 @@ export default function PersonalitiesPage() {
     showToast("Personality saved!", "success");
   };
 
-  const filtered = personalities.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.prompt.toLowerCase().includes(search.toLowerCase())
-  );
+  const sortedPersonalities = [...personalities].sort((a, b) => {
+    if (a.name === activePersonality) return -1;
+    if (b.name === activePersonality) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const filtered = sortedPersonalities.filter((p) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.prompt.toLowerCase().includes(q) ||
+      p.name === activePersonality
+    );
+  });
 
   return (
     <AppPageShell>
       <PageHeader
         title="Personalities"
-        subtitle="Manage agent personality presets — custom system prompts for different behaviours"
+        subtitle="Global display personality (config.yaml → display.personality). Profile personality is set on Agents."
         icon={Brain}
         color="purple"
       />
 
       <div className="max-w-4xl mx-auto px-6 py-6">
+        {activePersonality && (
+          <p className="text-xs font-mono text-neon-cyan/80 mb-4">
+            Active: <span className="text-white">{activePersonality}</span>
+          </p>
+        )}
+
         {/* Toolbar */}
         <div className="flex items-center gap-3 mb-6">
           <div className="flex-1">
@@ -404,7 +420,7 @@ export default function PersonalitiesPage() {
             }
           />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filtered.map((p) => (
               <PersonalityCard
                 key={p.name}
@@ -424,8 +440,9 @@ export default function PersonalitiesPage() {
             How Personalities Work
           </h3>
           <ul className="space-y-1.5 text-xs text-white/40 font-mono">
-            <li>• Each personality is a custom system prompt stored in config.yaml</li>
-            <li>• Click ✨ to set as the active personality (display.personality)</li>
+            <li>• Global display personality in config.yaml (display.personality)</li>
+            <li>• Profile-specific personality is configured on the Agents page</li>
+            <li>• Click ✨ to set or clear the active global personality</li>
             <li>• Use <code className="text-neon-purple bg-white/5 px-1 rounded">/personality</code> in CLI to switch at runtime</li>
             <li>• Active personality is prepended to the agent&apos;s system prompt each message</li>
           </ul>

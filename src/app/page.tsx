@@ -36,7 +36,9 @@ import CategoryAccordion from "@/components/ui/CategoryAccordion";
 import TemplateCard from "@/components/ui/TemplateCard";
 import { useToast } from "@/components/ui/Toast";
 import type { SystemStatus, AccentColor } from "@/types/hermes";
-import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
+import { timeAgo, timeUntil, titleCase, parseSchedule } from "@/lib/utils";
+
+const MONITOR_FETCH_INIT: RequestInit = { cache: "no-store" };
 import AppPageShell from "@/components/layout/AppPageShell";
 import { shellHeaderBarClasses } from "@/lib/theme";
 import { StatPillSkeleton } from "@/components/skeletons";
@@ -273,6 +275,30 @@ export default function Dashboard() {
 
   // Update cron job schedule inline
   const handleCronScheduleChange = useCallback(async (jobId: string, newSchedule: string) => {
+    const parsed = parseSchedule(newSchedule);
+    const scheduleDisplay =
+      parsed.kind !== "invalid"
+        ? parsed.display
+        : newSchedule;
+
+    setDataFields((prev) => {
+      if (!prev.monitor?.cron.jobs) return prev;
+      return {
+        ...prev,
+        monitor: {
+          ...prev.monitor,
+          cron: {
+            ...prev.monitor.cron,
+            jobs: prev.monitor.cron.jobs.map((job) =>
+              job.id === jobId
+                ? { ...job, schedule: scheduleDisplay }
+                : job,
+            ),
+          },
+        },
+      };
+    });
+
     try {
       const putRes = await fetch("/api/cron", {
         method: "PUT",
@@ -282,15 +308,22 @@ export default function Dashboard() {
       if (!putRes.ok) {
         const body = await putRes.json().catch(() => null);
         showToast(body?.error || "Failed to update cron schedule", "error");
+        const res = await fetch("/api/monitor", MONITOR_FETCH_INIT);
+        const d = await res.json();
+        if (d.data) setData({ monitor: d.data });
         return;
       }
-      // Refresh monitor data to show updated schedule
-      const res = await fetch("/api/monitor");
+      const res = await fetch("/api/monitor", MONITOR_FETCH_INIT);
       const d = await res.json();
       if (d.data) setData({ monitor: d.data });
       showToast("Schedule updated", "success");
     } catch {
       showToast("Failed to update cron schedule", "error");
+      const res = await fetch("/api/monitor", MONITOR_FETCH_INIT).catch(() => null);
+      if (res?.ok) {
+        const d = await res.json().catch(() => null);
+        if (d?.data) setData({ monitor: d.data });
+      }
     }
   }, [showToast, setData]);
 
@@ -305,7 +338,7 @@ export default function Dashboard() {
           fetch("/api/status", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/config", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/templates", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
-          fetch("/api/monitor", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/agents", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/missions", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
         ]);
@@ -327,7 +360,7 @@ export default function Dashboard() {
     // Polling: monitor (10s), processes (15s), missions (15s)
     const monitorInterval = setInterval(async () => {
       if (!signal.aborted) {
-        const res = await fetch("/api/monitor", { signal }).catch(() => null);
+        const res = await fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).catch(() => null);
         if (res?.ok) {
           const d = await res.json().catch(() => null);
           if (d?.data) setData({ monitor: d.data });
@@ -702,20 +735,20 @@ export default function Dashboard() {
                 <Globe className="w-3.5 h-3.5 text-neon-cyan" />
                 <span className="text-xs font-mono text-white/60">Platforms</span>
               </div>
-              <Link href="/gateway" className="text-[10px] font-mono text-neon-cyan hover:underline">
-                details →
-              </Link>
             </div>
-            <div className="px-4 py-3 space-y-2">
+            <div
+              className="px-4 py-3 space-y-2"
+              title="Token present in Hermes .env; gateway must be running for live messaging."
+            >
               {monitor
-                ? Object.entries(monitor.gateway.platforms).map(([platform, connected]) => (
+                ? Object.entries(monitor.gateway.platforms).map(([platform, configured]) => (
                     <div key={platform} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <StatusDot status={connected ? "online" : "idle"} pulse={connected} />
+                        <StatusDot status={configured ? "online" : "idle"} pulse={configured} />
                         <span className="text-xs text-white/70 capitalize">{platform}</span>
                       </div>
-                      <span className={`text-[10px] font-mono ${connected ? "text-neon-green" : "text-white/25"}`}>
-                        {connected ? "Connected" : "Disabled"}
+                      <span className={`text-[10px] font-mono ${configured ? "text-neon-green" : "text-white/25"}`}>
+                        {configured ? "Configured" : "Not configured"}
                       </span>
                     </div>
                   ))
