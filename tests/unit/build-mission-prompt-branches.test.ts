@@ -5,12 +5,8 @@ describe("buildMissionPrompt localDirs branches", () => {
     const p = buildMissionPrompt({
       instruction: "Do work",
       localDirs: [{ path: "/repo", branch: "feature/x" }],
-      references: [],
-      skills: [],
-      goals: [],
-      context: "",
     });
-    expect(p).toContain("## Working Directories");
+    expect(p).toContain("<working_directories>");
     expect(p).toContain("/repo");
     expect(p).toContain("(branch: feature/x)");
   });
@@ -19,10 +15,6 @@ describe("buildMissionPrompt localDirs branches", () => {
     const p = buildMissionPrompt({
       instruction: "X",
       localDirs: ["/only"],
-      references: [],
-      skills: [],
-      goals: [],
-      context: "",
     });
     expect(p).toContain("/only");
     expect(p).not.toContain("(branch:");

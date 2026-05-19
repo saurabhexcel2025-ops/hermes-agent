@@ -78,6 +78,8 @@ export default function MissionsPage() {
     handleCreate,
     handleSaveAsTemplate,
     dispatching,
+    dispatchAcknowledged,
+    setDispatchAcknowledged,
     categories,
     newCategoryId,
     setCategoryId,
@@ -161,6 +163,7 @@ export default function MissionsPage() {
               setEditingId(null);
             }}
             dispatching={dispatching}
+            dispatchAcknowledged={dispatchAcknowledged}
           />
         }
       >
@@ -189,6 +192,10 @@ export default function MissionsPage() {
               setEditingId(null);
             }}
             dispatching={dispatching}
+            dispatchAcknowledged={dispatchAcknowledged}
+            onDispatchOpenChange={(open) => {
+              if (open) setDispatchAcknowledged(true);
+            }}
           />
         </div>
       </Sheet>

@@ -68,6 +68,8 @@ export interface MissionTemplate {
   defaultModel?: string;
   defaultProvider?: string;
   timeoutMinutes?: number;
+  outputFormat?: string;
+  constraints?: string;
 }
 
 // ── Constants (mirrored from missions/page.tsx) ────────────────

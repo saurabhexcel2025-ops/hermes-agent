@@ -12,7 +12,7 @@ import {
   deleteMission,
   buildMissionPrompt,
 } from "@/lib/mission-repository";
-import { stripPromptSections } from "@/lib/build-mission-prompt";
+import { parseMissionPrompt } from "@/lib/build-mission-prompt";
 import { createSession, updateSession } from "@/lib/session-repository";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import type { LocalDirEntry } from "@/types/hermes";
@@ -110,6 +110,8 @@ export async function POST(request: NextRequest) {
         missionTimeMinutes,
         timeoutMinutes,
         categoryId: categoryIdRaw,
+        outputFormat,
+        constraints,
       } = body as {
         name?: string;
         instruction?: string;
@@ -127,6 +129,8 @@ export async function POST(request: NextRequest) {
         missionTimeMinutes?: number;
         timeoutMinutes?: number;
         categoryId?: string | null;
+        outputFormat?: string;
+        constraints?: string;
       };
 
       const categoryParsed = parseCategoryId(categoryIdRaw);
@@ -149,6 +153,8 @@ export async function POST(request: NextRequest) {
         context: context ?? "",
         missionTimeMinutes: missionTimeMinutes ?? undefined,
         timeoutMinutes: timeoutMinutes ?? undefined,
+        outputFormat: outputFormat ?? "",
+        constraints: constraints ?? "",
       });
 
       // Resolve Hermes profile name to the DB profile_id for the mission record.
@@ -181,6 +187,8 @@ export async function POST(request: NextRequest) {
         timeoutMinutes,
         schedule: scheduleVal,
         categoryId: categoryParsed.value ?? null,
+        outputFormat: outputFormat?.trim() || undefined,
+        constraints: constraints?.trim() || undefined,
       });
 
       const isSaveMode = dispatchMode === "save" || dispatchMode === "queue";
@@ -308,7 +316,7 @@ export async function POST(request: NextRequest) {
 
     // ── Update Mission ─────────────────────────────────────────
     if (action === "update") {
-      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw } = body as {
+      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw, outputFormat, constraints } = body as {
         id?: string;
         missionId?: string;
         status?: string;
@@ -326,6 +334,8 @@ export async function POST(request: NextRequest) {
         schedule?: string;
         context?: string;
         categoryId?: string | null;
+        outputFormat?: string;
+        constraints?: string;
       };
       const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
       if (!missionIdFinal)
@@ -350,14 +360,16 @@ export async function POST(request: NextRequest) {
         skills !== undefined ||
         goals !== undefined ||
         missionTimeMinutes !== undefined ||
-        timeoutMinutes !== undefined;
+        timeoutMinutes !== undefined ||
+        outputFormat !== undefined ||
+        constraints !== undefined;
 
       if (shouldRebuildPrompt) {
-        const stripped = stripPromptSections(existing.prompt);
+        const parsed = parseMissionPrompt(existing.prompt);
         prompt = buildMissionPrompt({
           instruction:
-            instruction !== undefined ? instruction.trim() : stripped.instruction,
-          context: context !== undefined ? context : stripped.context,
+            instruction !== undefined ? instruction.trim() : parsed.instruction,
+          context: context !== undefined ? context : parsed.context,
           localDirs:
             localDirs !== undefined
               ? normalizeLocalDirsInput(localDirs)
@@ -373,6 +385,14 @@ export async function POST(request: NextRequest) {
             timeoutMinutes !== undefined
               ? timeoutMinutes
               : existing.timeoutMinutes,
+          outputFormat:
+            outputFormat !== undefined
+              ? outputFormat
+              : existing.outputFormat ?? parsed.outputFormat,
+          constraints:
+            constraints !== undefined
+              ? constraints
+              : existing.constraints ?? parsed.constraints,
         });
       }
 
@@ -391,10 +411,18 @@ export async function POST(request: NextRequest) {
         timeoutMinutes?: number | null;
         schedule?: string | null;
         categoryId?: string | null;
+        outputFormat?: string | null;
+        constraints?: string | null;
       } = {};
       if (status) updates.status = status as MissionStatus;
       if (result !== undefined) updates.result = result;
       if (prompt !== undefined) updates.prompt = prompt;
+      if (outputFormat !== undefined) {
+        updates.outputFormat = outputFormat.trim() || null;
+      }
+      if (constraints !== undefined) {
+        updates.constraints = constraints.trim() || null;
+      }
       if (localDirs !== undefined) updates.localDirs = normalizeLocalDirsInput(localDirs);
       if (references !== undefined) updates.references = references;
       if (skills !== undefined) updates.skills = skills;

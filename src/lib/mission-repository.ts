@@ -33,6 +33,8 @@ interface MissionRow {
   schedule: string | null;
   cron_job_id: string | null;
   category_id: string | null;
+  output_format: string | null;
+  constraints: string | null;
 }
 
 function safeJsonParse<T>(val: string | null | undefined, fallback: T): T {
@@ -67,6 +69,8 @@ function rowToMission(row: MissionRow | undefined): Mission | null {
     schedule: row.schedule ?? undefined,
     cronJobId: row.cron_job_id ?? undefined,
     categoryId: row.category_id ?? undefined,
+    outputFormat: row.output_format ?? undefined,
+    constraints: row.constraints ?? undefined,
   };
 }
 
@@ -120,6 +124,8 @@ export function createMission(data: {
   schedule?: string;
   cronJobId?: string;
   categoryId?: string | null;
+  outputFormat?: string;
+  constraints?: string;
 }): Mission {
   const id = uuid();
   const ts = now();
@@ -131,13 +137,13 @@ export function createMission(data: {
   inTransaction(() => {
     db()
       .prepare(
-        `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, goals, model_id, provider, profile_name, mission_time_minutes, timeout_minutes, schedule, cron_job_id, category_id)
-         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, goals, model_id, provider, profile_name, mission_time_minutes, timeout_minutes, schedule, cron_job_id, category_id, output_format, constraints)
+         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(id, data.name, data.prompt, data.profileId ?? null, ts, ts, localDirs, references, skills, goals,
         data.modelId ?? null, data.provider ?? null, data.profileName ?? null,
         data.missionTimeMinutes ?? null, data.timeoutMinutes ?? null, data.schedule ?? null, data.cronJobId ?? null,
-        data.categoryId ?? null);
+        data.categoryId ?? null, data.outputFormat ?? null, data.constraints ?? null);
   });
 
   return getMission(id)!;
@@ -162,6 +168,8 @@ export function updateMission(
     schedule?: string | null;
     cronJobId?: string | null;
     categoryId?: string | null;
+    outputFormat?: string | null;
+    constraints?: string | null;
   }
 ): Mission | null {
   const existing = getMission(id);
@@ -235,6 +243,14 @@ export function updateMission(
     if (updates.categoryId !== undefined) {
       sets.push("category_id = ?");
       vals.push(updates.categoryId);
+    }
+    if (updates.outputFormat !== undefined) {
+      sets.push("output_format = ?");
+      vals.push(updates.outputFormat);
+    }
+    if (updates.constraints !== undefined) {
+      sets.push("constraints = ?");
+      vals.push(updates.constraints);
     }
 
     vals.push(id);

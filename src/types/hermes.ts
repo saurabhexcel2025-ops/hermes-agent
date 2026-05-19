@@ -298,6 +298,8 @@ export interface Mission {
   schedule?: string;
   cronJobId?: string;
   categoryId?: string | null;
+  outputFormat?: string;
+  constraints?: string;
   createdAt: string;
   updatedAt: string;
 }

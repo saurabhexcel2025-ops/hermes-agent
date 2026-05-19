@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, ChevronDown, ChevronRight } from "lucide-react";
-import { buildMissionPrompt } from "@/lib/build-mission-prompt";
+import { Copy } from "lucide-react";
+import {
+  buildMissionPrompt,
+  buildMissionPromptHuman,
+} from "@/lib/build-mission-prompt";
 import type { LocalDirEntry } from "@/types/hermes";
+
+export type PromptPreviewMode = "human" | "ai";
 
 export interface MissionPromptPreviewProps {
   instruction: string;
   context: string;
   goals: string;
+  outputFormat: string;
+  constraints: string;
   localDirs: LocalDirEntry[];
   references: string[];
   skills: string[];
@@ -16,25 +23,39 @@ export interface MissionPromptPreviewProps {
   timeoutMinutes: number;
 }
 
+function buildOptions(props: MissionPromptPreviewProps) {
+  return {
+    instruction: props.instruction.trim(),
+    context: props.context.trim() || undefined,
+    outputFormat: props.outputFormat.trim() || undefined,
+    constraints: props.constraints.trim() || undefined,
+    goals: props.goals
+      .split("\n")
+      .map((g) => g.trim())
+      .filter(Boolean),
+    localDirs: props.localDirs,
+    references: props.references,
+    skills: props.skills,
+    missionTimeMinutes: props.missionTimeMinutes,
+    timeoutMinutes: props.timeoutMinutes,
+  };
+}
+
 export default function MissionPromptPreview(props: MissionPromptPreviewProps) {
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<PromptPreviewMode>("human");
   const [copied, setCopied] = useState(false);
 
-  const preview = useMemo(() => {
-    return buildMissionPrompt({
-      instruction: props.instruction.trim(),
-      context: props.context.trim() || undefined,
-      goals: props.goals
-        .split("\n")
-        .map((g) => g.trim())
-        .filter(Boolean),
-      localDirs: props.localDirs,
-      references: props.references,
-      skills: props.skills,
-      missionTimeMinutes: props.missionTimeMinutes,
-      timeoutMinutes: props.timeoutMinutes,
-    });
-  }, [props]);
+  const humanPreview = useMemo(
+    () => buildMissionPromptHuman(buildOptions(props)),
+    [props],
+  );
+
+  const aiPreview = useMemo(
+    () => buildMissionPrompt(buildOptions(props)),
+    [props],
+  );
+
+  const activePreview = mode === "human" ? humanPreview : aiPreview;
 
   useEffect(() => {
     if (!copied) return;
@@ -44,7 +65,7 @@ export default function MissionPromptPreview(props: MissionPromptPreviewProps) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(preview);
+      await navigator.clipboard.writeText(activePreview);
       setCopied(true);
     } catch {
       // ignore
@@ -52,39 +73,54 @@ export default function MissionPromptPreview(props: MissionPromptPreviewProps) {
   };
 
   return (
-    <div className="rounded-lg border border-white/10 bg-dark-950/50">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="flex items-center gap-1.5 text-xs font-mono text-white/40 uppercase tracking-widest hover:text-white/60"
-          aria-expanded={open}
-        >
-          {open ? (
-            <ChevronDown className="w-3.5 h-3.5" />
-          ) : (
-            <ChevronRight className="w-3.5 h-3.5" />
-          )}
-          Assembled agent prompt
-        </button>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-lg border border-white/10 p-0.5 bg-dark-950/80">
+          <button
+            type="button"
+            onClick={() => setMode("human")}
+            className={`px-3 py-1.5 text-xs font-mono rounded-md transition-colors ${
+              mode === "human"
+                ? "bg-white/10 text-white"
+                : "text-white/40 hover:text-white/60"
+            }`}
+          >
+            Human
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("ai")}
+            className={`px-3 py-1.5 text-xs font-mono rounded-md transition-colors ${
+              mode === "ai"
+                ? "bg-white/10 text-white"
+                : "text-white/40 hover:text-white/60"
+            }`}
+          >
+            AI
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => void handleCopy()}
           className="flex items-center gap-1 text-xs font-mono text-neon-cyan hover:text-neon-cyan/80"
         >
           <Copy className="w-3 h-3" />
-          {copied ? "Copied" : "Copy"}
+          {copied
+            ? "Copied"
+            : mode === "human"
+              ? "Copy human preview"
+              : "Copy agent prompt"}
         </button>
       </div>
-      <p className="px-3 pb-2 text-[10px] font-mono text-white/25 leading-relaxed">
-        Profile personality (SOUL/AGENTS) comes from Hermes at ~/.hermes — this is
-        the mission prompt sent to the agent.
+      <p className="text-[10px] font-mono text-white/25 leading-relaxed">
+        Profile personality (SOUL/AGENTS) comes from Hermes at ~/.hermes.{" "}
+        {mode === "human"
+          ? "Human view mirrors your form fields."
+          : "AI view is the XML prompt stored and sent to the agent."}
       </p>
-      {open && (
-        <pre className="px-3 pb-3 text-[11px] font-mono text-white/60 whitespace-pre-wrap max-h-64 overflow-y-auto border-t border-white/5">
-          {preview || "(empty)"}
-        </pre>
-      )}
+      <pre className="rounded-lg border border-white/10 bg-dark-950/50 px-3 py-3 text-[11px] font-mono text-white/60 whitespace-pre-wrap max-h-72 overflow-y-auto">
+        {activePreview || "(empty)"}
+      </pre>
     </div>
   );
 }

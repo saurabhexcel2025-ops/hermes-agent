@@ -68,6 +68,8 @@ interface CustomTemplate {
   defaultProvider?: string;
   localDirs?: LocalDirEntry[];
   references?: string[];
+  outputFormat?: string;
+  constraints?: string;
   timeoutMinutes?: number;
   createdAt: string;
   updatedAt: string;
@@ -250,6 +252,10 @@ export async function POST(request: NextRequest) {
         references: Array.isArray(body.references)
           ? (body.references as unknown[]).map((x) => String(x))
           : [],
+        outputFormat:
+          typeof body.outputFormat === "string" ? body.outputFormat : undefined,
+        constraints:
+          typeof body.constraints === "string" ? body.constraints : undefined,
         timeoutMinutes:
           typeof body.timeoutMinutes === "number" && Number.isFinite(body.timeoutMinutes)
             ? body.timeoutMinutes
@@ -309,6 +315,14 @@ export async function POST(request: NextRequest) {
         template.references = Array.isArray(body.references)
           ? (body.references as unknown[]).map((x) => String(x))
           : [];
+      }
+      if (body.outputFormat !== undefined) {
+        template.outputFormat =
+          typeof body.outputFormat === "string" ? body.outputFormat : undefined;
+      }
+      if (body.constraints !== undefined) {
+        template.constraints =
+          typeof body.constraints === "string" ? body.constraints : undefined;
       }
       if (body.timeoutMinutes !== undefined) {
         template.timeoutMinutes =

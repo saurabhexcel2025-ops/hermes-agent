@@ -4,9 +4,12 @@ Control Hub missions are stored in SQLite (`missions` table) with optional JSON 
 
 ## Prompt model
 
-- The UI sends **raw** `instruction` and optional `context` on dispatch/update.
-- The API builds the stored `prompt` once via `buildMissionPrompt()` in `src/lib/build-mission-prompt.ts`.
-- Editing uses `stripPromptSections()` to recover instruction/context from a stored prompt.
+- The UI sends **raw** fields (`instruction`, `context`, `goals`, `outputFormat`, `constraints`, dirs, refs, skills) on dispatch/update.
+- The API builds the stored `prompt` via `buildMissionPrompt()` in `src/lib/build-mission-prompt.ts` — XML under `<hermes_mission>` (agent payload).
+- The composer preview can toggle **Human** (form mirror) vs **AI** (stored agent prompt).
+- Editing uses `parseMissionPrompt()` for instruction/context/output/constraints; goals, dirs, refs, and skills load from DB columns.
+- `output_format` and `constraints` columns (migration `003_mission_output_constraints.sql`) persist those fields for edit round-trip.
+- Missions saved before the XML format may need re-save after deploy.
 
 ## Categories
 

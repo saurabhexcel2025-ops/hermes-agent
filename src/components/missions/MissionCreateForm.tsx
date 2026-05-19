@@ -24,6 +24,8 @@ export interface MissionFormState {
   newInstruction: string;
   newContext: string;
   newGoals: string;
+  newOutputFormat: string;
+  newConstraints: string;
   newDispatch: "save" | "now" | "cron" | "queue";
   newSchedule: string;
   scheduleType: ScheduleMode;
@@ -60,6 +62,8 @@ export interface MissionCreateFormProps {
   onSaveAsTemplate: () => void;
   onClose: () => void;
   dispatching: boolean;
+  dispatchAcknowledged?: boolean;
+  onDispatchOpenChange?: (open: boolean) => void;
 }
 
 export const DISPATCH_MODES = [
@@ -92,6 +96,7 @@ export function MissionComposerActions({
   onSaveAsTemplate,
   onClose,
   dispatching,
+  dispatchAcknowledged = true,
 }: Pick<
   MissionCreateFormProps,
   | "editingId"
@@ -101,6 +106,7 @@ export function MissionComposerActions({
   | "onSaveAsTemplate"
   | "onClose"
   | "dispatching"
+  | "dispatchAcknowledged"
 >) {
   const existing = editingId
     ? missions.find((m) => m.id === editingId)
@@ -119,28 +125,39 @@ export function MissionComposerActions({
     isActiveEdit: Boolean(isActiveEdit),
   });
 
+  const needsDispatchAck = !editingId && !dispatchAcknowledged;
+
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        onClick={onSubmit}
-        disabled={
-          !formState.newName.trim() ||
-          !formState.newInstruction.trim() ||
-          dispatching
-        }
-        loading={dispatching}
-      >
-        <Send className="w-3.5 h-3.5" />
-        {submitLabel}
-      </Button>
-      {formState.newInstruction.trim() && (
-        <Button variant="secondary" onClick={onSaveAsTemplate}>
-          <Save className="w-3.5 h-3.5" /> Save as Template
-        </Button>
+    <div className="space-y-2">
+      {needsDispatchAck && (
+        <p className="text-xs font-mono text-neon-orange/80">
+          Open <strong className="text-neon-cyan/90">Dispatch</strong> to choose
+          how this mission runs before submitting.
+        </p>
       )}
-      <Button variant="ghost" onClick={onClose}>
-        Cancel
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          onClick={onSubmit}
+          disabled={
+            !formState.newName.trim() ||
+            !formState.newInstruction.trim() ||
+            dispatching ||
+            needsDispatchAck
+          }
+          loading={dispatching}
+        >
+          <Send className="w-3.5 h-3.5" />
+          {submitLabel}
+        </Button>
+        {formState.newInstruction.trim() && (
+          <Button variant="secondary" onClick={onSaveAsTemplate}>
+            <Save className="w-3.5 h-3.5" /> Save as Template
+          </Button>
+        )}
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
@@ -162,6 +179,8 @@ export default function MissionCreateForm({
   onSaveAsTemplate,
   onClose,
   dispatching,
+  dispatchAcknowledged = false,
+  onDispatchOpenChange,
 }: MissionCreateFormProps) {
   const existing = editingId
     ? missions.find((m) => m.id === editingId)
@@ -236,7 +255,7 @@ export default function MissionCreateForm({
       </div>
 
       <div>
-        <ComposerFieldLabel>Instruction Prompt</ComposerFieldLabel>
+        <ComposerFieldLabel>Instruction</ComposerFieldLabel>
         <AutoTextarea
           value={formState.newInstruction}
           onChange={(v) => setFormField("newInstruction", v)}
@@ -247,7 +266,7 @@ export default function MissionCreateForm({
       </div>
 
       <div>
-        <ComposerFieldLabel>Goals (one per line)</ComposerFieldLabel>
+        <ComposerFieldLabel>Goals</ComposerFieldLabel>
         <AutoTextarea
           value={formState.newGoals}
           onChange={(v) => setFormField("newGoals", v)}
@@ -256,28 +275,19 @@ export default function MissionCreateForm({
           placeholder="Gather data&#10;Analyze findings&#10;Write report"
         />
         <p className="text-[10px] text-white/25 font-mono mt-1.5">
-          Optional checklist the agent should complete alongside the instruction.
+          One goal per line — checklist the agent completes alongside the task.
         </p>
       </div>
 
       <ComposerAccordion
-        title="Context & resources"
-        description="Background, files, references, and skills"
+        title="Mission parameters"
+        description="Directories, references, skills, context, output, and constraints"
         defaultOpen={false}
+        step={1}
+        accent="cyan"
       >
         <div>
-          <ComposerFieldLabel optional>Context Prompt</ComposerFieldLabel>
-          <AutoTextarea
-            value={formState.newContext}
-            onChange={(v) => setFormField("newContext", v)}
-            minRows={2}
-            maxRows={8}
-            placeholder="Additional context for this run..."
-          />
-        </div>
-
-        <div>
-          <ComposerFieldLabel optional>Local Directories</ComposerFieldLabel>
+          <ComposerFieldLabel>Working directories</ComposerFieldLabel>
           <div className="space-y-2">
             <LocalDirRow
               mode="draft"
@@ -326,7 +336,7 @@ export default function MissionCreateForm({
         </div>
 
         <div>
-          <ComposerFieldLabel optional>Key References</ComposerFieldLabel>
+          <ComposerFieldLabel>References</ComposerFieldLabel>
           <div className="space-y-1.5">
             {formState.newReferences.map((ref, i) => (
               <div
@@ -389,9 +399,7 @@ export default function MissionCreateForm({
         </div>
 
         <div>
-          <ComposerFieldLabel optional>
-            Attached Skills (max 10)
-          </ComposerFieldLabel>
+          <ComposerFieldLabel>Recommend agent skills</ComposerFieldLabel>
           <SkillSelector
             value={formState.newSkills}
             onChange={(skills) => setFormField("newSkills", skills)}
@@ -400,12 +408,46 @@ export default function MissionCreateForm({
           />
         </div>
 
+        <div>
+          <ComposerFieldLabel>Additional context</ComposerFieldLabel>
+          <AutoTextarea
+            value={formState.newContext}
+            onChange={(v) => setFormField("newContext", v)}
+            minRows={2}
+            maxRows={8}
+            placeholder="Background the agent should know before starting..."
+          />
+        </div>
+
+        <div>
+          <ComposerFieldLabel>Output format</ComposerFieldLabel>
+          <AutoTextarea
+            value={formState.newOutputFormat}
+            onChange={(v) => setFormField("newOutputFormat", v)}
+            minRows={2}
+            maxRows={6}
+            placeholder="e.g. Markdown report with summary and list of changed files"
+          />
+        </div>
+
+        <div>
+          <ComposerFieldLabel>Constraints</ComposerFieldLabel>
+          <AutoTextarea
+            value={formState.newConstraints}
+            onChange={(v) => setFormField("newConstraints", v)}
+            minRows={2}
+            maxRows={6}
+            placeholder="e.g. Do not modify tests/; max 3 files per commit"
+          />
+        </div>
       </ComposerAccordion>
 
       <ComposerAccordion
         title="Runtime"
         description="Profile, model, scope, and timeout"
         defaultOpen={false}
+        step={2}
+        accent="purple"
       >
         <AgentRuntimeDefaultsCard
           variant="embedded"
@@ -429,11 +471,15 @@ export default function MissionCreateForm({
         title="Assembled agent prompt"
         description="Preview of the mission prompt sent to the agent"
         defaultOpen={false}
+        step={3}
+        accent="pink"
       >
         <MissionPromptPreview
           instruction={formState.newInstruction}
           context={formState.newContext}
           goals={formState.newGoals}
+          outputFormat={formState.newOutputFormat}
+          constraints={formState.newConstraints}
           localDirs={formState.newLocalDirs}
           references={formState.newReferences}
           skills={formState.newSkills}
@@ -446,6 +492,11 @@ export default function MissionCreateForm({
         title="Dispatch"
         description="When and how this mission runs"
         defaultOpen={false}
+        step={4}
+        accent="green"
+        onOpenChange={(open) => {
+          if (open) onDispatchOpenChange?.(true);
+        }}
       >
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {DISPATCH_MODES.map((mode) => (
@@ -487,6 +538,7 @@ export default function MissionCreateForm({
           onSaveAsTemplate={onSaveAsTemplate}
           onClose={onClose}
           dispatching={dispatching}
+          dispatchAcknowledged={dispatchAcknowledged}
         />
       )}
     </div>

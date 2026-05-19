@@ -4,7 +4,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useMissionsApi } from "@/hooks/useMissionsApi";
 import type { LocalDirEntry, Mission } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
-import { buildMissionPrompt, stripPromptSections } from "@/lib/build-mission-prompt";
+import { parseMissionPrompt } from "@/lib/build-mission-prompt";
 import type { MissionFormState } from "@/components/missions/MissionCreateForm";
 import type { MissionTemplate } from "@/components/missions/TemplateModals";
 import {
@@ -93,8 +93,11 @@ export function useMissionsPage() {
   const [newInstruction, setNewInstruction] = useState("");
   const [newContext, setNewContext] = useState("");
   const [newGoals, setNewGoals] = useState("");
+  const [newOutputFormat, setNewOutputFormat] = useState("");
+  const [newConstraints, setNewConstraints] = useState("");
+  const [dispatchAcknowledged, setDispatchAcknowledged] = useState(false);
   const [newDispatch, setNewDispatch] = useState<"save" | "now" | "cron" | "queue">(
-    "now",
+    "save",
   );
   const [newSchedule, setNewSchedule] = useState("every 5m");
   const [scheduleType, setScheduleType] = useState<"interval" | "wall-clock" | "post-run">("interval");
@@ -128,6 +131,8 @@ export function useMissionsPage() {
     newInstruction,
     newContext,
     newGoals,
+    newOutputFormat,
+    newConstraints,
     newDispatch,
     newSchedule,
     scheduleType,
@@ -153,7 +158,12 @@ export function useMissionsPage() {
       case "newInstruction": setNewInstruction(value as string); break;
       case "newContext": setNewContext(value as string); break;
       case "newGoals": setNewGoals(value as string); break;
-      case "newDispatch": setNewDispatch(value as "save" | "now" | "cron" | "queue"); break;
+      case "newOutputFormat": setNewOutputFormat(value as string); break;
+      case "newConstraints": setNewConstraints(value as string); break;
+      case "newDispatch":
+        setNewDispatch(value as "save" | "now" | "cron" | "queue");
+        setDispatchAcknowledged(true);
+        break;
       case "newSchedule": setNewSchedule(value as string); break;
       case "scheduleType": setScheduleType(value as "interval" | "wall-clock" | "post-run"); break;
       case "newMissionTime": setNewMissionTime(value as number); break;
@@ -170,20 +180,12 @@ export function useMissionsPage() {
     }
   };
 
-  const buildPrompt = useCallback(() => {
-    return buildMissionPrompt({
-      instruction: newInstruction,
-      localDirs: newLocalDirs,
-      references: newReferences,
-      skills: newSkills,
-      context: newContext,
-    });
-  }, [newInstruction, newLocalDirs, newReferences, newSkills, newContext]);
-
   function dispatchPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       instruction: newInstruction.trim(),
       context: newContext.trim() || undefined,
+      outputFormat: newOutputFormat.trim() || undefined,
+      constraints: newConstraints.trim() || undefined,
       categoryId: newCategoryId,
       goals: newGoals.split("\n").filter((g) => g.trim()),
       profile: newProfile || undefined,
@@ -204,6 +206,10 @@ export function useMissionsPage() {
     setNewInstruction("");
     setNewContext("");
     setNewGoals("");
+    setNewOutputFormat("");
+    setNewConstraints("");
+    setDispatchAcknowledged(false);
+    setNewDispatch("save");
     setNewModel("");
     setNewProvider("");
     setNewLocalDirs([]);
@@ -315,6 +321,14 @@ export function useMissionsPage() {
             setNewInstruction(t.instruction);
             setNewContext(t.context);
             setNewGoals(t.goals.join("\n"));
+            setNewOutputFormat(
+              (t as MissionTemplate & { outputFormat?: string }).outputFormat ??
+                "",
+            );
+            setNewConstraints(
+              (t as MissionTemplate & { constraints?: string }).constraints ??
+                "",
+            );
             if (t.profile) setNewProfile(t.profile);
             if (t.defaultModel) setNewModel(t.defaultModel);
             if (t.defaultProvider) setNewProvider(t.defaultProvider);
@@ -404,6 +418,10 @@ export function useMissionsPage() {
 
   const handleCreate = async () => {
     if (!newName.trim() || !newInstruction.trim()) return;
+    if (!editingId && !dispatchAcknowledged) {
+      showToast("Open Dispatch to choose how this mission runs.", "error");
+      return;
+    }
     if (dispatching) return;
     setDispatching(true);
 
@@ -516,10 +534,13 @@ export function useMissionsPage() {
   const handleEdit = (m: MissionRow) => {
     setEditingId(m.id);
     setNewName(m.name);
-    const { instruction, context } = stripPromptSections(m.prompt);
-    setNewInstruction(instruction);
-    setNewContext(context);
+    const parsed = parseMissionPrompt(m.prompt);
+    setNewInstruction(parsed.instruction);
+    setNewContext(parsed.context);
+    setNewOutputFormat(m.outputFormat ?? parsed.outputFormat ?? "");
+    setNewConstraints(m.constraints ?? parsed.constraints ?? "");
     setNewGoals(m.goals?.join("\n") ?? "");
+    setDispatchAcknowledged(true);
     setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences(m.references ?? []);
@@ -569,6 +590,8 @@ export function useMissionsPage() {
     setNewInstruction("");
     setNewContext("");
     setNewGoals("");
+    setNewOutputFormat("");
+    setNewConstraints("");
     setNewLocalDirs([]);
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences([]);
@@ -592,6 +615,8 @@ export function useMissionsPage() {
 
       payload.instruction = newInstruction;
       payload.context = newContext;
+      payload.outputFormat = newOutputFormat;
+      payload.constraints = newConstraints;
       payload.goals = newGoals.split("\n").filter((g) => g.trim());
       payload.localDirs = newLocalDirs;
       payload.references = newReferences;
@@ -665,6 +690,12 @@ export function useMissionsPage() {
     setNewInstruction(t.instruction || "");
     setNewContext(t.context || "");
     setNewGoals((t.goals || []).join("\n"));
+    setNewOutputFormat(
+      (t as MissionTemplate & { outputFormat?: string }).outputFormat ?? "",
+    );
+    setNewConstraints(
+      (t as MissionTemplate & { constraints?: string }).constraints ?? "",
+    );
     setNewProfile(t.profile || "");
     setNewModel(t.defaultModel || "");
     setNewProvider(t.defaultProvider || "");
@@ -717,10 +748,13 @@ export function useMissionsPage() {
   const handleDuplicateMission = (m: MissionRow) => {
     setEditingId(null);
     setNewName(`${m.name} (copy)`);
-    const { instruction, context } = stripPromptSections(m.prompt);
-    setNewInstruction(instruction);
-    setNewContext(context);
+    const parsed = parseMissionPrompt(m.prompt);
+    setNewInstruction(parsed.instruction);
+    setNewContext(parsed.context);
+    setNewOutputFormat(m.outputFormat ?? parsed.outputFormat ?? "");
+    setNewConstraints(m.constraints ?? parsed.constraints ?? "");
     setNewGoals(m.goals?.join("\n") ?? "");
+    setDispatchAcknowledged(false);
     setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
     setNewReferences(m.references ?? []);
     setNewSkills(m.skills ?? []);
@@ -914,6 +948,12 @@ export function useMissionsPage() {
     setNewContext,
     newGoals,
     setNewGoals,
+    newOutputFormat,
+    setNewOutputFormat,
+    newConstraints,
+    setNewConstraints,
+    dispatchAcknowledged,
+    setDispatchAcknowledged,
     newProfile,
     setNewProfile,
     newModel,
@@ -938,7 +978,6 @@ export function useMissionsPage() {
     handleDelete,
     handleCancel,
     handleDuplicateMission,
-    buildPrompt,
   };
 }
 

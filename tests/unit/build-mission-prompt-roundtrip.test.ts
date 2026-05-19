@@ -1,118 +1,126 @@
 /**
- * buildMissionPrompt round-trip tests:
- * build → stripPromptSections → instruction should be preserved.
- * Also verifies the new MISSION SCOPE and SAFETY LIMITS sections.
+ * buildMissionPrompt / parseMissionPrompt / buildMissionPromptHuman tests.
  */
 
-import { buildMissionPrompt, stripPromptSections } from "@/lib/build-mission-prompt";
+import {
+  buildMissionPrompt,
+  buildMissionPromptHuman,
+  parseMissionPrompt,
+} from "@/lib/build-mission-prompt";
 
-describe("buildMissionPrompt → stripPromptSections round-trip", () => {
-  it("preserves instruction through build+strip", () => {
-    const instruction = "Refactor the authentication module to use JWT.";
-    const prompt = buildMissionPrompt({
-      instruction,
-      localDirs: ["/repo"],
-      references: ["README.md"],
-      skills: ["refactoring-patterns"],
-      goals: ["Read & understand", "Plan refactor", "Execute refactor"],
-      context: "The module lives in src/auth/",
-    });
-    const { instruction: stripped } = stripPromptSections(prompt);
-    expect(stripped).toBe(instruction);
+const baseOpts = {
+  instruction: "Refactor the authentication module to use JWT.",
+  localDirs: ["/repo"],
+  references: ["README.md"],
+  skills: ["refactoring-patterns"],
+  goals: ["Read & understand", "Plan refactor"],
+  context: "The module lives in src/auth/",
+  outputFormat: "Markdown summary plus file list.",
+  constraints: "Do not modify tests/ without approval.",
+  missionTimeMinutes: 120,
+  timeoutMinutes: 30,
+};
+
+describe("buildMissionPrompt (AI XML)", () => {
+  it("wraps prompt in hermes_mission with mission_brief first and task last", () => {
+    const prompt = buildMissionPrompt(baseOpts);
+    expect(prompt).toMatch(/^<hermes_mission>/);
+    expect(prompt).toMatch(/<\/hermes_mission>$/);
+    expect(prompt.indexOf("<mission_brief>")).toBeLessThan(
+      prompt.indexOf("<task>"),
+    );
+    expect(prompt.lastIndexOf("<task>")).toBeGreaterThan(
+      prompt.indexOf("<constraints"),
+    );
   });
 
-  it("preserves context through build+strip", () => {
-    const context = "Background: the auth module is 3 years old and needs cleanup.";
-    const prompt = buildMissionPrompt({
-      instruction: "Do the thing",
-      context,
-    });
-    const { context: strippedContext } = stripPromptSections(prompt);
-    expect(strippedContext).toBe(context);
+  it("does not use --- delimiters", () => {
+    const prompt = buildMissionPrompt(baseOpts);
+    expect(prompt).not.toMatch(/\n---\n/);
   });
 
-  it("injects MISSION SCOPE when missionTimeMinutes is set", () => {
+  it("uses CDATA for user-authored sections", () => {
+    const prompt = buildMissionPrompt(baseOpts);
+    expect(prompt).toContain("<task><![CDATA[");
+    expect(prompt).toContain("<additional_context><![CDATA[");
+    expect(prompt).toContain("<expected_output><![CDATA[");
+    expect(prompt).toContain('<constraints binding="hard"><![CDATA[');
+  });
+
+  it("omits empty optional tags", () => {
+    const prompt = buildMissionPrompt({ instruction: "Only task." });
+    expect(prompt).not.toContain("<working_directories>");
+    expect(prompt).not.toContain("<goals>");
+    expect(prompt).toContain("<mission_brief>");
+    expect(prompt).toContain("<task>");
+  });
+
+  it("includes mission_scope and safety_limits when set", () => {
     const prompt = buildMissionPrompt({
-      instruction: "Fix the bug",
+      instruction: "Fix bug",
       missionTimeMinutes: 120,
-    });
-    expect(prompt).toContain("## MISSION SCOPE");
-    expect(prompt).toContain("120 minutes");
-    expect(prompt).toContain("2.0 developer hours");
-    expect(prompt).toContain("Planning horizon:");
-    expect(prompt).toContain("SOFT GUIDE");
-  });
-
-  it("omits MISSION SCOPE when missionTimeMinutes is absent", () => {
-    const prompt = buildMissionPrompt({
-      instruction: "Fix the bug",
-    });
-    expect(prompt).not.toContain("## MISSION SCOPE");
-    expect(prompt).not.toContain("Planning horizon");
-  });
-
-  it("injects SAFETY LIMITS when timeoutMinutes is set", () => {
-    const prompt = buildMissionPrompt({
-      instruction: "Investigate the outage",
       timeoutMinutes: 30,
     });
-    expect(prompt).toContain("## SAFETY LIMITS");
+    expect(prompt).toContain("<mission_scope>");
+    expect(prompt).toContain("120 minutes");
+    expect(prompt).toContain("<safety_limits>");
     expect(prompt).toContain("Inactivity timeout: 30 minutes");
-    expect(prompt).toContain("Each tool call resets the timer");
   });
 
-  it("omits SAFETY LIMITS when timeoutMinutes is absent", () => {
+  it("omits scope and safety when zero or absent", () => {
     const prompt = buildMissionPrompt({
-      instruction: "Investigate the outage",
-    });
-    expect(prompt).not.toContain("## SAFETY LIMITS");
-    expect(prompt).not.toContain("Inactivity timeout");
-  });
-
-  it("strips MISSION SCOPE and SAFETY LIMITS via stripPromptSections", () => {
-    const prompt = buildMissionPrompt({
-      instruction: "Deploy the release",
-      missionTimeMinutes: 60,
-      timeoutMinutes: 45,
-    });
-    const { instruction } = stripPromptSections(prompt);
-    // Original prompt has both SCOPE and SAFETY sections
-    expect(prompt).toContain("## MISSION SCOPE");
-    expect(prompt).toContain("## SAFETY LIMITS");
-    // Stripped prompt contains only the instruction
-    expect(instruction).toBe("Deploy the release");
-  });
-
-  it("handles zero missionTimeMinutes as absent (no scope block)", () => {
-    const prompt = buildMissionPrompt({
-      instruction: "Do it",
+      instruction: "Fix bug",
       missionTimeMinutes: 0,
-    });
-    expect(prompt).not.toContain("## MISSION SCOPE");
-  });
-
-  it("handles zero timeoutMinutes as absent (no safety block)", () => {
-    const prompt = buildMissionPrompt({
-      instruction: "Do it",
       timeoutMinutes: 0,
     });
-    expect(prompt).not.toContain("## SAFETY LIMITS");
+    expect(prompt).not.toContain("<mission_scope>");
+    expect(prompt).not.toContain("<safety_limits>");
   });
 
-  it("build+strip round-trips multiple options at once", () => {
-    const instruction = "Run a full deployment pipeline check.";
-    const context = "We are on the staging environment.";
+  it("escapes CDATA break sequences in user content", () => {
     const prompt = buildMissionPrompt({
-      instruction,
-      context,
-      localDirs: [{ path: "/workspace/deploy" }],
-      skills: ["devops"],
-      goals: ["Verify infra", "Deploy", "Run smoke tests"],
-      missionTimeMinutes: 90,
-      timeoutMinutes: 60,
+      instruction: "Use ]]>",
     });
-    const result = stripPromptSections(prompt);
-    expect(result.instruction).toBe(instruction);
-    expect(result.context).toBe(context);
+    expect(prompt).toContain("]]]]><![CDATA[>");
+    expect(parseMissionPrompt(prompt).instruction).toBe("Use ]]>");
+  });
+});
+
+describe("parseMissionPrompt round-trip", () => {
+  it("preserves instruction, context, output, constraints", () => {
+    const prompt = buildMissionPrompt(baseOpts);
+    const parsed = parseMissionPrompt(prompt);
+    expect(parsed.instruction).toBe(baseOpts.instruction);
+    expect(parsed.context).toBe(baseOpts.context);
+    expect(parsed.outputFormat).toBe(baseOpts.outputFormat);
+    expect(parsed.constraints).toBe(baseOpts.constraints);
+  });
+
+  it("returns raw string as instruction when not XML", () => {
+    const parsed = parseMissionPrompt("Plain old instruction");
+    expect(parsed.instruction).toBe("Plain old instruction");
+    expect(parsed.context).toBe("");
+  });
+});
+
+describe("buildMissionPromptHuman", () => {
+  it("uses markdown headings in form field order", () => {
+    const human = buildMissionPromptHuman(baseOpts);
+    expect(human.indexOf("## Instruction")).toBeLessThan(
+      human.indexOf("## Goals"),
+    );
+    expect(human.indexOf("## Goals")).toBeLessThan(
+      human.indexOf("## Additional context"),
+    );
+    expect(human.indexOf("## Repositories")).toBeLessThan(
+      human.indexOf("## References"),
+    );
+    expect(human).not.toContain("<hermes_mission>");
+    expect(human).not.toContain("<task>");
+  });
+
+  it("omits empty sections", () => {
+    const human = buildMissionPromptHuman({ instruction: "Do it" });
+    expect(human).toBe("## Instruction\n\nDo it");
   });
 });
