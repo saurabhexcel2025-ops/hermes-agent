@@ -59,32 +59,39 @@ jest.mock("@/lib/backends", () => ({
   },
 }));
 
-// Mock mission-repository with require() factory
+jest.mock("@/lib/mission-cron-sync", () => ({
+  enrichMissionCron: jest.fn((m: unknown) => m),
+  syncMissionToCronJob: jest.fn(),
+  pauseMissionCron: jest.fn(),
+  deleteMissionCron: jest.fn(),
+}));
+
+jest.mock("@/lib/mission-category-repository", () => ({
+  getCategory: jest.fn(),
+}));
+
 jest.mock("@/lib/mission-repository", () => {
-  const loadMission = jest.fn();
-  const saveMission = jest.fn();
+  const getMission = jest.fn();
   const updateMission = jest.fn();
-  const listMissions = jest.fn();
+  const buildMissionPrompt = jest.fn(
+    (opts: { instruction: string }) => opts.instruction,
+  );
 
   return {
-    ensureMissionsDir: jest.fn(),
-    getMissionsDataDir: jest.fn(() => "/tmp/test-hermes/missions"),
-    loadMission,
-    saveMission,
+    getMission,
     updateMission,
-    listMissions,
-    sanitizeMissionId: jest.fn((id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "")),
-    __loadMission: loadMission,
-    __saveMission: saveMission,
+    listMissions: jest.fn(),
+    createMission: jest.fn(),
+    deleteMission: jest.fn(),
+    buildMissionPrompt,
+    __getMission: getMission,
     __updateMission: updateMission,
-    __listMissions: listMissions,
   };
 });
 
 const missionRepo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
 const mockUpdateMission = missionRepo.__updateMission;
-const mockLoadMission = missionRepo.__loadMission;
-const mockSaveMission = missionRepo.__saveMission;
+const mockGetMission = missionRepo.__getMission;
 
 const mockMissionData = {
   id: "m_test123",
@@ -111,8 +118,9 @@ const mockMissionData = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUpdateMission.mockReturnValue({ ...mockMissionData });
-  mockLoadMission.mockReturnValue({ ...mockMissionData });
-  mockSaveMission.mockReturnValue(undefined);
+  mockGetMission.mockImplementation((id: string) =>
+    id === "m_test123" ? { ...mockMissionData } : null,
+  );
 });
 
 async function postRoute(body: Record<string, unknown>) {

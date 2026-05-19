@@ -56,34 +56,39 @@ jest.mock("@/lib/backends", () => ({
   },
 }));
 
-// Mock mission-repository using require() factory
+jest.mock("@/lib/mission-cron-sync", () => ({
+  enrichMissionCron: jest.fn((m: unknown) => m),
+  syncMissionToCronJob: jest.fn(),
+  pauseMissionCron: jest.fn(),
+  deleteMissionCron: jest.fn(),
+}));
+
 jest.mock("@/lib/mission-repository", () => {
-  const loadMission = jest.fn();
-  const saveMission = jest.fn();
+  const getMission = jest.fn();
   const deleteMission = jest.fn();
-  const listMissions = jest.fn();
 
   return {
-    ensureMissionsDir: jest.fn(),
-    getMissionsDataDir: jest.fn(() => "/tmp/test-hermes/missions"),
-    loadMission,
-    saveMission,
+    getMission,
     deleteMission,
-    listMissions,
-    sanitizeMissionId: jest.fn((id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "")),
-    __loadMission: loadMission,
-    __saveMission: saveMission,
+    listMissions: jest.fn(),
+    createMission: jest.fn(),
+    updateMission: jest.fn(),
+    buildMissionPrompt: jest.fn(),
+    __getMission: getMission,
     __deleteMission: deleteMission,
-    __listMissions: listMissions,
   };
 });
 
 const repo = require("@/lib/mission-repository") as Record<string, jest.Mock>;
 const mockDeleteMission = repo.__deleteMission;
+const mockGetMission = repo.__getMission;
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockDeleteMission.mockReturnValue(true);
+  mockGetMission.mockImplementation((id: string) =>
+    id === "m_existing" ? { id: "m_existing", name: "Test" } : null,
+  );
 });
 
 async function postRoute(body: Record<string, unknown>) {

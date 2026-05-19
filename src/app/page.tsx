@@ -33,6 +33,11 @@ import {
 import { StatusDot } from "@/components/ui/Card";
 import IntervalSelector from "@/components/ui/IntervalSelector";
 import CategoryAccordion from "@/components/ui/CategoryAccordion";
+import {
+  groupTemplatesByCategory,
+  type TemplateLike,
+} from "@/lib/mission-categories";
+import type { MissionCategory } from "@/lib/mission-category-repository";
 import TemplateCard from "@/components/ui/TemplateCard";
 import { useToast } from "@/components/ui/Toast";
 import type { SystemStatus, AccentColor } from "@/types/hermes";
@@ -184,29 +189,6 @@ function StatPill({
 
 const DEFAULT_PLATFORMS = ["discord", "telegram", "slack", "whatsapp"] as const;
 
-const TEMPLATE_CAT_ORDER = [
-  "Business - Operations",
-  "Engineering - QA",
-  "Engineering - DevOps",
-  "Engineering - Software",
-  "Engineering - Data",
-  "Engineering - Data Science",
-  "Business - Creative",
-  "Support",
-  "Custom",
-] as const;
-
-const TEMPLATE_CAT_COLORS: Record<string, AccentColor> = {
-  "Engineering - QA": "pink",
-  "Engineering - DevOps": "cyan",
-  "Engineering - Software": "purple",
-  "Engineering - Data": "green",
-  "Engineering - Data Science": "orange",
-  "Business - Operations": "cyan",
-  "Business - Creative": "orange",
-  "Support": "blue",
-  "Custom": "purple",
-};
 
 export default function Dashboard() {
   const [data, setDataFields] = useState<{
@@ -215,7 +197,18 @@ export default function Dashboard() {
     processes: HermesProcess[];
     missions: MissionBrief[];
     config: Record<string, unknown> | null;
-    templates: Array<{ id: string; name: string; icon: string; color: string; category: string; profile: string; description: string; isCustom?: boolean }>;
+    templates: Array<{
+      id: string;
+      name: string;
+      icon: string;
+      color: string;
+      category: string;
+      categoryId?: string;
+      profile: string;
+      description: string;
+      isCustom?: boolean;
+    }>;
+    categories: MissionCategory[];
   }>({
     status: null,
     monitor: null,
@@ -223,8 +216,10 @@ export default function Dashboard() {
     missions: [],
     config: null,
     templates: [],
+    categories: [],
   });
-  const { status, monitor, processes, missions, config, templates } = data;
+  const { status, monitor, processes, missions, config, templates, categories } =
+    data;
 
   const setData = useCallback((partial: Partial<typeof data>) => {
     setDataFields(prev => ({ ...prev, ...partial }));
@@ -333,11 +328,19 @@ export default function Dashboard() {
 
     // Batch all initial fetches — single render update
     const initialLoad = async () => {
-      const [statusRes, configRes, templatesRes, monitorRes, processesRes, missionsRes] =
-        await Promise.all([
+      const [
+        statusRes,
+        configRes,
+        templatesRes,
+        categoriesRes,
+        monitorRes,
+        processesRes,
+        missionsRes,
+      ] = await Promise.all([
           fetch("/api/status", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/config", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/templates", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/mission-categories", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/agents", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/missions", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
@@ -348,6 +351,7 @@ export default function Dashboard() {
           status: statusRes.data,
           config: configRes.data,
           templates: templatesRes.data?.templates || [],
+          categories: categoriesRes.data?.categories || [],
           monitor: monitorRes.data,
           processes: processesRes.data?.processes || processesRes.processes || [],
           missions: missionsRes.data?.missions || [],
@@ -406,14 +410,22 @@ export default function Dashboard() {
   const [now] = useState(() => Date.now());
 
   // Group templates by category for the dispatch section
-  const groupedTemplates = useMemo(() => {
-    const grouped: Record<string, typeof templates> = {};
-    for (const t of templates) {
-      const cat = t.isCustom ? "Custom" : (t.category || "Other");
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(t);
-    }
-    return grouped;
+  const templateGroups = useMemo(
+    () =>
+      groupTemplatesByCategory(
+        templates as TemplateLike[],
+        categories,
+      ),
+    [templates, categories],
+  );
+
+  const collapsedTemplateStrip = useMemo(() => {
+    if (templates.length <= 8) return templates;
+    const sorted = [...templates].sort((a, b) => {
+      if (a.isCustom !== b.isCustom) return a.isCustom ? 1 : -1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+    return sorted.slice(0, 12);
   }, [templates]);
 
   return (
@@ -546,7 +558,7 @@ export default function Dashboard() {
           {/* Collapsed: horizontal pill strip */}
           {!dispatchExpanded && (
             <div className="px-4 pb-3 flex flex-wrap gap-1.5">
-              {templates.slice(0, 12).map((t) => (
+              {collapsedTemplateStrip.map((t) => (
                 <TemplateCard
                   key={t.id}
                   id={t.id}
@@ -556,7 +568,11 @@ export default function Dashboard() {
                   description={t.description}
                   isCustom={t.isCustom}
                   compact
-                  onSelect={() => router.push(`/orchestration/missions?template=${t.id}`)}
+                  onSelect={() =>
+                    router.push(
+                      `/orchestration/missions?template=${t.id}&compose=1`,
+                    )
+                  }
                 />
               ))}
               {templates.length > 12 && (
@@ -573,37 +589,36 @@ export default function Dashboard() {
           {/* Expanded: grouped by category, all compact pills */}
           {dispatchExpanded && (
             <div className="px-4 pb-4 space-y-3">
-              {TEMPLATE_CAT_ORDER.map((cat) => {
-                const items = groupedTemplates[cat];
-                if (!items) return null;
-                const color = TEMPLATE_CAT_COLORS[cat] || "cyan";
-                return (
-                  <CategoryAccordion
-                    key={cat}
-                    name={cat}
-                    count={items.length}
-                    color={color}
-                    expandable={cat === "Custom" && items.length > 6}
-                    defaultOpen={true}
-                  >
-                    <div className="flex flex-wrap gap-1.5">
-                      {items.map((t) => (
-                        <TemplateCard
-                          key={t.id}
-                          id={t.id}
-                          name={t.name}
-                          icon={t.icon}
-                          color={t.color}
-                          description={t.description}
-                          isCustom={t.isCustom}
-                          compact
-                          onSelect={() => router.push(`/orchestration/missions?template=${t.id}`)}
-                        />
-                      ))}
-                    </div>
-                  </CategoryAccordion>
-                );
-              })}
+              {templateGroups.map((group) => (
+                <CategoryAccordion
+                  key={group.categoryId ?? "__none__"}
+                  name={group.label}
+                  count={group.items.length}
+                  color={group.color as AccentColor}
+                  expandable={group.items.length > 6}
+                  defaultOpen={true}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.items.map((t) => (
+                      <TemplateCard
+                        key={t.id}
+                        id={t.id}
+                        name={t.name ?? t.id}
+                        icon={t.icon ?? "Zap"}
+                        color={t.color ?? "cyan"}
+                        description={t.description ?? ""}
+                        isCustom={t.isCustom}
+                        compact
+                        onSelect={() =>
+                          router.push(
+                            `/orchestration/missions?template=${t.id}&compose=1`,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </CategoryAccordion>
+              ))}
             </div>
           )}
         </div>

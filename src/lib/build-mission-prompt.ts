@@ -22,6 +22,8 @@ export interface BuildPromptOptions {
   missionTimeMinutes?: number;
   /** Inactivity timeout warning — shown as ## SAFETY LIMITS in the prompt. */
   timeoutMinutes?: number;
+  outputFormat?: string;
+  constraints?: string;
 }
 
 // ── The sections injected by buildMissionPrompt ─────────────────
@@ -32,6 +34,8 @@ const SKILLS_HEADER = "## Recommended Skills";
 const GOALS_HEADER = "## Goals (complete each in order)";
 const SCOPE_HEADER = "## MISSION SCOPE";
 const SAFETY_HEADER = "## SAFETY LIMITS";
+const OUTPUT_HEADER = "## Expected Output";
+const CONSTRAINTS_HEADER = "## Constraints";
 
 // ── Build the full prompt ──────────────────────────────────────
 
@@ -99,6 +103,14 @@ export function buildMissionPrompt(opts: BuildPromptOptions): string {
       `  tool requests for this duration, your session will be terminated.\n` +
       `- To avoid timeout: stay active. Each tool call resets the timer.\n`,
     );
+  }
+
+  if (opts.outputFormat?.trim()) {
+    parts.push(`${OUTPUT_HEADER}\n${opts.outputFormat.trim()}\n`);
+  }
+
+  if (opts.constraints?.trim()) {
+    parts.push(`${CONSTRAINTS_HEADER}\n${opts.constraints.trim()}\n`);
   }
 
   parts.push(opts.instruction);

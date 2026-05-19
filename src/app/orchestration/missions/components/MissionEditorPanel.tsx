@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   ChevronRight,
+  Copy,
   Edit3,
   ExternalLink,
   Loader2,
@@ -18,23 +19,35 @@ export interface MissionEditorPanelProps {
   detail: MissionDetail | null;
   detailLoading: boolean;
   mission: MissionRow;
+  categoryLabel?: string;
   promptCollapsed: boolean;
   onPromptCollapsedChange: (collapsed: boolean) => void;
   onEdit: (m: MissionRow) => void;
   onCancel: (id: string) => void;
   onDelete: (id: string) => void;
+  onDuplicate?: (m: MissionRow) => void;
 }
 
 export default function MissionEditorPanel({
   detail,
   detailLoading,
   mission,
+  categoryLabel,
   promptCollapsed,
   onPromptCollapsedChange,
   onEdit,
   onCancel,
   onDelete,
+  onDuplicate,
 }: MissionEditorPanelProps) {
+  const copyPrompt = async () => {
+    const text = detail?.mission.prompt ?? mission.prompt;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore
+    }
+  };
   return (
     <div className="border-t border-white/10 px-3 py-3 bg-dark-800/30">
       {detailLoading ? (
@@ -90,6 +103,12 @@ export default function MissionEditorPanel({
                 })()}
               </span>
             </div>
+            {categoryLabel && (
+              <div className="flex justify-between">
+                <span className="text-white/30">Category</span>
+                <span className="text-white/70 ml-2 text-right">{categoryLabel}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-white/30">Schedule</span>
               <span className="text-white/70 truncate ml-2 text-right">
@@ -178,10 +197,12 @@ export default function MissionEditorPanel({
                   </span>
                 </div>
                 <Link
-                  href="/orchestration/cron"
-                  onClick={(e) =>
-                    e.stopPropagation()
+                  href={
+                    detail.cronJob.id
+                      ? `/orchestration/cron?highlight=${encodeURIComponent(detail.cronJob.id)}`
+                      : "/orchestration/cron"
                   }
+                  onClick={(e) => e.stopPropagation()}
                   className="text-[9px] font-mono text-neon-orange hover:underline flex items-center gap-0.5"
                 >
                   view
@@ -246,9 +267,30 @@ export default function MissionEditorPanel({
             </div>
           )}
 
-          <div className="flex gap-1.5 pt-1">
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            <Button variant="ghost" size="sm" onClick={() => void copyPrompt()}>
+              <Copy className="w-3 h-3" /> Copy prompt
+            </Button>
+            {onDuplicate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDuplicate(mission)}
+              >
+                Duplicate
+              </Button>
+            )}
             {(mission.status === "queued" ||
-              mission.status === "successful" ||
+              mission.status === "dispatched") && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onEdit(mission)}
+              >
+                <Edit3 className="w-3 h-3" /> Edit
+              </Button>
+            )}
+            {(mission.status === "successful" ||
               mission.status === "failed") && (
               <Button
                 variant="secondary"

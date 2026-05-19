@@ -22,5 +22,52 @@ export function useMissionsApi() {
     return d.data ?? null;
   }, []);
 
-  return { fetchMissions, fetchTemplates, fetchMissionDetail };
+  const fetchCategories = useCallback(async () => {
+    const d = await apiFetch("/api/mission-categories");
+    return d.data?.categories ?? [];
+  }, []);
+
+  const createCategory = useCallback(async (name: string, color?: string) => {
+    const d = await apiFetch("/api/mission-categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, color }),
+    });
+    return d.data?.category ?? null;
+  }, []);
+
+  const updateCategory = useCallback(
+    async (
+      id: string,
+      patch: { name?: string; color?: string; sortOrder?: number },
+    ) => {
+      await apiFetch("/api/mission-categories", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      });
+    },
+    [],
+  );
+
+  const deleteCategory = useCallback(
+    async (id: string, reassignToId: string | null) => {
+      const params = new URLSearchParams({ id });
+      if (reassignToId) params.set("reassignToId", reassignToId);
+      await apiFetch(`/api/mission-categories?${params.toString()}`, {
+        method: "DELETE",
+      });
+    },
+    [],
+  );
+
+  return {
+    fetchMissions,
+    fetchTemplates,
+    fetchMissionDetail,
+    fetchCategories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+  };
 }

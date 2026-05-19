@@ -56,6 +56,7 @@ export interface Mission {
   schedule?: string;
   /** ID of the linked cron job (for recurring missions dispatched with dispatchMode='cron') */
   cronJobId?: string;
+  categoryId?: string | null;
 }
 
 export interface DispatchMissionInput {

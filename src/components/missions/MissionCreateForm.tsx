@@ -1,19 +1,18 @@
-// ═══════════════════════════════════════════════════════════════
-// MissionCreateForm — Inline create/edit mission form
-// Extracted from missions/page.tsx for modularity.
-// ═══════════════════════════════════════════════════════════════
-
 "use client";
 
-import { X, Send, Save } from "lucide-react";
+import { useState } from "react";
+import { ChevronRight, Send, Save } from "lucide-react";
 
-import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import AutoTextarea from "@/components/ui/AutoTextarea";
 import ScheduleSelector from "@/components/missions/ScheduleSelector";
 import type { ScheduleMode } from "@/components/missions/ScheduleSelector";
 import LocalDirRow from "@/components/missions/LocalDirRow";
 import AgentRuntimeDefaultsCard from "@/components/missions/AgentRuntimeDefaultsCard";
+import CategoryCombobox, {
+  type CategoryOption,
+} from "@/components/missions/CategoryCombobox";
+import MissionPromptPreview from "@/components/missions/MissionPromptPreview";
 import type { LocalDirEntry } from "@/types/hermes";
 
 export interface MissionFormState {
@@ -38,8 +37,7 @@ export interface MissionFormState {
 }
 
 export interface MissionCreateFormProps {
-  open: boolean;
-  onClose: () => void;
+  embedded?: boolean;
   editingId: string | null;
   missions: { id: string; name: string; status: string }[];
   formState: MissionFormState;
@@ -47,23 +45,62 @@ export interface MissionCreateFormProps {
     field: K,
     value: MissionFormState[K],
   ) => void;
+  categories: CategoryOption[];
+  categoryId: string | null;
+  onCategoryChange: (id: string | null) => void;
+  onCreateCategory?: (name: string) => Promise<string | null>;
   onSubmit: () => void;
   onSaveAsTemplate: () => void;
+  onClose: () => void;
   dispatching: boolean;
 }
 
-export default function MissionCreateForm({
+function FormSection({
+  title,
   open,
-  onClose,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-dark-900/30 overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-mono text-white/40 uppercase tracking-widest hover:bg-white/[0.02]"
+      >
+        {title}
+        <ChevronRight
+          className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && <div className="px-3 pb-3 space-y-3 border-t border-white/5">{children}</div>}
+    </div>
+  );
+}
+
+export default function MissionCreateForm({
+  embedded = false,
   editingId,
   missions,
   formState,
   setFormField,
+  categories,
+  categoryId,
+  onCategoryChange,
+  onCreateCategory,
   onSubmit,
   onSaveAsTemplate,
+  onClose,
   dispatching,
 }: MissionCreateFormProps) {
-  if (!open) return null;
+  const [contextOpen, setContextOpen] = useState(false);
+  const [runtimeOpen, setRuntimeOpen] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(true);
 
   const existing = editingId
     ? missions.find((m) => m.id === editingId)
@@ -73,36 +110,32 @@ export default function MissionCreateForm({
     existing &&
     (existing.status === "successful" || existing.status === "failed");
 
-  return (
-    <Card className="mb-6 glow-cyan" padding="lg">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-widest">
-          {(() => {
-            if (isReDispatch) {
-              return `Re-Dispatch: ${existing!.name}`;
-            }
-            if (editingId) return "Edit Mission";
-            return "New Mission";
-          })()}
-        </h3>
-        <button onClick={onClose} className="text-white/30 hover:text-white/60">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="space-y-3">
-        {editingId &&
-          (() => {
-            if (isReDispatch) {
-              return (
-                <div className="rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 p-3 text-xs text-neon-cyan/80 font-mono">
-                  A new mission will be created and dispatched immediately
-                  with your changes. The previous mission record will be
-                  kept for history.
-                </div>
-              );
-            }
-            return null;
-          })()}
+  const isActiveEdit =
+    existing &&
+    (existing.status === "queued" || existing.status === "dispatched");
+
+  const inner = (
+    <div className="space-y-3">
+      {editingId && isReDispatch && (
+        <div className="rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 p-3 text-xs text-neon-cyan/80 font-mono">
+          A new mission will be created and dispatched immediately with your
+          changes. The previous mission record will be kept for history.
+        </div>
+      )}
+      {editingId && isActiveEdit && (
+        <div className="rounded-lg bg-neon-orange/5 border border-neon-orange/20 p-3 text-xs text-neon-orange/80 font-mono">
+          Updates apply to this mission and sync the linked cron job when
+          schedule or prompt fields change.
+        </div>
+      )}
+
+      <FormSection title="Overview" open={true} onToggle={() => {}}>
+        <CategoryCombobox
+          categories={categories}
+          value={categoryId}
+          onChange={onCategoryChange}
+          onCreateCategory={onCreateCategory}
+        />
         <div>
           <label className="text-xs text-white/40 font-mono block mb-1">
             Mission Name
@@ -114,8 +147,9 @@ export default function MissionCreateForm({
             className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
           />
         </div>
+      </FormSection>
 
-        {/* Goals — moved to top, immediately below Mission Name */}
+      <FormSection title="Task" open={true} onToggle={() => {}}>
         <div>
           <label className="text-xs text-white/40 font-mono block mb-1">
             Goals (one per line)
@@ -128,7 +162,6 @@ export default function MissionCreateForm({
             placeholder="Gather data&#10;Analyze findings&#10;Write report"
           />
         </div>
-
         <div>
           <label className="text-xs text-white/40 font-mono block mb-1">
             Instruction Prompt
@@ -138,13 +171,16 @@ export default function MissionCreateForm({
             onChange={(v) => setFormField("newInstruction", v)}
             minRows={4}
             maxRows={16}
-            placeholder="The agent's task instructions - what to do and how to do it..."
+            placeholder="The agent's task instructions..."
           />
-          <p className="text-[10px] text-white/20 font-mono mt-0.5">
-            Defines the agent&apos;s role, approach, and step-by-step
-            process. Templates pre-fill this.
-          </p>
         </div>
+      </FormSection>
+
+      <FormSection
+        title="Context & resources"
+        open={contextOpen}
+        onToggle={() => setContextOpen(!contextOpen)}
+      >
         <div>
           <label className="text-xs text-white/40 font-mono block mb-1">
             Context Prompt{" "}
@@ -155,16 +191,9 @@ export default function MissionCreateForm({
             onChange={(v) => setFormField("newContext", v)}
             minRows={2}
             maxRows={8}
-            placeholder="Additional context, specifics, or direction for this particular run..."
+            placeholder="Additional context for this run..."
           />
-          <p className="text-[10px] text-white/20 font-mono mt-0.5">
-            Added below the instructions as &quot;Additional
-            Context&quot;. Use for topic, URL, code path, or specific
-            requirements.
-          </p>
         </div>
-
-        {/* Local Directories */}
         <div>
           <label className="text-xs text-white/40 font-mono block mb-1">
             Local Directories{" "}
@@ -186,17 +215,9 @@ export default function MissionCreateForm({
                     branch: formState.localDirDraft.branch || null,
                   },
                 ]);
-                setFormField("localDirDraft", {
-                  path: "",
-                  branch: null,
-                } as LocalDirEntry);
+                setFormField("localDirDraft", { path: "", branch: null });
               }}
             />
-            {formState.newLocalDirs.length > 0 && (
-              <div className="text-[10px] text-white/30 font-mono uppercase tracking-wider">
-                Added directories
-              </div>
-            )}
             {formState.newLocalDirs.map((dir, i) => (
               <div
                 key={`${dir.path}-${i}`}
@@ -223,14 +244,7 @@ export default function MissionCreateForm({
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-white/20 font-mono mt-0.5">
-            Directories the agent should focus work within. Injected as
-            highest-priority section in the mission prompt. Use Browse to
-            pick a path under allowed workspace roots.
-          </p>
         </div>
-
-        {/* Key References */}
         <div>
           <label className="text-xs text-white/40 font-mono block mb-1">
             Key References{" "}
@@ -253,9 +267,9 @@ export default function MissionCreateForm({
                       formState.newReferences.filter((_, j) => j !== i),
                     )
                   }
-                  className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0"
+                  className="text-white/30 hover:text-red-400 text-xs"
                 >
-                  <X className="w-3 h-3" />
+                  ×
                 </button>
               </div>
             ))}
@@ -266,18 +280,16 @@ export default function MissionCreateForm({
                   setFormField("referenceInput", e.target.value)
                 }
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && formState.referenceInput.trim()) {
                     e.preventDefault();
-                    if (formState.referenceInput.trim()) {
-                      setFormField("newReferences", [
-                        ...formState.newReferences,
-                        formState.referenceInput.trim(),
-                      ]);
-                      setFormField("referenceInput", "");
-                    }
+                    setFormField("newReferences", [
+                      ...formState.newReferences,
+                      formState.referenceInput.trim(),
+                    ]);
+                    setFormField("referenceInput", "");
                   }
                 }}
-                placeholder="www.example.com, docs/spec.md, README.md..."
+                placeholder="URL, doc path..."
                 className="flex-1 bg-dark-800/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-pink/50 font-mono"
               />
               <button
@@ -291,19 +303,30 @@ export default function MissionCreateForm({
                     setFormField("referenceInput", "");
                   }
                 }}
-                className="px-3 py-1.5 rounded-lg bg-neon-pink/10 border border-neon-pink/30 text-xs text-neon-pink hover:bg-neon-pink/20 font-mono transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-neon-pink/10 border border-neon-pink/30 text-xs text-neon-pink font-mono"
               >
                 + Add
               </button>
             </div>
           </div>
-          <p className="text-[10px] text-white/20 font-mono mt-0.5">
-            File names, URLs, or resources the agent should prioritise.
-            Added as &quot;Key References&quot; in the prompt.
-          </p>
         </div>
+        <MissionPromptPreview
+          instruction={formState.newInstruction}
+          context={formState.newContext}
+          goals={formState.newGoals}
+          localDirs={formState.newLocalDirs}
+          references={formState.newReferences}
+          skills={formState.newSkills}
+          missionTimeMinutes={formState.newMissionTime}
+          timeoutMinutes={formState.newTimeout}
+        />
+      </FormSection>
 
-        {/* Mission Settings — agent & runtime card (now includes Skills) */}
+      <FormSection
+        title="Runtime"
+        open={runtimeOpen}
+        onToggle={() => setRuntimeOpen(!runtimeOpen)}
+      >
         <AgentRuntimeDefaultsCard
           profileId={formState.newProfile}
           onProfileChange={(id) => setFormField("newProfile", id)}
@@ -321,13 +344,21 @@ export default function MissionCreateForm({
           skills={formState.newSkills}
           onSkillsChange={(skills) => setFormField("newSkills", skills)}
         />
-        <div className="flex items-center gap-3">
-          <label className="text-xs text-white/40 font-mono">
-            Dispatch:
-          </label>
+        <p className="text-[10px] text-white/25 font-mono">
+          Profile defines agent role via SOUL/AGENTS under your Hermes home.
+        </p>
+      </FormSection>
+
+      <FormSection
+        title="Dispatch"
+        open={dispatchOpen}
+        onToggle={() => setDispatchOpen(!dispatchOpen)}
+      >
+        <div className="flex flex-wrap items-center gap-2">
           {(["save", "now", "queue", "cron"] as const).map((mode) => (
             <button
               key={mode}
+              type="button"
               onClick={() => setFormField("newDispatch", mode)}
               className={`px-3 py-1 rounded-lg text-xs font-mono border transition-colors ${
                 formState.newDispatch === mode
@@ -345,67 +376,60 @@ export default function MissionCreateForm({
             </button>
           ))}
         </div>
-        {formState.newDispatch === "now" && (
-          <div className="text-[10px] text-white/30 font-mono bg-dark-800/50 rounded-lg px-3 py-2 border border-white/5">
-            ⚡ Launches hermes chat immediately. One-shot execution.
-            Results delivered to Discord.
-          </div>
-        )}
-        {formState.newDispatch === "save" && (
-          <div className="text-[10px] text-white/30 font-mono bg-dark-800/50 rounded-lg px-3 py-2 border border-white/5">
-            💾 Saves the mission as a draft. Nothing is executed yet.
-          </div>
-        )}
-        {formState.newDispatch === "queue" && (
-          <div className="text-[10px] text-white/30 font-mono bg-dark-800/50 rounded-lg px-3 py-2 border border-white/5">
-            📋 Adds the mission to the queued column on the board.
-            Launch it manually when ready.
-          </div>
-        )}
         {formState.newDispatch === "cron" && (
-          <div className="space-y-2">
-            <label className="text-xs text-white/40 font-mono block">
-              Schedule
-            </label>
-            <ScheduleSelector
-              value={formState.newSchedule}
-              onChange={(s) => setFormField("newSchedule", s)}
-              mode={formState.scheduleType}
-              onModeChange={(m) => setFormField("scheduleType", m)}
-              startTime={formState.scheduleStartTime}
-              onStartTimeChange={(t) => setFormField("scheduleStartTime", t)}
-            />
-          </div>
+          <ScheduleSelector
+            value={formState.newSchedule}
+            onChange={(s) => setFormField("newSchedule", s)}
+            mode={formState.scheduleType}
+            onModeChange={(m) => setFormField("scheduleType", m)}
+            startTime={formState.scheduleStartTime}
+            onStartTimeChange={(t) => setFormField("scheduleStartTime", t)}
+          />
         )}
-        <div className="flex gap-2 pt-1">
-          <Button
-            onClick={onSubmit}
-            disabled={
-              !formState.newName.trim() ||
-              !formState.newInstruction.trim() ||
-              dispatching
-            }
-            loading={dispatching}
-          >
-            <Send className="w-3.5 h-3.5" />
-            {(() => {
-              if (isReDispatch) return "Re-Dispatch Now";
-              if (formState.newDispatch === "save") return "Save Mission";
-              if (formState.newDispatch === "now") return "Dispatch Now";
-              if (formState.newDispatch === "queue") return "Queue Mission";
-              return "Schedule Mission";
-            })()}
+      </FormSection>
+
+      <div className="flex flex-wrap gap-2 pt-2 sticky bottom-0 bg-dark-950/95 backdrop-blur py-3 border-t border-white/10 -mx-1 px-1">
+        <Button
+          onClick={onSubmit}
+          disabled={
+            !formState.newName.trim() ||
+            !formState.newInstruction.trim() ||
+            dispatching
+          }
+          loading={dispatching}
+        >
+          <Send className="w-3.5 h-3.5" />
+          {(() => {
+            if (isReDispatch) return "Re-Dispatch Now";
+            if (isActiveEdit) return "Update Mission";
+            if (formState.newDispatch === "save") return "Save Mission";
+            if (formState.newDispatch === "now") return "Dispatch Now";
+            if (formState.newDispatch === "queue") return "Queue Mission";
+            return "Schedule Mission";
+          })()}
+        </Button>
+        {formState.newInstruction.trim() && (
+          <Button variant="secondary" onClick={onSaveAsTemplate}>
+            <Save className="w-3.5 h-3.5" /> Save as Template
           </Button>
-          {formState.newInstruction.trim() && (
-            <Button variant="secondary" onClick={onSaveAsTemplate}>
-              <Save className="w-3.5 h-3.5" /> Save as Template
-            </Button>
-          )}
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
+        )}
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
       </div>
-    </Card>
+    </div>
+  );
+
+  if (embedded) {
+    return inner;
+  }
+
+  return (
+    <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 p-4 mb-6">
+      <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-widest mb-4">
+        {editingId ? "Edit Mission" : "New Mission"}
+      </h3>
+      {inner}
+    </div>
   );
 }

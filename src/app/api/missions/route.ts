@@ -12,6 +12,7 @@ import {
   deleteMission,
   buildMissionPrompt,
 } from "@/lib/mission-repository";
+import { stripPromptSections } from "@/lib/build-mission-prompt";
 import { createSession, updateSession } from "@/lib/session-repository";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import type { LocalDirEntry } from "@/types/hermes";
@@ -21,11 +22,32 @@ import { appendAuditLine } from "@/lib/audit-log";
 import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
 import { createCronJob, pushJobToHermes } from "@/lib/cron-repository";
+import { getCategory } from "@/lib/mission-category-repository";
+import {
+  deleteMissionCron,
+  enrichMissionCron,
+  pauseMissionCron,
+  syncMissionToCronJob,
+} from "@/lib/mission-cron-sync";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
 function resolveMissionId(body: Record<string, unknown>): string | undefined {
   return (body.id ?? body.missionId) as string | undefined;
+}
+
+function parseCategoryId(
+  raw: unknown,
+): { ok: true; value: string | null | undefined } | { ok: false; error: string } {
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (raw === null || raw === "") return { ok: true, value: null };
+  if (typeof raw !== "string") {
+    return { ok: false, error: "categoryId must be a string" };
+  }
+  if (!getCategory(raw)) {
+    return { ok: false, error: "Category not found" };
+  }
+  return { ok: true, value: raw };
 }
 
 // ── GET ───────────────────────────────────────────────────────
@@ -41,10 +63,17 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
       }
       // Mission status is synced in background by MissionSync
-      return NextResponse.json({ data: { mission } });
+      return NextResponse.json({ data: { mission: enrichMissionCron(mission) } });
     }
 
-    const missions = listMissions();
+    const categoryIdParam = url.searchParams.get("categoryId");
+    const missions = listMissions(
+      categoryIdParam === "__uncategorized__"
+        ? { categoryId: null }
+        : categoryIdParam
+          ? { categoryId: categoryIdParam }
+          : undefined,
+    ).map((m) => enrichMissionCron(m));
     return NextResponse.json({ data: { missions } });
   } catch (error) {
     logApiError("GET /api/missions", id ? `mission ${id}` : "listing missions", error);
@@ -80,6 +109,7 @@ export async function POST(request: NextRequest) {
         schedule: scheduleVal,
         missionTimeMinutes,
         timeoutMinutes,
+        categoryId: categoryIdRaw,
       } = body as {
         name?: string;
         instruction?: string;
@@ -96,7 +126,13 @@ export async function POST(request: NextRequest) {
         schedule?: string;
         missionTimeMinutes?: number;
         timeoutMinutes?: number;
+        categoryId?: string | null;
       };
+
+      const categoryParsed = parseCategoryId(categoryIdRaw);
+      if (!categoryParsed.ok) {
+        return NextResponse.json({ error: categoryParsed.error }, { status: 400 });
+      }
 
       if (!instruction || typeof instruction !== "string" || !instruction.trim()) {
         return NextResponse.json({ error: "instruction is required" }, { status: 400 });
@@ -144,6 +180,7 @@ export async function POST(request: NextRequest) {
         missionTimeMinutes,
         timeoutMinutes,
         schedule: scheduleVal,
+        categoryId: categoryParsed.value ?? null,
       });
 
       const isSaveMode = dispatchMode === "save" || dispatchMode === "queue";
@@ -182,7 +219,7 @@ export async function POST(request: NextRequest) {
 
           appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: true });
           return NextResponse.json(
-            { data: { mission: getMission(mission.id) } },
+            { data: { mission: enrichMissionCron(getMission(mission.id)!) } },
             { status: 201 }
           );
         } catch (err) {
@@ -264,14 +301,14 @@ export async function POST(request: NextRequest) {
 
       appendAuditLine({ action: "mission.dispatch", resource: mission.id, ok: true });
       return NextResponse.json(
-        { data: { mission: getMission(mission.id) } },
+        { data: { mission: enrichMissionCron(getMission(mission.id)!) } },
         { status: 201 }
       );
     }
 
     // ── Update Mission ─────────────────────────────────────────
     if (action === "update") {
-      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule } = body as {
+      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw } = body as {
         id?: string;
         missionId?: string;
         status?: string;
@@ -287,18 +324,56 @@ export async function POST(request: NextRequest) {
         missionTimeMinutes?: number;
         timeoutMinutes?: number;
         schedule?: string;
+        context?: string;
+        categoryId?: string | null;
       };
       const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
       if (!missionIdFinal)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
-      // Build updated prompt if instruction changed.
-      // The client sends instruction=buildPrompt() which already contains the full
-      // formatted prompt (with Working Directories, Goals header, etc.). Store it
-      // directly without re-wrapping through buildMissionPrompt to avoid duplication.
+      const existing = getMission(missionIdFinal);
+      if (!existing) {
+        return NextResponse.json({ error: "Mission not found" }, { status: 404 });
+      }
+
+      const categoryParsed = parseCategoryId(categoryIdRaw);
+      if (!categoryParsed.ok) {
+        return NextResponse.json({ error: categoryParsed.error }, { status: 400 });
+      }
+
       let prompt: string | undefined;
-      if (instruction !== undefined) {
-        prompt = instruction.trim();
+      const shouldRebuildPrompt =
+        instruction !== undefined ||
+        context !== undefined ||
+        localDirs !== undefined ||
+        references !== undefined ||
+        skills !== undefined ||
+        goals !== undefined ||
+        missionTimeMinutes !== undefined ||
+        timeoutMinutes !== undefined;
+
+      if (shouldRebuildPrompt) {
+        const stripped = stripPromptSections(existing.prompt);
+        prompt = buildMissionPrompt({
+          instruction:
+            instruction !== undefined ? instruction.trim() : stripped.instruction,
+          context: context !== undefined ? context : stripped.context,
+          localDirs:
+            localDirs !== undefined
+              ? normalizeLocalDirsInput(localDirs)
+              : existing.localDirs,
+          references: references !== undefined ? references : existing.references,
+          skills: skills !== undefined ? skills : existing.skills,
+          goals: goals !== undefined ? goals : existing.goals,
+          missionTimeMinutes:
+            missionTimeMinutes !== undefined
+              ? missionTimeMinutes
+              : existing.missionTimeMinutes,
+          timeoutMinutes:
+            timeoutMinutes !== undefined
+              ? timeoutMinutes
+              : existing.timeoutMinutes,
+        });
       }
 
       const updates: {
@@ -315,6 +390,7 @@ export async function POST(request: NextRequest) {
         missionTimeMinutes?: number | null;
         timeoutMinutes?: number | null;
         schedule?: string | null;
+        categoryId?: string | null;
       } = {};
       if (status) updates.status = status as MissionStatus;
       if (result !== undefined) updates.result = result;
@@ -329,22 +405,30 @@ export async function POST(request: NextRequest) {
       if (missionTimeMinutes !== undefined) updates.missionTimeMinutes = missionTimeMinutes;
       if (timeoutMinutes !== undefined) updates.timeoutMinutes = timeoutMinutes;
       if (schedule !== undefined) updates.schedule = schedule;
+      if (categoryParsed.value !== undefined) updates.categoryId = categoryParsed.value;
 
       const mission = updateMission(missionIdFinal, updates);
       if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      // Sync updated prompt to the cron job so future runs use the new prompt
+      if (mission.cronJobId && shouldRebuildPrompt) {
+        syncMissionToCronJob(missionIdFinal);
+      } else if (mission.cronJobId && schedule !== undefined) {
+        syncMissionToCronJob(missionIdFinal);
+      }
+
       if (prompt !== undefined) {
         try {
-          await agentBackend.syncMission(missionIdFinal, { prompt });
+          await agentBackend.syncMission(missionIdFinal, { prompt: mission.prompt });
         } catch (err) {
-          logApiError("POST /api/missions", "syncMission", err);
+          logApiError("POST /api/missions", "syncMission disk", err);
         }
       }
 
       appendAuditLine({ action: "mission.update", resource: missionIdFinal, ok: true });
-      return NextResponse.json({ data: { mission } });
+      return NextResponse.json({
+        data: { mission: enrichMissionCron(getMission(missionIdFinal)!) },
+      });
     }
 
     // ── Cancel Mission ─────────────────────────────────────────
@@ -362,8 +446,10 @@ export async function POST(request: NextRequest) {
       if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
+      pauseMissionCron(cancelId);
+
       appendAuditLine({ action: "mission.cancel", resource: cancelId, ok: true });
-      return NextResponse.json({ data: { mission } });
+      return NextResponse.json({ data: { mission: enrichMissionCron(mission) } });
     }
 
     // ── Delete Mission ─────────────────────────────────────────
@@ -371,6 +457,13 @@ export async function POST(request: NextRequest) {
       const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
       if (!missionIdFinal)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
+
+      const existing = getMission(missionIdFinal);
+      if (!existing) {
+        return NextResponse.json({ error: "Mission not found" }, { status: 404 });
+      }
+
+      deleteMissionCron(missionIdFinal);
 
       const ok = deleteMission(missionIdFinal);
       if (!ok)

@@ -135,9 +135,6 @@ function runMigrations(database: Database.Database): void {
   }
 
   const currentVersion = getSchemaVersion(database);
-  if (currentVersion >= BASELINE_SCHEMA_VERSION) {
-    return;
-  }
 
   const migrations: Array<{ num: number; sql: string }> = [];
   try {

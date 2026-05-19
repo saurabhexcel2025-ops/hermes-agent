@@ -96,6 +96,17 @@ jest.mock("@/lib/cron-repository", () => ({
   pushJobToHermes: (...args: unknown[]) => mockPushJobToHermes(...args),
 }));
 
+jest.mock("@/lib/mission-cron-sync", () => ({
+  enrichMissionCron: jest.fn((m: unknown) => m),
+  syncMissionToCronJob: jest.fn(),
+  pauseMissionCron: jest.fn(),
+  deleteMissionCron: jest.fn(),
+}));
+
+jest.mock("@/lib/mission-category-repository", () => ({
+  getCategory: jest.fn(),
+}));
+
 // ── Base mission shape ───────────────────────────────────────────
 
 function makeMission(overrides: Record<string, unknown> = {}) {

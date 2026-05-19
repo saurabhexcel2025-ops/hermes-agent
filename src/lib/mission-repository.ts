@@ -32,6 +32,7 @@ interface MissionRow {
   timeout_minutes: number | null;
   schedule: string | null;
   cron_job_id: string | null;
+  category_id: string | null;
 }
 
 function safeJsonParse<T>(val: string | null | undefined, fallback: T): T {
@@ -65,6 +66,7 @@ function rowToMission(row: MissionRow | undefined): Mission | null {
     timeoutMinutes: row.timeout_minutes ?? undefined,
     schedule: row.schedule ?? undefined,
     cronJobId: row.cron_job_id ?? undefined,
+    categoryId: row.category_id ?? undefined,
   };
 }
 
@@ -76,12 +78,22 @@ export { buildMissionPrompt } from "@/lib/build-mission-prompt";
 
 // ── CRUD ─────────────────────────────────────────────────────
 
-export function listMissions(): Mission[] {
+export function listMissions(opts?: { categoryId?: string | null }): Mission[] {
+  let sql =
+    "SELECT * FROM missions WHERE deleted_at IS NULL";
+  const params: unknown[] = [];
+  if (opts?.categoryId !== undefined) {
+    if (opts.categoryId === null) {
+      sql += " AND category_id IS NULL";
+    } else {
+      sql += " AND category_id = ?";
+      params.push(opts.categoryId);
+    }
+  }
+  sql += " ORDER BY created_at DESC";
   const rows = db()
-    .prepare(
-      "SELECT * FROM missions WHERE deleted_at IS NULL ORDER BY created_at DESC"
-    )
-    .all() as MissionRow[];
+    .prepare(sql)
+    .all(...params) as MissionRow[];
   return rows.map(rowToMission).filter(Boolean) as Mission[];
 }
 
@@ -107,6 +119,7 @@ export function createMission(data: {
   timeoutMinutes?: number;
   schedule?: string;
   cronJobId?: string;
+  categoryId?: string | null;
 }): Mission {
   const id = uuid();
   const ts = now();
@@ -118,12 +131,13 @@ export function createMission(data: {
   inTransaction(() => {
     db()
       .prepare(
-        `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, goals, model_id, provider, profile_name, mission_time_minutes, timeout_minutes, schedule, cron_job_id)
-         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, goals, model_id, provider, profile_name, mission_time_minutes, timeout_minutes, schedule, cron_job_id, category_id)
+         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(id, data.name, data.prompt, data.profileId ?? null, ts, ts, localDirs, references, skills, goals,
         data.modelId ?? null, data.provider ?? null, data.profileName ?? null,
-        data.missionTimeMinutes ?? null, data.timeoutMinutes ?? null, data.schedule ?? null, data.cronJobId ?? null);
+        data.missionTimeMinutes ?? null, data.timeoutMinutes ?? null, data.schedule ?? null, data.cronJobId ?? null,
+        data.categoryId ?? null);
   });
 
   return getMission(id)!;
@@ -147,6 +161,7 @@ export function updateMission(
     timeoutMinutes?: number | null;
     schedule?: string | null;
     cronJobId?: string | null;
+    categoryId?: string | null;
   }
 ): Mission | null {
   const existing = getMission(id);
@@ -216,6 +231,10 @@ export function updateMission(
     if (updates.cronJobId !== undefined) {
       sets.push("cron_job_id = ?");
       vals.push(updates.cronJobId);
+    }
+    if (updates.categoryId !== undefined) {
+      sets.push("category_id = ?");
+      vals.push(updates.categoryId);
     }
 
     vals.push(id);

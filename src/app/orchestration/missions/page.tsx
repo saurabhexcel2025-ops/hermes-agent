@@ -4,6 +4,9 @@ import { Loader2, Plus, RefreshCw, Rocket } from "lucide-react";
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
+import Sheet from "@/components/ui/Sheet";
+import MissionCreateForm from "@/components/missions/MissionCreateForm";
+import CategoryManagerModal from "@/components/missions/CategoryManagerModal";
 import {
   TemplateEditorModal,
   TemplateManagerModal,
@@ -17,7 +20,10 @@ export default function MissionsPage() {
     loading,
     toastElement,
     fetchData,
+    showCreate,
     setShowCreate,
+    editingId,
+    setEditingId,
     templates,
     showTemplateManager,
     setShowTemplateManager,
@@ -64,6 +70,21 @@ export default function MissionsPage() {
     setReferenceInput,
     newSkills,
     setNewSkills,
+    missions,
+    formState,
+    setFormField,
+    handleCreate,
+    handleSaveAsTemplate,
+    dispatching,
+    categories,
+    newCategoryId,
+    setCategoryId,
+    showCategoryManager,
+    setShowCategoryManager,
+    loadCategories,
+    handleCreateCategory,
+    handleUpdateCategory,
+    handleDeleteCategory,
   } = vm;
 
   if (loading) {
@@ -75,6 +96,18 @@ export default function MissionsPage() {
       </AppPageShell>
     );
   }
+
+  const sheetTitle = (() => {
+    if (!editingId) return "New Mission";
+    const m = missions.find((x) => x.id === editingId);
+    if (
+      m &&
+      (m.status === "successful" || m.status === "failed")
+    ) {
+      return `Re-Dispatch: ${m.name}`;
+    }
+    return "Edit Mission";
+  })();
 
   return (
     <AppPageShell variant="scanlines">
@@ -104,6 +137,49 @@ export default function MissionsPage() {
 
       <MissionsList vm={vm} />
 
+      <Sheet
+        open={showCreate}
+        onClose={() => {
+          setShowCreate(false);
+          setEditingId(null);
+        }}
+        title={sheetTitle}
+      >
+        <div className="p-4">
+          <MissionCreateForm
+            embedded
+            editingId={editingId}
+            missions={missions}
+            formState={formState}
+            setFormField={setFormField}
+            categories={categories.map((c) => ({
+              id: c.id,
+              name: c.name,
+              color: c.color,
+            }))}
+            categoryId={newCategoryId}
+            onCategoryChange={setCategoryId}
+            onCreateCategory={handleCreateCategory}
+            onSubmit={handleCreate}
+            onSaveAsTemplate={handleSaveAsTemplate}
+            onClose={() => {
+              setShowCreate(false);
+              setEditingId(null);
+            }}
+            dispatching={dispatching}
+          />
+        </div>
+      </Sheet>
+
+      <CategoryManagerModal
+        open={showCategoryManager}
+        onClose={() => setShowCategoryManager(false)}
+        categories={categories}
+        onRefresh={() => void loadCategories()}
+        onUpdate={handleUpdateCategory}
+        onDelete={handleDeleteCategory}
+      />
+
       <TemplateManagerModal
         open={showTemplateManager}
         onClose={() => setShowTemplateManager(false)}
@@ -131,6 +207,14 @@ export default function MissionsPage() {
         onTemplateColorChange={setTemplateColor}
         templateSaving={templateSaving}
         onSave={handleTemplateSave}
+        categories={categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          color: c.color,
+        }))}
+        categoryId={newCategoryId}
+        onCategoryChange={setCategoryId}
+        onCreateCategory={handleCreateCategory}
         newInstruction={newInstruction}
         onNewInstructionChange={setNewInstruction}
         newContext={newContext}

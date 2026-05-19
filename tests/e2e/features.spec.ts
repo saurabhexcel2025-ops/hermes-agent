@@ -15,7 +15,7 @@ test.describe("Missions page", () => {
     ).toBeVisible();
     const region = page.getByTestId("missions-quick-templates");
     await expect(region).toBeVisible({ timeout: 30_000 });
-    await expect(region.getByText(/Quick Deploy/i)).toBeVisible();
+    await expect(region.getByText(/Quick load template/i)).toBeVisible();
   });
 
   test("can open create mission form", async ({ page }) => {

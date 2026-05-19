@@ -12,8 +12,11 @@ import {
 import { StatusDot } from "@/components/ui/Card";
 import CategoryAccordion from "@/components/ui/CategoryAccordion";
 import TemplateCard from "@/components/ui/TemplateCard";
-import MissionCreateForm from "@/components/missions/MissionCreateForm";
-import { CATEGORY_COLORS } from "@/components/missions/TemplateModals";
+import {
+  CATEGORY_COLOR_CLASSES,
+  resolveCategoryDisplay,
+  buildCategoryMap,
+} from "@/lib/mission-categories";
 import { timeAgo, titleCase } from "@/lib/utils";
 import type { MissionsPageViewModel, MissionRow } from "../hooks/useMissionsPage";
 import {
@@ -31,9 +34,6 @@ export default function MissionsList({ vm }: MissionsListProps) {
     missions,
     missionCounts,
     showCreate,
-    setShowCreate,
-    editingId,
-    setEditingId,
     filter,
     setFilter,
     search,
@@ -48,21 +48,23 @@ export default function MissionsList({ vm }: MissionsListProps) {
     setCollapsedColumns,
     categoryFilter,
     setCategoryFilter,
-    allCategories,
+    missionCategoryFilter,
+    setMissionCategoryFilter,
+    templateCategoryPills,
+    missionCategoryPills,
     filteredGrouped,
     filtered,
-    formState,
-    setFormField,
-    handleCreate,
-    handleSaveAsTemplate,
-    dispatching,
+    categories,
     handleTemplateSelect,
-    createFormRef,
     setShowTemplateManager,
+    setShowCategoryManager,
     handleEdit,
     handleDelete,
     handleCancel,
+    handleDuplicateMission,
   } = vm;
+
+  const categoryMap = buildCategoryMap(categories);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
@@ -96,139 +98,168 @@ export default function MissionsList({ vm }: MissionsListProps) {
                 Prefill the mission form — review and dispatch when ready
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowTemplateManager(true)}
-              className="text-[10px] font-mono text-white/30 hover:text-neon-cyan flex items-center gap-1 transition-colors"
-            >
-              <Layers className="w-3 h-3" />
-              Edit Templates
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCategoryManager(true)}
+                className="text-[10px] font-mono text-white/30 hover:text-neon-cyan"
+              >
+                Manage categories
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTemplateManager(true)}
+                className="text-[10px] font-mono text-white/30 hover:text-neon-cyan flex items-center gap-1 transition-colors"
+              >
+                <Layers className="w-3 h-3" />
+                Edit Templates
+              </button>
+            </div>
           </div>
-          <p className="text-[10px] font-mono text-white/25 uppercase tracking-widest mb-2">
-            Filter by category
-          </p>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("all")}
-              className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
-                categoryFilter === "all"
-                  ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/40"
-                  : "text-white/40 border border-white/10 hover:text-white/60 hover:border-white/20"
-              }`}
-            >
-              All
-            </button>
-            {allCategories.map((cat) => {
-              const color = CATEGORY_COLORS[cat] || "cyan";
-              const active = categoryFilter === cat;
-              return (
+          {templateCategoryPills.length > 1 && (
+            <>
+              <p className="text-[10px] font-mono text-white/25 uppercase tracking-widest mb-2">
+                Template categories
+              </p>
+              <div className="flex flex-wrap gap-2 mb-4">
                 <button
                   type="button"
-                  key={cat}
-                  onClick={() => setCategoryFilter(cat)}
+                  onClick={() => setCategoryFilter("all")}
                   className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
-                    active
-                      ? CATEGORY_ACTIVE_CLASSES[color] || CATEGORY_ACTIVE_CLASSES.cyan
+                    categoryFilter === "all"
+                      ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/40"
                       : "text-white/40 border border-white/10 hover:text-white/60 hover:border-white/20"
                   }`}
                 >
-                  {cat}
+                  All
                 </button>
-              );
-            })}
-          </div>
+                {templateCategoryPills.map((pill) => {
+                  const active = categoryFilter === pill.id;
+                  return (
+                    <button
+                      type="button"
+                      key={pill.id}
+                      onClick={() => setCategoryFilter(pill.id)}
+                      className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
+                        active
+                          ? CATEGORY_COLOR_CLASSES[pill.color] ??
+                            CATEGORY_ACTIVE_CLASSES.cyan
+                          : "text-white/40 border border-white/10 hover:text-white/60 hover:border-white/20"
+                      }`}
+                    >
+                      {pill.name} ({pill.count})
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
           <div className="space-y-2">
-            {filteredGrouped.map(([cat, items]) => {
-              return (
-                <CategoryAccordion
-                  key={cat}
-                  name={cat}
-                  count={items.length}
-                  color="cyan"
-                  expandable={true}
-                  defaultOpen={
-                    categoryFilter !== "all"
-                      ? true
-                      : allCategories.length <= 3
-                  }
-                >
-                  <div className="flex flex-wrap gap-1.5">
-                    {items.map((t) => (
-                      <TemplateCard
-                        key={t.id}
-                        id={t.id}
-                        name={t.name}
-                        icon={t.icon}
-                        color={t.color}
-                        description={t.description}
-                        isCustom={t.isCustom}
-                        compact
-                        onSelect={() => handleTemplateSelect(t)}
-                      />
-                    ))}
-                  </div>
-                </CategoryAccordion>
-              );
-            })}
+            {filteredGrouped.map((group) => (
+              <CategoryAccordion
+                key={group.categoryId ?? "__none__"}
+                name={group.label}
+                count={group.items.length}
+                color={group.color}
+                expandable={true}
+                defaultOpen={
+                  categoryFilter !== "all"
+                    ? true
+                    : filteredGrouped.length <= 3
+                }
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {group.items.map((t) => (
+                    <TemplateCard
+                      key={t.id}
+                      id={t.id}
+                      name={t.name}
+                      icon={t.icon}
+                      color={t.color}
+                      description={t.description}
+                      isCustom={t.isCustom}
+                      compact
+                      onSelect={() => handleTemplateSelect(t)}
+                    />
+                  ))}
+                </div>
+              </CategoryAccordion>
+            ))}
           </div>
         </div>
       )}
 
-      <div ref={createFormRef}>
-        <MissionCreateForm
-          open={showCreate}
-          onClose={() => {
-            setShowCreate(false);
-            setEditingId(null);
-          }}
-          editingId={editingId}
-          missions={missions}
-          formState={formState}
-          setFormField={setFormField}
-          onSubmit={handleCreate}
-          onSaveAsTemplate={handleSaveAsTemplate}
-          dispatching={dispatching}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex items-center gap-1 bg-dark-900/50 rounded-lg border border-white/10 p-1">
-          {["all", "queued", "dispatched", "successful", "failed"].map(
-            (f) => (
-              <button
-                type="button"
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-2.5 py-1 rounded-md text-[10px] font-mono capitalize transition-colors ${
-                  filter === f
-                    ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30"
-                    : "text-white/30 hover:text-white/50 border border-transparent"
-                }`}
-              >
-                {f}
-              </button>
-            ),
-          )}
-        </div>
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search missions..."
-            className="w-full bg-dark-900/50 border border-white/10 rounded-lg pl-9 pr-8 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
-          />
-          {search && (
+      <div className="flex flex-col gap-3 mb-4">
+        {missionCategoryPills.length > 0 && (
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-white/30 hover:text-white/60 transition-colors"
+              onClick={() => setMissionCategoryFilter("all")}
+              className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
+                missionCategoryFilter === "all"
+                  ? "bg-neon-purple/20 text-neon-purple border border-neon-purple/40"
+                  : "text-white/40 border border-white/10 hover:text-white/60 hover:border-white/20"
+              }`}
             >
-              <X className="w-3.5 h-3.5" />
+              All missions
             </button>
-          )}
+            {missionCategoryPills.map((pill) => {
+              const active = missionCategoryFilter === pill.id;
+              return (
+                <button
+                  type="button"
+                  key={pill.id}
+                  onClick={() => setMissionCategoryFilter(pill.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-mono transition-colors ${
+                    active
+                      ? CATEGORY_COLOR_CLASSES[pill.color] ??
+                        CATEGORY_ACTIVE_CLASSES.cyan
+                      : "text-white/40 border border-white/10 hover:text-white/60 hover:border-white/20"
+                  }`}
+                >
+                  {pill.name} ({pill.count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1 bg-dark-900/50 rounded-lg border border-white/10 p-1">
+            {["all", "queued", "dispatched", "successful", "failed"].map(
+              (f) => (
+                <button
+                  type="button"
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono capitalize transition-colors ${
+                    filter === f
+                      ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30"
+                      : "text-white/30 hover:text-white/50 border border-transparent"
+                  }`}
+                >
+                  {f}
+                </button>
+              ),
+            )}
+          </div>
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search missions..."
+              className="w-full bg-dark-900/50 border border-white/10 rounded-lg pl-9 pr-8 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-white/30 hover:text-white/60 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -249,10 +280,13 @@ export default function MissionsList({ vm }: MissionsListProps) {
                 (m) => m.status === status,
               );
               const sc = STATUS_CONFIG[status];
-              const isCollapsible = (status === "successful" || status === "failed") && columnMissions.length > 5;
-              const visibleMissions = isCollapsible && collapsedColumns[status]
-                ? columnMissions.slice(0, 5)
-                : columnMissions;
+              const isCollapsible =
+                (status === "successful" || status === "failed") &&
+                columnMissions.length > 5;
+              const visibleMissions =
+                isCollapsible && collapsedColumns[status]
+                  ? columnMissions.slice(0, 5)
+                  : columnMissions;
               if (filter !== "all" && filter !== status) return null;
               return (
                 <div
@@ -273,15 +307,21 @@ export default function MissionsList({ vm }: MissionsListProps) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {(status === "successful" || status === "failed") && columnMissions.length > 5 && (
-                        <button
-                          type="button"
-                          onClick={() => setCollapsedColumns((prev) => ({ ...prev, [status]: !prev[status] }))}
-                          className="text-[9px] font-mono text-white/25 hover:text-neon-cyan transition-colors"
-                        >
-                          {collapsedColumns[status] ? "Show all" : "Collapse"}
-                        </button>
-                      )}
+                      {(status === "successful" || status === "failed") &&
+                        columnMissions.length > 5 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCollapsedColumns((prev) => ({
+                                ...prev,
+                                [status]: !prev[status],
+                              }))
+                            }
+                            className="text-[9px] font-mono text-white/25 hover:text-neon-cyan transition-colors"
+                          >
+                            {collapsedColumns[status] ? "Show all" : "Collapse"}
+                          </button>
+                        )}
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${sc?.bg} ${sc?.text}`}
                       >
@@ -291,17 +331,23 @@ export default function MissionsList({ vm }: MissionsListProps) {
                   </div>
                   <div className="space-y-2 flex-1">
                     {columnMissions.length === 0 ? (
-                      <div
-                        className="rounded-xl border border-dashed border-white/5 bg-dark-900/20 p-4 text-center text-[10px] font-mono text-white/20"
-                      >
+                      <div className="rounded-xl border border-dashed border-white/5 bg-dark-900/20 p-4 text-center text-[10px] font-mono text-white/20">
                         No missions
                       </div>
                     ) : (
                       <div className="contents">
                         {visibleMissions.map((mission: MissionRow) => {
                           const rowStatus =
-                            STATUS_CONFIG[mission.status] || { dot: "idle" as const, bg: "bg-white/5", text: "text-white/40" };
+                            STATUS_CONFIG[mission.status] || {
+                              dot: "idle" as const,
+                              bg: "bg-white/5",
+                              text: "text-white/40",
+                            };
                           const isExpanded = expandedId === mission.id;
+                          const catDisplay = resolveCategoryDisplay(
+                            mission.categoryId,
+                            categoryMap,
+                          );
                           return (
                             <div
                               key={mission.id}
@@ -324,13 +370,26 @@ export default function MissionsList({ vm }: MissionsListProps) {
                                       <span className="text-xs font-semibold text-white truncate">
                                         {mission.name}
                                       </span>
+                                      {mission.categoryId && (
+                                        <span
+                                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full border ${
+                                            CATEGORY_COLOR_CLASSES[
+                                              catDisplay.color
+                                            ] ?? CATEGORY_ACTIVE_CLASSES.cyan
+                                          }`}
+                                        >
+                                          {catDisplay.name}
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1.5 text-[10px] font-mono text-white/25 flex-wrap">
                                       <span className="flex items-center gap-0.5">
                                         {mission.status === "queued" ? (
                                           <>
                                             <Clock className="w-2.5 h-2.5 text-neon-orange" />
-                                            <span className="text-neon-orange/60">Queued</span>
+                                            <span className="text-neon-orange/60">
+                                              Queued
+                                            </span>
                                           </>
                                         ) : (
                                           <>
@@ -339,17 +398,19 @@ export default function MissionsList({ vm }: MissionsListProps) {
                                           </>
                                         )}
                                       </span>
-                                      {mission.status !== "queued" && mission.cronJob?.lastStatus && (
-                                        <span
-                                          className={
-                                            mission.cronJob.lastStatus === "ok"
-                                              ? "text-neon-green"
-                                              : "text-red-400"
-                                          }
-                                        >
-                                          {mission.cronJob.lastStatus}
-                                        </span>
-                                      )}
+                                      {mission.status !== "queued" &&
+                                        mission.cronJob?.lastStatus && (
+                                          <span
+                                            className={
+                                              mission.cronJob.lastStatus ===
+                                              "ok"
+                                                ? "text-neon-green"
+                                                : "text-red-400"
+                                            }
+                                          >
+                                            {mission.cronJob.lastStatus}
+                                          </span>
+                                        )}
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -366,25 +427,34 @@ export default function MissionsList({ vm }: MissionsListProps) {
                                   detail={detail}
                                   detailLoading={detailLoading}
                                   mission={mission}
+                                  categoryLabel={catDisplay.name}
                                   promptCollapsed={promptCollapsed}
                                   onPromptCollapsedChange={setPromptCollapsed}
                                   onEdit={handleEdit}
                                   onCancel={handleCancel}
                                   onDelete={handleDelete}
+                                  onDuplicate={handleDuplicateMission}
                                 />
                               )}
                             </div>
                           );
                         })}
-                        {isCollapsible && collapsedColumns[status] && columnMissions.length > 5 && (
-                          <button
-                            type="button"
-                            onClick={() => setCollapsedColumns((prev) => ({ ...prev, [status]: false }))}
-                            className="w-full text-[10px] font-mono text-neon-cyan/60 hover:text-neon-cyan py-2 text-center border border-dashed border-white/5 rounded-lg transition-colors mt-2"
-                          >
-                            Show all {columnMissions.length} missions →
-                          </button>
-                        )}
+                        {isCollapsible &&
+                          collapsedColumns[status] &&
+                          columnMissions.length > 5 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCollapsedColumns((prev) => ({
+                                  ...prev,
+                                  [status]: false,
+                                }))
+                              }
+                              className="w-full text-[10px] font-mono text-neon-cyan/60 hover:text-neon-cyan py-2 text-center border border-dashed border-white/5 rounded-lg transition-colors mt-2"
+                            >
+                              Show all {columnMissions.length} missions →
+                            </button>
+                          )}
                       </div>
                     )}
                   </div>

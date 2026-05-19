@@ -10,6 +10,7 @@ import { logApiError } from "@/lib/api-logger";
 import { PATHS } from "@/lib/paths";
 import { requireAuth } from "@/lib/api-auth";
 import { TEMPLATES } from "@/lib/mission-helpers";
+import { resolveTemplateCategoryId } from "@/lib/mission-category-repository";
 import type { LocalDirEntry } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 
@@ -51,6 +52,7 @@ interface CustomTemplate {
   icon: string;
   color: string;
   category: string;
+  categoryId?: string;
   profile: string;
   description: string;
   instruction: string;
@@ -96,12 +98,21 @@ function enrichCustomTemplateFromDisk(
       ? raw.timeoutMinutes
       : undefined;
 
+  const categoryId =
+    typeof raw.categoryId === "string"
+      ? raw.categoryId
+      : resolveTemplateCategoryId(
+          typeof raw.category === "string" ? raw.category : undefined,
+        );
   const out = {
     ...raw,
     suggestedSkills,
     localDirs,
     references,
     timeoutMinutes,
+    categoryId: categoryId ?? "general",
+    category:
+      typeof raw.category === "string" ? raw.category : "Custom",
     isCustom: true as const,
   } as CustomTemplate & { isCustom: true };
   delete (out as unknown as Record<string, unknown>).skills;
@@ -158,6 +169,7 @@ export async function GET() {
       icon: t.icon,
       color: t.color,
       category: t.category,
+      categoryId: resolveTemplateCategoryId(t.category) ?? "general",
       profile: t.profile,
       description: t.description,
       instruction: t.instruction,
@@ -210,7 +222,12 @@ export async function POST(request: NextRequest) {
         name: body.name || "Untitled Template",
         icon: body.icon || "Zap",
         color: body.color || "cyan",
-        category: body.category || "Custom",
+        category:
+          typeof body.category === "string" ? body.category : "Custom",
+        categoryId:
+          typeof body.categoryId === "string" && body.categoryId
+            ? body.categoryId
+            : resolveTemplateCategoryId(body.category) ?? "general",
         profile: typeof body.profile === "string" ? body.profile : "",
         description: body.description || "",
         instruction: body.instruction || "",
@@ -256,6 +273,10 @@ export async function POST(request: NextRequest) {
       if (body.icon !== undefined) template.icon = body.icon;
       if (body.color !== undefined) template.color = body.color;
       if (body.category !== undefined) template.category = body.category;
+      if (body.categoryId !== undefined) {
+        template.categoryId =
+          typeof body.categoryId === "string" ? body.categoryId : undefined;
+      }
       if (body.profile !== undefined) template.profile = body.profile;
       if (body.description !== undefined) template.description = body.description;
       if (body.instruction !== undefined) template.instruction = body.instruction;

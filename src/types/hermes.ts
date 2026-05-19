@@ -297,6 +297,7 @@ export interface Mission {
   timeoutMinutes?: number;
   schedule?: string;
   cronJobId?: string;
+  categoryId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

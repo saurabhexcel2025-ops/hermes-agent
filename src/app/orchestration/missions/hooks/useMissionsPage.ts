@@ -6,11 +6,12 @@ import type { LocalDirEntry, Mission } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import { buildMissionPrompt, stripPromptSections } from "@/lib/build-mission-prompt";
 import type { MissionFormState } from "@/components/missions/MissionCreateForm";
+import type { MissionTemplate } from "@/components/missions/TemplateModals";
 import {
-  MissionTemplate,
-  CATEGORY_ORDER,
-  groupTemplates,
-} from "@/components/missions/TemplateModals";
+  categoryFilterPills,
+  groupTemplatesByCategory,
+} from "@/lib/mission-categories";
+import type { ManagedCategory } from "@/components/missions/CategoryManagerModal";
 
 export type MissionRow = Mission & {
   cronJob?: {
@@ -42,8 +43,15 @@ export interface MissionDetail {
 }
 
 export function useMissionsPage() {
-  const { fetchMissions, fetchTemplates, fetchMissionDetail } =
-    useMissionsApi();
+  const {
+    fetchMissions,
+    fetchTemplates,
+    fetchMissionDetail,
+    fetchCategories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+  } = useMissionsApi();
   const router = useRouter();
   const [missions, setMissions] = useState<MissionRow[]>([]);
   const [templates, setTemplates] = useState<MissionTemplate[]>([]);
@@ -106,6 +114,11 @@ export function useMissionsPage() {
   const [referenceInput, setReferenceInput] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [missionCategoryFilter, setMissionCategoryFilter] = useState("all");
+  const [categories, setCategories] = useState<ManagedCategory[]>([]);
+  const [newCategoryId, setNewCategoryId] = useState<string | null>(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const LAST_CATEGORY_KEY = "ch-last-mission-category";
 
   const formState: MissionFormState = {
     newName,
@@ -166,7 +179,9 @@ export function useMissionsPage() {
 
   function dispatchPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
-      instruction: buildPrompt(),
+      instruction: newInstruction.trim(),
+      context: newContext.trim() || undefined,
+      categoryId: newCategoryId,
       goals: newGoals.split("\n").filter((g) => g.trim()),
       profile: newProfile || undefined,
       profileName: newProfile || undefined,
@@ -195,6 +210,72 @@ export function useMissionsPage() {
     setShowCreate(false);
   }
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const list = await fetchCategories();
+      setCategories(list);
+    } catch (error) {
+      console.error("Failed to load categories:", error);
+    }
+  }, [fetchCategories]);
+
+  const handleCreateCategory = useCallback(
+    async (name: string): Promise<string | null> => {
+      try {
+        const cat = await createCategory(name);
+        if (cat?.id) {
+          await loadCategories();
+          return cat.id as string;
+        }
+      } catch (error) {
+        console.error("Failed to create category:", error);
+      }
+      return null;
+    },
+    [createCategory, loadCategories],
+  );
+
+  const handleUpdateCategory = useCallback(
+    async (id: string, patch: { name?: string; color?: string }) => {
+      await updateCategory(id, patch);
+      await loadCategories();
+    },
+    [updateCategory, loadCategories],
+  );
+
+  const handleDeleteCategory = useCallback(
+    async (id: string, reassignToId: string | null) => {
+      await deleteCategory(id, reassignToId);
+      await loadCategories();
+      await fetchMissions().then(setMissions);
+      const loaded = await fetchTemplates();
+      setTemplates(loaded);
+    },
+    [deleteCategory, loadCategories, fetchMissions, fetchTemplates],
+  );
+
+  const setCategoryId = useCallback((id: string | null) => {
+    setNewCategoryId(id);
+    if (id) {
+      try {
+        localStorage.setItem(LAST_CATEGORY_KEY, id);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showCreate && !editingId) {
+      try {
+        const last = localStorage.getItem(LAST_CATEGORY_KEY);
+        if (last && !newCategoryId) setNewCategoryId(last);
+      } catch {
+        // ignore
+      }
+    }
+  }, [showCreate, editingId, newCategoryId]);
+
   const fetchData = useCallback(async () => {
     try {
       const list = await fetchMissions();
@@ -203,12 +284,15 @@ export function useMissionsPage() {
       console.error("Failed to load missions:", error);
     }
 
+    await loadCategories();
+
     try {
       const loaded = await fetchTemplates();
       setTemplates(loaded);
       if (!templateApplied.current && loaded.length > 0) {
         const url = new URL(window.location.href);
         const templateId = url.searchParams.get("template");
+        const compose = url.searchParams.get("compose");
         if (templateId) {
           const t = loaded.find(
             (tmpl: MissionTemplate) => tmpl.id === templateId,
@@ -231,10 +315,23 @@ export function useMissionsPage() {
                 [],
             );
             setNewSkills(t.suggestedSkills || []);
+            const cid =
+              (t as MissionTemplate & { categoryId?: string }).categoryId ??
+              null;
+            setNewCategoryId(cid);
+            if (cid) {
+              try {
+                localStorage.setItem(LAST_CATEGORY_KEY, cid);
+              } catch {
+                // ignore
+              }
+            }
             setShowCreate(true);
             templateApplied.current = true;
             showToast(`Template loaded: ${t.name}`, "success");
-            scrollToCreateForm();
+            if (compose !== "1") {
+              scrollToCreateForm();
+            }
             window.history.replaceState({}, "", "/orchestration/missions");
           }
         }
@@ -242,7 +339,7 @@ export function useMissionsPage() {
     } catch (error) {
       console.error("Failed to load templates:", error);
     }
-  }, [fetchMissions, fetchTemplates, showToast, scrollToCreateForm]);
+  }, [fetchMissions, fetchTemplates, showToast, scrollToCreateForm, loadCategories]);
 
   const fetchDetail = useCallback(
     (id: string, showLoading = true) => {
@@ -313,11 +410,13 @@ export function useMissionsPage() {
               action: "update",
               missionId: editingId,
               name: newName,
-              ...dispatchPayload({ schedule: newDispatch === "cron" ? newSchedule : undefined }),
+              ...dispatchPayload({
+                schedule: newDispatch === "cron" ? newSchedule : undefined,
+              }),
             }),
           });
           if (res.ok) {
-            showToast("Mission updated - cron job prompt synced", "success");
+            showToast("Mission updated", "success");
             setEditingId(null);
             setShowCreate(false);
             fetchData();
@@ -411,6 +510,7 @@ export function useMissionsPage() {
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences(m.references ?? []);
     setNewSkills(m.skills ?? []);
+    setNewCategoryId(m.categoryId ?? null);
 
     setNewModel(m.modelId || m.model || "");
     setNewProvider(m.provider || "");
@@ -474,6 +574,7 @@ export function useMissionsPage() {
           ? newProvider.trim()
           : undefined;
       payload.timeoutMinutes = newTimeout;
+      if (newCategoryId) payload.categoryId = newCategoryId;
       if (!editingTemplateId) {
         payload.dispatchMode = newDispatch;
         payload.schedule = newSchedule;
@@ -545,6 +646,8 @@ export function useMissionsPage() {
       (t as MissionTemplate & { references?: string[] }).references ?? [],
     );
     setNewSkills(t.suggestedSkills || []);
+    const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
+    setNewCategoryId(cid);
     const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
     if (typeof tm === "number" && Number.isFinite(tm)) {
       setNewTimeout(tm);
@@ -573,9 +676,33 @@ export function useMissionsPage() {
   const handleTemplateSelect = (t: MissionTemplate) => {
     setNewName(t.name);
     applyTemplateToForm(t);
+    const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
+    setNewCategoryId(cid);
     setShowCreate(true);
     showToast(`Template loaded: ${t.name}`, "success");
-    scrollToCreateForm();
+  };
+
+  const handleDuplicateMission = (m: MissionRow) => {
+    setEditingId(null);
+    setNewName(`${m.name} (copy)`);
+    const { instruction, context } = stripPromptSections(m.prompt);
+    setNewInstruction(instruction);
+    setNewContext(context);
+    setNewGoals(m.goals?.join("\n") ?? "");
+    setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
+    setNewReferences(m.references ?? []);
+    setNewSkills(m.skills ?? []);
+    setNewCategoryId(m.categoryId ?? null);
+    setNewModel(m.modelId || m.model || "");
+    setNewProvider(m.provider || "");
+    if (m.profileName) setNewProfile(m.profileName);
+    if (typeof m.missionTimeMinutes === "number") {
+      setNewMissionTime(m.missionTimeMinutes);
+    }
+    if (typeof m.timeoutMinutes === "number") setNewTimeout(m.timeoutMinutes);
+    setNewDispatch("save");
+    setShowCreate(true);
+    showToast("Mission duplicated as draft", "success");
   };
 
   const handleDelete = async (id: string) => {
@@ -616,6 +743,13 @@ export function useMissionsPage() {
     () =>
       missions.filter((m) => {
         if (filter !== "all" && m.status !== filter) return false;
+        if (missionCategoryFilter !== "all") {
+          if (missionCategoryFilter === "__uncategorized__") {
+            if (m.categoryId) return false;
+          } else if (m.categoryId !== missionCategoryFilter) {
+            return false;
+          }
+        }
         if (
           search &&
           !m.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -624,7 +758,7 @@ export function useMissionsPage() {
           return false;
         return true;
       }),
-    [missions, filter, search],
+    [missions, filter, search, missionCategoryFilter],
   );
 
   const missionCounts = useMemo(
@@ -636,20 +770,43 @@ export function useMissionsPage() {
     [missions],
   );
 
-  const allCategories = useMemo(() => {
-    const knownSet = new Set(CATEGORY_ORDER);
-    const extra = templates
-      .map((t) => (t.isCustom ? "Custom" : t.category || "Other"))
-      .filter((c) => !knownSet.has(c));
-    return [...CATEGORY_ORDER, ...extra];
-  }, [templates]);
+  const templateCategoryPills = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of templates) {
+      const cid =
+        (t as MissionTemplate & { categoryId?: string }).categoryId ??
+        "general";
+      counts[cid] = (counts[cid] ?? 0) + 1;
+    }
+    return categoryFilterPills(categories, counts, false, 0);
+  }, [templates, categories]);
+
+  const missionCategoryPills = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let uncategorized = 0;
+    for (const m of missions) {
+      if (!m.categoryId) {
+        uncategorized += 1;
+      } else {
+        counts[m.categoryId] = (counts[m.categoryId] ?? 0) + 1;
+      }
+    }
+    return categoryFilterPills(categories, counts, true, uncategorized);
+  }, [missions, categories]);
 
   const filteredGrouped = useMemo(() => {
-    const grouped = groupTemplates(templates);
-    return categoryFilter === "all"
-      ? grouped
-      : grouped.filter(([cat]) => cat === categoryFilter);
-  }, [templates, categoryFilter]);
+    const grouped = groupTemplatesByCategory(
+      templates as Array<MissionTemplate & { categoryId?: string }>,
+      categories,
+    );
+    if (categoryFilter === "all") return grouped;
+    return grouped.filter((g) => {
+      if (categoryFilter === "__uncategorized__") {
+        return g.categoryId === null;
+      }
+      return g.categoryId === categoryFilter;
+    });
+  }, [templates, categoryFilter, categories]);
 
   return {
     toastElement,
@@ -676,7 +833,20 @@ export function useMissionsPage() {
     setCollapsedColumns,
     categoryFilter,
     setCategoryFilter,
-    allCategories,
+    missionCategoryFilter,
+    setMissionCategoryFilter,
+    categories,
+    newCategoryId,
+    setNewCategoryId,
+    showCategoryManager,
+    setShowCategoryManager,
+    loadCategories,
+    handleCreateCategory,
+    handleUpdateCategory,
+    handleDeleteCategory,
+    setCategoryId,
+    templateCategoryPills,
+    missionCategoryPills,
     filteredGrouped,
     filtered,
     formState,
@@ -733,6 +903,8 @@ export function useMissionsPage() {
     handleEdit,
     handleDelete,
     handleCancel,
+    handleDuplicateMission,
+    buildPrompt,
   };
 }
 

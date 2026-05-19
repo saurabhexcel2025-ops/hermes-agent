@@ -34,6 +34,9 @@ import Button from "@/components/ui/Button";
 import CategoryAccordion from "@/components/ui/CategoryAccordion";
 import Modal from "@/components/ui/Modal";
 import AgentRuntimeDefaultsCard from "@/components/missions/AgentRuntimeDefaultsCard";
+import CategoryCombobox, {
+  type CategoryOption,
+} from "@/components/missions/CategoryCombobox";
 import LocalDirRow from "@/components/missions/LocalDirRow";
 import type { LocalDirEntry } from "@/types/hermes";
 
@@ -186,6 +189,10 @@ export interface TemplateEditorModalProps {
   onTemplateColorChange: (v: string) => void;
   templateSaving: boolean;
   onSave: () => void;
+  categories?: CategoryOption[];
+  categoryId?: string | null;
+  onCategoryChange?: (id: string | null) => void;
+  onCreateCategory?: (name: string) => Promise<string | null>;
 
   // Mission form state (shared with create/edit form)
   newInstruction: string;
@@ -324,6 +331,10 @@ export function TemplateEditorModal({
   onTemplateColorChange,
   templateSaving,
   onSave,
+  categories = [],
+  categoryId = null,
+  onCategoryChange,
+  onCreateCategory,
   newInstruction,
   onNewInstructionChange,
   newContext,
@@ -376,6 +387,14 @@ export function TemplateEditorModal({
       }
     >
       <div className="space-y-4">
+        {categories.length > 0 && onCategoryChange && (
+          <CategoryCombobox
+            categories={categories}
+            value={categoryId}
+            onChange={onCategoryChange}
+            onCreateCategory={onCreateCategory}
+          />
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-white/40 font-mono block mb-1">

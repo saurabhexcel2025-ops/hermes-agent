@@ -44,6 +44,7 @@ interface MissionRow {
   timeout_minutes: number | null;
   schedule: string | null;
   cron_job_id: string | null;
+  category_id?: string | null;
 }
 
 /** Tables preserved in FK-safe order (missions before sessions). */
@@ -133,7 +134,53 @@ function exportMissionsFromDb(database: Database.Database): MissionRow[] {
   return exportTableRows(database, "missions") as unknown as MissionRow[];
 }
 
+function missionsHasCategoryId(database: Database.Database): boolean {
+  const cols = database
+    .prepare("PRAGMA table_info(missions)")
+    .all() as Array<{ name: string }>;
+  return cols.some((c) => c.name === "category_id");
+}
+
 function importMissionRow(database: Database.Database, row: MissionRow): void {
+  const baseValues = [
+    row.id,
+    row.name,
+    row.prompt,
+    row.profile_id ?? "default",
+    row.status,
+    row.result,
+    row.session_id,
+    row.created_at,
+    row.updated_at,
+    row.deleted_at,
+    row.local_dirs ?? "[]",
+    row.references_ ?? "[]",
+    row.skills ?? "[]",
+    row.goals ?? "[]",
+    row.model_id,
+    row.provider,
+    row.profile_name,
+    row.mission_time_minutes,
+    row.timeout_minutes,
+    row.schedule,
+    row.cron_job_id,
+  ];
+
+  if (missionsHasCategoryId(database)) {
+    database
+      .prepare(
+        `INSERT OR REPLACE INTO missions (
+          id, name, prompt, profile_id, status, result, session_id,
+          created_at, updated_at, deleted_at,
+          local_dirs, references_, skills, goals,
+          model_id, provider, profile_name,
+          mission_time_minutes, timeout_minutes, schedule, cron_job_id, category_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(...baseValues, row.category_id ?? null);
+    return;
+  }
+
   database
     .prepare(
       `INSERT OR REPLACE INTO missions (
@@ -142,31 +189,9 @@ function importMissionRow(database: Database.Database, row: MissionRow): void {
         local_dirs, references_, skills, goals,
         model_id, provider, profile_name,
         mission_time_minutes, timeout_minutes, schedule, cron_job_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(
-      row.id,
-      row.name,
-      row.prompt,
-      row.profile_id ?? "default",
-      row.status,
-      row.result,
-      row.session_id,
-      row.created_at,
-      row.updated_at,
-      row.deleted_at,
-      row.local_dirs ?? "[]",
-      row.references_ ?? "[]",
-      row.skills ?? "[]",
-      row.goals ?? "[]",
-      row.model_id,
-      row.provider,
-      row.profile_name,
-      row.mission_time_minutes,
-      row.timeout_minutes,
-      row.schedule,
-      row.cron_job_id
-    );
+    .run(...baseValues);
 }
 
 function importMissionsFromJsonDir(database: Database.Database): number {
