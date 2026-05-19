@@ -2,14 +2,14 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Missions page", () => {
   test("loads missions list", async ({ page }) => {
-    await page.goto("/missions");
+    await page.goto("/orchestration/missions");
     await expect(
       page.getByRole("heading", { name: "Missions", exact: true })
     ).toBeVisible();
   });
 
   test("shows quick deploy template region", async ({ page }) => {
-    await page.goto("/missions");
+    await page.goto("/orchestration/missions");
     await expect(
       page.getByRole("heading", { name: "Missions", exact: true })
     ).toBeVisible();
@@ -19,7 +19,7 @@ test.describe("Missions page", () => {
   });
 
   test("can open create mission form", async ({ page }) => {
-    await page.goto("/missions");
+    await page.goto("/orchestration/missions");
     const createBtn = page.getByRole("button", { name: /Create|New Mission|Draft/i });
     if (await createBtn.isVisible()) {
       await createBtn.click();
@@ -30,14 +30,14 @@ test.describe("Missions page", () => {
 
 test.describe("Cron page", () => {
   test("loads cron jobs list", async ({ page }) => {
-    await page.goto("/cron");
+    await page.goto("/orchestration/cron");
     await expect(
       page.getByRole("heading", { name: /Cron Jobs/i })
     ).toBeVisible();
   });
 
   test("shows create job button", async ({ page }) => {
-    await page.goto("/cron");
+    await page.goto("/orchestration/cron");
     await expect(
       page.getByRole("button", { name: /Create|New|Add/i }).first()
     ).toBeVisible();

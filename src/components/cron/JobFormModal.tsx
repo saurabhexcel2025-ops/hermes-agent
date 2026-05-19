@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Edit3,
@@ -28,6 +28,11 @@ export interface CronJobFormData {
   model: string;
   profile_name?: string;
   repeat?: boolean;
+}
+
+interface AgentProfileOption {
+  id: string;
+  name: string;
 }
 
 interface JobFormModalProps {
@@ -54,6 +59,58 @@ export default function JobFormModal({
   const [repeat, setRepeat] = useState(job?.repeat ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<AgentProfileOption[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+
+    if (job?.id) {
+      setName(job.name ?? "");
+      setSchedule(job.schedule ?? "");
+      setPrompt(job.prompt ?? "");
+      setDeliver(job.deliver || "none");
+      setModel(job.model ?? "");
+      setProfileName(job.profile_name || "default");
+      setRepeat(job.repeat ?? false);
+    } else {
+      setName("");
+      setSchedule("");
+      setPrompt("");
+      setDeliver("none");
+      setModel("");
+      setProfileName("default");
+      setRepeat(false);
+    }
+  }, [open, job]);
+
+  useEffect(() => {
+    if (!open) return;
+    setProfilesLoading(true);
+    let cancelled = false;
+    void fetch("/api/agent/profiles")
+      .then((r) => r.json())
+      .then((d: { data?: { profiles?: AgentProfileOption[] } }) => {
+        if (cancelled) return;
+        const raw = d.data?.profiles ?? [];
+        if (raw.length > 0) {
+          setProfiles(
+            raw.map((p) => ({
+              id: p.id,
+              name: p.name,
+            })),
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setProfilesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Derive the actual cron expression from the current schedule value.
   const cronExpr =
@@ -233,17 +290,23 @@ export default function JobFormModal({
           <select
             value={profile_name}
             onChange={(e) => setProfileName(e.target.value)}
+            disabled={profilesLoading}
             className={baseInputStyles}
           >
-            <option value="default">Bob (default)</option>
-            <option value="swe">swe</option>
-            <option value="qa">qa</option>
-            <option value="devops">devops</option>
-            <option value="web-design">web-design</option>
-            <option value="researcher">researcher</option>
-            <option value="marketing">marketing</option>
-            <option value="creative-lead">creative-lead</option>
-            <option value="data-scientist">data-scientist</option>
+            {(() => {
+              const options =
+                profiles.length > 0 &&
+                !profiles.some((p) => p.id === profile_name)
+                  ? [{ id: profile_name, name: profile_name }, ...profiles]
+                  : profiles.length > 0
+                    ? profiles
+                    : [{ id: profile_name, name: profile_name }];
+              return options.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ));
+            })()}
           </select>
         </div>
 

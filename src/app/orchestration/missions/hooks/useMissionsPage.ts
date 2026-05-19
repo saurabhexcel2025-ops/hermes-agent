@@ -188,51 +188,51 @@ export function useMissionsPage() {
     setShowCreate(false);
   }
 
-  const fetchData = useCallback(() => {
-    fetchMissions()
-      .then((list) => setMissions(list))
-      .catch((error) => {
-        console.error("Failed to load missions:", error);
-      });
+  const fetchData = useCallback(async () => {
+    try {
+      const list = await fetchMissions();
+      setMissions(list);
+    } catch (error) {
+      console.error("Failed to load missions:", error);
+    }
 
-    fetchTemplates()
-      .then((loaded) => {
-        setTemplates(loaded);
-        if (!templateApplied.current && loaded.length > 0) {
-          const url = new URL(window.location.href);
-          const templateId = url.searchParams.get("template");
-          if (templateId) {
-            const t = loaded.find(
-              (tmpl: MissionTemplate) => tmpl.id === templateId,
+    try {
+      const loaded = await fetchTemplates();
+      setTemplates(loaded);
+      if (!templateApplied.current && loaded.length > 0) {
+        const url = new URL(window.location.href);
+        const templateId = url.searchParams.get("template");
+        if (templateId) {
+          const t = loaded.find(
+            (tmpl: MissionTemplate) => tmpl.id === templateId,
+          );
+          if (t) {
+            setNewName(t.name);
+            setNewInstruction(t.instruction);
+            setNewContext(t.context);
+            setNewGoals(t.goals.join("\n"));
+            if (t.profile) setNewProfile(t.profile);
+            if (t.defaultModel) setNewModel(t.defaultModel);
+            if (t.defaultProvider) setNewProvider(t.defaultProvider);
+            setNewLocalDirs(
+              normalizeLocalDirsInput(
+                (t as MissionTemplate & { localDirs?: unknown }).localDirs,
+              ),
             );
-            if (t) {
-              setNewName(t.name);
-              setNewInstruction(t.instruction);
-              setNewContext(t.context);
-              setNewGoals(t.goals.join("\n"));
-              if (t.profile) setNewProfile(t.profile);
-              if (t.defaultModel) setNewModel(t.defaultModel);
-              if (t.defaultProvider) setNewProvider(t.defaultProvider);
-              setNewLocalDirs(
-                normalizeLocalDirsInput(
-                  (t as MissionTemplate & { localDirs?: unknown }).localDirs,
-                ),
-              );
-              setNewReferences(
-                (t as MissionTemplate & { references?: string[] }).references ??
-                  [],
-              );
-              setNewSkills(t.suggestedSkills || []);
-              setShowCreate(true);
-              templateApplied.current = true;
-              window.history.replaceState({}, "", "/missions");
-            }
+            setNewReferences(
+              (t as MissionTemplate & { references?: string[] }).references ??
+                [],
+            );
+            setNewSkills(t.suggestedSkills || []);
+            setShowCreate(true);
+            templateApplied.current = true;
+            window.history.replaceState({}, "", "/orchestration/missions");
           }
         }
-      })
-      .catch((error) => {
-        console.error("Failed to load templates:", error);
-      });
+      }
+    } catch (error) {
+      console.error("Failed to load templates:", error);
+    }
   }, [fetchMissions, fetchTemplates]);
 
   const fetchDetail = useCallback(
@@ -257,14 +257,20 @@ export function useMissionsPage() {
   }, [expandedId]);
 
   useEffect(() => {
-    fetchData();
-    setLoading(false);
+    let cancelled = false;
+    setLoading(true);
+    void fetchData().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     const interval = setInterval(() => {
-      fetchData();
+      void fetchData();
       const id = expandedIdRef.current;
       if (id) fetchDetail(id, false);
     }, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [fetchData, fetchDetail]);
 
   useEffect(() => {
@@ -360,7 +366,7 @@ export function useMissionsPage() {
           showToast(
             newDispatch === "save"
               ? "Mission saved as draft"
-              : "Mission queued — visible on the board",
+              : "Mission saved to queue",
             "success",
           );
           resetForm();

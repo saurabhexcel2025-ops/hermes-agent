@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Save, Check, RotateCcw, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -35,12 +35,14 @@ export default function ConfigSectionPage() {
   const [fileContent, setFileContent] = useState("");
   const [originalFileContent, setOriginalFileContent] = useState("");
 
-  // Stable ref for change detection — avoids JSON.stringify on every render
-  const hasChangesRef = useRef(false);
+  const yamlHasChanges = useMemo(
+    () => JSON.stringify(values) !== JSON.stringify(originalValues),
+    [values, originalValues],
+  );
 
   const hasChanges = isFileSection
     ? fileContent !== originalFileContent
-    : hasChangesRef.current;
+    : yamlHasChanges;
 
   const loadConfig = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -60,7 +62,6 @@ export default function ConfigSectionPage() {
         const sectionValues = (config[sectionId] as Record<string, unknown>) || {};
         setValues(sectionValues);
         setOriginalValues({ ...sectionValues });
-        hasChangesRef.current = false;
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -104,7 +105,6 @@ export default function ConfigSectionPage() {
         });
         if (!res.ok) throw new Error("Failed to save");
         setOriginalValues({ ...values });
-        hasChangesRef.current = false;
       }
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
@@ -121,16 +121,11 @@ export default function ConfigSectionPage() {
       setFileContent(originalFileContent);
     } else {
       setValues({ ...originalValues });
-      hasChangesRef.current = false;
     }
   }, [isFileSection, originalFileContent, originalValues]);
 
   const updateValue = useCallback((key: string, value: unknown) => {
-    setValues((prev) => {
-      const next = { ...prev, [key]: value };
-      hasChangesRef.current = true;
-      return next;
-    });
+    setValues((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   if (!sectionDef) {

@@ -523,7 +523,7 @@ export default function Dashboard() {
                   description={t.description}
                   isCustom={t.isCustom}
                   compact
-                  onSelect={() => router.push(`/missions?template=${t.id}`)}
+                  onSelect={() => router.push(`/orchestration/missions?template=${t.id}`)}
                 />
               ))}
               {templates.length > 12 && (
@@ -564,7 +564,7 @@ export default function Dashboard() {
                           description={t.description}
                           isCustom={t.isCustom}
                           compact
-                          onSelect={() => router.push(`/missions?template=${t.id}`)}
+                          onSelect={() => router.push(`/orchestration/missions?template=${t.id}`)}
                         />
                       ))}
                     </div>
