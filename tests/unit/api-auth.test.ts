@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 
 import {
   getCorrelationId,
-  requireChApiKey,
+  requireAuth,
   requireSignedRequest,
 } from "@/lib/api-auth";
 
@@ -13,12 +13,10 @@ describe("api-auth", () => {
     delete process.env.CH_REQUEST_SIGNING_SECRET;
   });
 
-  it("does not enforce optional API keys on routes", () => {
-    const request = new NextRequest("http://localhost/api/test", {
-      method: "POST",
-      headers: { "x-ch-api-key": "any" },
-    });
-    expect(requireChApiKey(request)).toBeNull();
+  it("allows writes when not read-only", () => {
+    delete process.env.CH_READ_ONLY;
+    const request = new NextRequest("http://localhost/api/test", { method: "POST" });
+    expect(requireAuth(request)).toBeNull();
   });
 
   it("accepts valid signed request", () => {

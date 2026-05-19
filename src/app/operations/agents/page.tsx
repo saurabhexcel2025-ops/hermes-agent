@@ -5,6 +5,8 @@ import {
   Users, FileText, Save, RotateCcw, Eye, EyeOff,
   Check, AlertCircle, Plus, Trash2,
 } from "lucide-react";
+import ProfilesDriftBanner from "@/components/profiles/ProfilesDriftBanner";
+import ProfileSyncBar from "@/components/profiles/ProfileSyncBar";
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
@@ -44,8 +46,87 @@ export default function BehaviourPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const { showToast, toastElement } = useToast();
+
+  const bundledProfiles = profiles.filter((p) => !p.isDefault && p.isBundled);
+  const driftCount = bundledProfiles.filter((p) => p.syncStatus === "drift").length;
+  const syncErrorCount = bundledProfiles.filter((p) => p.syncStatus === "error").length;
+
+  const runProfileSync = async (
+    body: Record<string, unknown>,
+    successMessage: string,
+  ): Promise<boolean> => {
+    setSyncBusy(true);
+    try {
+      const res = await fetch("/api/agent/profiles/sync/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
+      if (!res.ok || data.data?.success === false) {
+        showToast(data.error ?? "Push failed", "error");
+        return false;
+      }
+      showToast(successMessage, "success");
+      await loadProfiles();
+      return true;
+    } catch {
+      showToast("Push failed", "error");
+      return false;
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const pullSlug = async (slug: string): Promise<boolean> => {
+    const res = await fetch("/api/agent/profiles/sync/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    });
+    const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
+    if (!res.ok || data.data?.success === false) {
+      showToast(data.error ?? `Pull failed for ${slug}`, "error");
+      return false;
+    }
+    return true;
+  };
+
+  const handlePushAll = () =>
+    void runProfileSync({ all: true }, "All profiles pushed to Hermes");
+
+  const handlePushOne = (slug: string) =>
+    void runProfileSync({ slug }, `Pushed ${slug} to Hermes`);
+
+  const handlePullAll = async () => {
+    setSyncBusy(true);
+    try {
+      for (const p of bundledProfiles) {
+        if (!(await pullSlug(p.id))) return;
+      }
+      showToast("All profiles pulled from Hermes", "success");
+      await loadProfiles();
+    } catch {
+      showToast("Pull failed", "error");
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const handlePullOne = async (slug: string) => {
+    setSyncBusy(true);
+    try {
+      if (await pullSlug(slug)) {
+        showToast(`Pulled ${slug} from Hermes`, "success");
+        await loadProfiles();
+      }
+    } finally {
+      setSyncBusy(false);
+    }
+  };
 
   const loadProfiles = useCallback(async () => {
     setLoading(true);
@@ -241,6 +322,21 @@ export default function BehaviourPage() {
           </a>
           .
         </p>
+
+        <ProfilesDriftBanner
+          driftCount={driftCount}
+          errorCount={syncErrorCount}
+          onPushAll={handlePushAll}
+          pushing={syncBusy}
+        />
+        <ProfileSyncBar
+          selectedSlug={selectedProfileId}
+          onPushAll={handlePushAll}
+          onPullAll={() => void handlePullAll()}
+          onPushOne={handlePushOne}
+          onPullOne={(slug) => void handlePullOne(slug)}
+          busy={syncBusy}
+        />
 
         <div className="flex flex-col lg:flex-row gap-6 min-h-[520px]">
           <div className="w-full lg:w-64 shrink-0 space-y-2">

@@ -44,8 +44,6 @@ jest.mock("@/lib/api-logger", () => ({ logApiError: (...args: unknown[]) => mock
 
 jest.mock("@/lib/api-auth", () => ({
   requireAuth: jest.fn(() => null),
-  requireAuth: jest.fn(() => null),
-  requireAuth: jest.fn(() => null),
 }));
 
 jest.mock("@/lib/audit-log", () => ({
@@ -55,7 +53,6 @@ jest.mock("@/lib/audit-log", () => ({
 jest.mock("@/lib/backends", () => ({
   agentBackend: {
     dispatchMission: jest.fn(),
-    listProfiles: jest.fn().mockResolvedValue([]),
   },
 }));
 

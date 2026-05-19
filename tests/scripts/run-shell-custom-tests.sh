@@ -46,7 +46,7 @@ mkdir -p "$TMP_ENV"
 printf '%s\n' \
   '# comment' \
   'FOO=ignored' \
-  'CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no' \
+  'CH_READ_ONLY=0' \
   'HERMES_HOME=/tmp/from-dotenv' \
   'INSTALL_HERMES_PROFILE_TEMPLATES=yes' \
   'CH_DATA_DIR=/tmp/chdata' \
@@ -55,11 +55,11 @@ printf '%s\n' \
 # shellcheck source=../../scripts/lib/ch-dotenv-local.sh
 source "$REPO_ROOT/scripts/lib/ch-dotenv-local.sh"
 
-unset CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES HERMES_HOME INSTALL_HERMES_PROFILE_TEMPLATES CH_DATA_DIR CH_READ_ONLY FOO || true
+unset HERMES_HOME INSTALL_HERMES_PROFILE_TEMPLATES CH_DATA_DIR CH_READ_ONLY FOO || true
 ch_load_control_hub_env_local "$TMP_ENV"
 
 [[ -z "${FOO+x}" ]] || fail "FOO should not be exported"
-[[ "${CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES:-}" == "no" ]] || fail "expected CH_UPDATE_SYNC from dotenv"
+[[ "${CH_READ_ONLY:-}" == "0" ]] || fail "expected CH_READ_ONLY from dotenv"
 [[ "${HERMES_HOME:-}" == "/tmp/from-dotenv" ]] || fail "expected HERMES_HOME from dotenv"
 [[ "${INSTALL_HERMES_PROFILE_TEMPLATES:-}" == "yes" ]] || fail "expected INSTALL_HERMES_PROFILE_TEMPLATES"
 [[ "${CH_DATA_DIR:-}" == "/tmp/chdata" ]] || fail "expected CH_DATA_DIR"
@@ -125,12 +125,6 @@ ch_bundled_profiles_install "$REPO_ROOT"
 [[ -f "$HERMES_HOME/profiles/devops/SOUL.md" ]] || fail "devops SOUL missing after install"
 grep -q "DevOps — Development Guide" "$HERMES_HOME/profiles/devops/AGENTS.md" || fail "devops AGENTS missing expected phrase"
 pass "install creates missing profile dirs and copies templates"
-
-echo 'STALE' >"$HERMES_HOME/profiles/qa/SOUL.md"
-ch_bundled_profiles_sync "$REPO_ROOT"
-grep -q "quality assurance specialist" "$HERMES_HOME/profiles/qa/SOUL.md" || fail "sync did not overwrite SOUL from template"
-[[ "$(cat "$HERMES_HOME/profiles/qa/SOUL.md")" == STALE ]] && fail "sync left stale SOUL"
-pass "sync overwrites SOUL.md from repo templates"
 
 # ── ch-backup.sh (mock hindsight_bridge.py) ───────────────────
 echo ""

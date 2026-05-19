@@ -4,26 +4,6 @@
 
 import type { LocalDirEntry } from "@/types/hermes";
 
-// ── Agent Profile ──────────────────────────────────────────────
-
-export interface AgentProfile {
-  id: string;
-  name: string;
-  description: string;
-  role: string;
-  status: "active" | "inactive";
-  config: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateProfileInput {
-  name: string;
-  description?: string;
-  role?: string;
-  config?: Record<string, unknown>;
-}
-
 // ── Mission ────────────────────────────────────────────────────
 //
 // Status enum is canonical from the V1 mission JSON schema. The legacy

@@ -345,7 +345,9 @@ Control Hub is a command centre, not a file manager. The operator opens the dash
 
 §
 
-**Sidebar sections:** Main (Dashboard, Sessions, Memory, Gateway, Logs) | Orchestration (Cron, Missions, Chat) | Operations (Agents, Skills, Tools, Personalities) | Rec Room (Story Weaver) | Config (Models, HERMES.md, Environment + YAML sections)
+**Sidebar sections:** Main (Dashboard, Sessions, Memory, Gateway, Logs) | Orchestration (Cron, Missions, Chat) | Operations (Agents, Skills, Tools, Personalities) | Rec Room (Story Weaver) | Config (Models, Seed, HERMES.md, Environment + YAML sections)
+
+**Profiles:** SQLite `agent_profiles` is source of truth; push/pull/drift on Operations → Agents mirrors Config → Models sync. See [docs/CATALOG_AND_PROFILES.md](docs/CATALOG_AND_PROFILES.md).
 
 §
 

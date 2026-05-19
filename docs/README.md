@@ -4,6 +4,7 @@
 |----------|-------------|
 | [CONTROL_HUB.md](CONTROL_HUB.md) | What this repo is and where to read next |
 | [API.md](API.md) | REST endpoints |
+| [CATALOG_AND_PROFILES.md](CATALOG_AND_PROFILES.md) | Seed pack, SQLite catalog, Hermes profile sync |
 | [DEPLOY.md](DEPLOY.md) | Deploy, **`ch-deploy`**, TLS, Docker, ports, scripts layout |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [TESTING.md](TESTING.md) | Jest, Playwright, CI, and navigation-matrix upkeep |

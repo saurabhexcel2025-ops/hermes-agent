@@ -19,7 +19,7 @@ Override the host port in Docker Compose with **`PORT`** (see `docker-compose.ym
 | `scripts/lib/` | Shared bash modules (`ch-deploy-impl.sh`, Hermes profile templates, dotenv, port helpers, …) |
 | `scripts/tooling/` | **`prebuild-db.mjs`**, **`discover-agents.mjs`**, **`generate-json-schema.ts`** (also run via `npm run prebuild`, `npm run discover-agents`, `npm run generate:schema-json`) |
 | `scripts/hardware/` | Preset cron scripts; copied into **`CH_DATA_DIR/scripts`** when missing during **`scripts/bootstrap/setup.sh`**. Behaviour: **[SYSTEM-CRON.md](SYSTEM-CRON.md)**. |
-| `scripts/bundled-profiles/` | **Deprecated** — see `data/seed/profiles/` |
+| `data/seed/` | Professional catalog (profiles, template packs); seeded via `npm run db:seed` / `ch-deploy update` — [CATALOG_AND_PROFILES.md](CATALOG_AND_PROFILES.md) |
 | `scripts/git-hooks/` | Optional Git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
 
 Deploy from a shell (same commands the dashboard triggers via **`POST /api/update`**):

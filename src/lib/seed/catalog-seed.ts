@@ -9,7 +9,7 @@ import { ensureDb } from "../db";
 import { upsertProfile, getProfileBySeedKey } from "../profiles-repository";
 import { upsertCatalogTemplate, getCatalogTemplate } from "../catalog-template-repository";
 import { db } from "../db";
-import { CH_DATA_DIR, PATHS } from "../paths";
+import { CH_DATA_DIR } from "../paths";
 import { pushProfileToHermes, pushAllProfiles } from "../hermes-profile-sync";
 import { writeFileSync, mkdirSync } from "fs";
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# Bundled Hermes profile templates — shared by bootstrap/install.sh and ch-deploy update
+# Optional Hermes profile templates — install.sh only (update uses seed-catalog.ts → SQLite → push)
 #
 # Hermes root: HERMES_HOME (default ~/.hermes). Profiles live under
 #   $HERMES_HOME/profiles/<name>/
@@ -74,42 +74,6 @@ ch_bundled_profiles_install() {
       cp "$HERMES_HOME/auth.json" "$profile_dir/auth.json"
       chmod 600 "$profile_dir/auth.json"
       _ch_profiles_emit "Installed $profile/auth.json (from Hermes home)"
-    fi
-  done
-}
-
-# Update mode: ensure dirs exist; overwrite SOUL.md / AGENTS.md from repo templates when present.
-ch_bundled_profiles_sync() {
-  local repo_root="$1"
-  local templates="$repo_root/data/seed/profiles"
-  local profile profile_dir
-
-  ch_resolve_hermes_home
-
-  for profile in "${CH_BUNDLED_PROFILE_LIST[@]}"; do
-    profile_dir="$HERMES_HOME/profiles/$profile"
-
-    if [ ! -d "$profile_dir" ]; then
-      _ch_profiles_emit "Creating missing profile: $profile"
-      if _ch_hermes_cli_ok; then
-        hermes profile create "$profile" --clone --no-alias 2>/dev/null || true
-      fi
-      if [ ! -d "$profile_dir" ]; then
-        mkdir -p "$profile_dir"/{memories,sessions,skills,skins,logs,plans,workspace,cron}
-        [ -f "$HERMES_HOME/config.yaml" ] && cp "$HERMES_HOME/config.yaml" "$profile_dir/config.yaml"
-        [ -f "$HERMES_HOME/.env" ] && cp "$HERMES_HOME/.env" "$profile_dir/.env"
-      fi
-    fi
-
-    if [ -f "$templates/$profile/SOUL.md" ]; then
-      cp "$templates/$profile/SOUL.md" "$profile_dir/SOUL.md"
-    fi
-    if [ -f "$templates/$profile/AGENTS.md" ]; then
-      cp "$templates/$profile/AGENTS.md" "$profile_dir/AGENTS.md"
-    fi
-    if [ ! -f "$profile_dir/auth.json" ] && [ -f "$HERMES_HOME/auth.json" ]; then
-      cp "$HERMES_HOME/auth.json" "$profile_dir/auth.json"
-      chmod 600 "$profile_dir/auth.json"
     fi
   done
 }

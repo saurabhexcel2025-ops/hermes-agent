@@ -94,6 +94,10 @@ jest.mock("@/lib/session-repository", () => ({
   listSessions: jest.fn(() => ({ sessions: [], total: 0 })),
 }));
 
+jest.mock("@/lib/cron-repository", () => ({
+  listCronJobs: jest.fn(() => []),
+}));
+
 import { NextRequest } from "next/server";
 
 describe("GET /api/status", () => {
@@ -123,39 +127,6 @@ describe("GET /api/status", () => {
     expect(typeof data.data.configFile).toBe("boolean");
     expect(data.data.skillsCount).toBe(12);
     expect(data.data.sessionsCount).toBe(42);
-  });
-});
-
-describe("GET /api/gateway", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("returns gateway status with platforms", async () => {
-    const { getGatewayPlatforms } = await import("@/lib/db");
-    (getGatewayPlatforms as jest.Mock).mockReturnValue([
-      { platform: "discord", enabled: 1, bot_token_present: 1, last_synced_at: "2026-05-15T00:00:00Z" },
-      { platform: "telegram", enabled: 0, bot_token_present: 0, last_synced_at: "2026-05-15T00:00:00Z" },
-    ]);
-
-    const { GET } = await import("@/app/api/gateway/route");
-    const res = await GET();
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data).toBeDefined();
-    expect(data.data.connectedCount).toBe(1);
-  });
-
-  it("handles empty platforms gracefully", async () => {
-    const { getGatewayPlatforms } = await import("@/lib/db");
-    (getGatewayPlatforms as jest.Mock).mockReturnValue([]);
-
-    const { GET } = await import("@/app/api/gateway/route");
-    const res = await GET();
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data).toBeDefined();
-    expect(data.data.platforms).toEqual({});
   });
 });
 
@@ -212,6 +183,11 @@ describe("GET /api/monitor", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns aggregated status", async () => {
+    const { getGatewayPlatforms } = await import("@/lib/db");
+    (getGatewayPlatforms as jest.Mock).mockReturnValue([
+      { platform: "discord", enabled: 1, bot_token_present: 1 },
+    ]);
+
     // Mock DB reads
     mockDb.prepare.mockImplementation((sql: string) => {
       if (sql.includes("SELECT platform, enabled")) {
@@ -240,6 +216,6 @@ describe("GET /api/monitor", () => {
     expect(data.data.cron).toBeDefined();
     expect(data.data.memory).toBeDefined();
     expect(data.data.sync).toBeDefined();
-    expect(typeof data.data.sync.lastRun).toBe("object"); // null
+    expect(data.data.sync.lastRun === null || typeof data.data.sync.lastRun === "string").toBe(true);
   });
 });

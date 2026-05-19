@@ -7,11 +7,7 @@ import Database, { type Database as _DatabaseType } from "better-sqlite3";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
-import {
-  BASELINE_SCHEMA_VERSION,
-  needsBaselineRebuild,
-  rebuildToBaseline,
-} from "./db/upgrade";
+import { needsBaselineRebuild, rebuildToBaseline } from "./db/upgrade";
 
 // ── Ensure data directory exists ───────────────────────────────
 

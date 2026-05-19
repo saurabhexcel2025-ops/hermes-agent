@@ -10,11 +10,6 @@ function firstEnvFlag(keys: string[]): string | undefined {
   return undefined;
 }
 
-/** Legacy helper; optional API keys are not enforced for route access. */
-export function getChApiKey(): string {
-  return "";
-}
-
 export function isDeployApiEnabled(): boolean {
   const raw = firstEnvFlag(["CH_ENABLE_DEPLOY_API"]);
   const value = raw?.toLowerCase();
@@ -27,11 +22,6 @@ export function isChReadOnly(): boolean {
   const raw = firstEnvFlag(["CH_READ_ONLY"]);
   const value = raw?.toLowerCase();
   return value === "1" || value === "true";
-}
-
-/** Optional API key / scoped key checks are disabled; routes rely on same-trust as the UI. */
-export function requireChApiKey(_request: NextRequest): NextResponse | null {
-  return null;
 }
 
 export function getCorrelationId(request: NextRequest): string {
@@ -80,25 +70,12 @@ export function requireDeployApiEnabled(): NextResponse | null {
   );
 }
 
-// Backward-compatible aliases.
-export const getMcApiKey = getChApiKey;
-export const isMcReadOnly = isChReadOnly;
-export const requireMcApiKey = requireChApiKey;
-
 /**
- * Combined auth guard: checks read-only mode AND optional API key.
+ * Combined auth guard: checks read-only mode.
  * Returns a NextResponse (to return) if auth fails, or null if allowed.
- *
- * Use as the first line in route handlers:
- *   const auth = requireAuth(request);
- *   if (auth) return auth;
  */
-export function requireAuth(request: NextRequest): NextResponse | null {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
-  if (auth) return auth;
-  return null;
+export function requireAuth(_request: NextRequest): NextResponse | null {
+  return requireNotReadOnly();
 }
 
 /**

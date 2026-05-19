@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
- * One-shot generator for data/seed/ (profiles + template pack).
+ * Validate or scaffold data/seed/ (profiles + template pack).
+ * Profiles are authored under data/seed/profiles/<slug>/ — this script does not overwrite
+ * existing SOUL.md/AGENTS.md unless --scaffold <slug> is passed.
+ *
  * Run: node scripts/tooling/generate-seed-pack.mjs
+ *      node scripts/tooling/generate-seed-pack.mjs --scaffold support
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -12,61 +16,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
 const SEED_ROOT = join(ROOT, "data", "seed");
 const PROFILES_ROOT = join(SEED_ROOT, "profiles");
-const BUNDLED = join(ROOT, "scripts", "bundled-profiles");
-
-const MANIFEST = {
-  version: "1.0.0",
-  profiles: [
-    {
-      slug: "qa",
-      displayName: "QA",
-      description: "Quality assurance, reproduction, and test-driven fixes",
-      personality: "technical",
-      seedKey: "ch.prof.qa",
-    },
-    {
-      slug: "swe",
-      displayName: "SWE",
-      description: "Software engineering, features, and refactors",
-      personality: "technical",
-      seedKey: "ch.prof.swe",
-    },
-    {
-      slug: "devops",
-      displayName: "DevOps",
-      description: "CI/CD, infrastructure, deploy and verify",
-      personality: "technical",
-      seedKey: "ch.prof.devops",
-    },
-    {
-      slug: "data-scientist",
-      displayName: "Data Scientist",
-      description: "Analysis, forecasting, and reproducible data pipelines",
-      personality: "technical",
-      seedKey: "ch.prof.data-scientist",
-    },
-    {
-      slug: "creative-lead",
-      displayName: "Creative Lead",
-      description: "Content, UX copy, and narrative quality",
-      personality: "creative",
-      seedKey: "ch.prof.creative-lead",
-    },
-    {
-      slug: "support",
-      displayName: "Support",
-      description: "Triage, customer impact, and clear operator guidance",
-      personality: "friendly",
-      seedKey: "ch.prof.support",
-    },
-  ],
-};
-
-const LEGACY_MAP = {
-  qa: "qa-engineer",
-  swe: "swe-engineer",
-  devops: "devops-engineer",
-};
+const PACK_PATH = join(
+  SEED_ROOT,
+  "template-packs",
+  "control-hub-professional-v1.json",
+);
 
 function agentsHeader(slug) {
   const titles = {
@@ -77,228 +31,103 @@ function agentsHeader(slug) {
     "creative-lead": "Creative Lead — Development Guide",
     support: "Support — Development Guide",
   };
-  return `# ${titles[slug]}\n§\n`;
-}
-
-function soulExtra(slug) {
-  if (slug === "qa") {
-    return "\n§\nYou are a quality assurance specialist focused on reproduction, regression prevention, and evidence-based fixes.\n";
-  }
-  return "";
+  return `# ${titles[slug] ?? slug}\n§\n`;
 }
 
 function defaultConfig(personality) {
   return `agent:\n  personality: ${personality}\nskills:\n  enabled: []\n`;
 }
 
-function writeProfile(slug, personality, legacyDir) {
-  const dir = join(PROFILES_ROOT, slug);
+function scaffoldProfile(entry) {
+  const dir = join(PROFILES_ROOT, entry.slug);
   mkdirSync(dir, { recursive: true });
+  const soulPath = join(dir, "SOUL.md");
+  const agentsPath = join(dir, "AGENTS.md");
+  const configPath = join(dir, "config.yaml");
 
-  let soul = "";
-  let agents = "";
-  if (legacyDir && existsSync(join(BUNDLED, legacyDir, "SOUL.md"))) {
-    soul = readFileSync(join(BUNDLED, legacyDir, "SOUL.md"), "utf-8");
-    agents = readFileSync(join(BUNDLED, legacyDir, "AGENTS.md"), "utf-8");
-    agents = agents.replace(/^#[^\n]+\n/, agentsHeader(slug));
-  } else {
-    soul = `You are a subject matter expert for the ${slug} role.\n`;
-    agents =
-      agentsHeader(slug) +
-      `You operate within the Control Hub and Hermes ecosystem.\n§\nFollow project conventions and document outcomes clearly.\n`;
+  if (!existsSync(soulPath)) {
+    let soul = `You are a subject matter expert for the ${entry.slug} role.\n`;
+    if (entry.slug === "qa") {
+      soul +=
+        "\n§\nYou are a quality assurance specialist focused on reproduction, regression prevention, and evidence-based fixes.\n";
+    }
+    writeFileSync(soulPath, soul, "utf-8");
   }
-  soul += soulExtra(slug);
-
-  writeFileSync(join(dir, "SOUL.md"), soul, "utf-8");
-  writeFileSync(join(dir, "AGENTS.md"), agents, "utf-8");
-  writeFileSync(join(dir, "config.yaml"), defaultConfig(personality), "utf-8");
+  if (!existsSync(agentsPath)) {
+    writeFileSync(
+      agentsPath,
+      agentsHeader(entry.slug) +
+        "You operate within the Control Hub and Hermes ecosystem.\n§\nFollow project conventions and document outcomes clearly.\n",
+      "utf-8",
+    );
+  }
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, defaultConfig(entry.personality), "utf-8");
+  }
 }
 
-function template(
-  id,
-  name,
-  icon,
-  color,
-  categoryId,
-  profile,
-  description,
-  instruction,
-) {
-  return {
-    id,
-    seedKey: `ch.tpl.${id}`,
-    name,
-    icon,
-    color,
-    categoryId,
-    profile,
-    description,
-    instruction,
-    context:
-      "## Input\n\n(Describe the task.)\n\n## Scope\n\n- In scope: as described\n- Out of scope: unrelated refactors\n",
-    goals: ["Deliver the outcome described in the instruction", "Document assumptions and verification steps"],
-    outputFormat:
-      "Structured markdown: Summary, Changes, Verification, Follow-ups (if any).",
-    constraints:
-      "Do not bypass Control Hub APIs for state changes. Run tests/build when touching application code.",
-    suggestedSkills: [],
-    localDirs: [],
-    references: [],
-    missionTimeMinutes: 60,
-    timeoutMinutes: 120,
-  };
+function validate() {
+  const errors = [];
+  const manifestPath = join(PROFILES_ROOT, "manifest.json");
+  if (!existsSync(manifestPath)) {
+    errors.push(`Missing ${manifestPath}`);
+    return errors;
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  for (const entry of manifest.profiles ?? []) {
+    for (const file of ["SOUL.md", "AGENTS.md", "config.yaml"]) {
+      const p = join(PROFILES_ROOT, entry.slug, file);
+      if (!existsSync(p)) {
+        errors.push(`Missing ${p}`);
+      }
+    }
+  }
+  if (!existsSync(PACK_PATH)) {
+    errors.push(`Missing ${PACK_PATH}`);
+  } else {
+    const pack = JSON.parse(readFileSync(PACK_PATH, "utf-8"));
+    if (!pack.templates?.length) {
+      errors.push("Template pack has no templates");
+    }
+    for (const t of pack.templates ?? []) {
+      if (!t.outputFormat?.length || !t.constraints?.length) {
+        errors.push(`Template ${t.id} missing outputFormat or constraints`);
+      }
+    }
+  }
+  return errors;
 }
 
-const templates = [
-  template(
-    "general-task",
-    "General Task",
-    "Target",
-    "cyan",
-    "general",
-    "default",
-    "Flexible task with clear outcomes",
-    "Complete the task described below using the project's conventions and tooling.",
-  ),
-  template(
-    "bug-hunt",
-    "Bug Hunt",
-    "Bug",
-    "pink",
-    "quality",
-    "qa",
-    "Find, reproduce, and fix a defect",
-    "Reproduce the reported issue, identify root cause, implement a minimal fix, and add regression coverage.",
-  ),
-  template(
-    "feature-build",
-    "Feature Build",
-    "Hammer",
-    "purple",
-    "engineering",
-    "swe",
-    "Implement a scoped feature",
-    "Design and implement the feature with tests and documentation aligned to existing patterns.",
-  ),
-  template(
-    "code-review",
-    "Code Review",
-    "Search",
-    "purple",
-    "engineering",
-    "swe",
-    "Review changes for quality and risk",
-    "Review the diff for correctness, security, performance, and maintainability. List actionable findings.",
-  ),
-  template(
-    "deploy-verify",
-    "Deploy & Verify",
-    "Rocket",
-    "orange",
-    "operations",
-    "devops",
-    "Deploy and confirm health",
-    "Execute the deployment steps, run smoke checks, and report status with rollback notes if needed.",
-  ),
-  template(
-    "infra-audit",
-    "Infrastructure Audit",
-    "Server",
-    "orange",
-    "operations",
-    "devops",
-    "Audit infrastructure configuration",
-    "Review CI/CD, secrets handling, and runtime configuration. Propose safe improvements.",
-  ),
-  template(
-    "data-analysis",
-    "Data Analysis",
-    "BarChart",
-    "green",
-    "data",
-    "data-scientist",
-    "Analyse data and report findings",
-    "Explore the dataset, validate quality, produce reproducible analysis and clear recommendations.",
-  ),
-  template(
-    "research-brief",
-    "Research Brief",
-    "BookOpen",
-    "blue",
-    "research",
-    "default",
-    "Research and summarise",
-    "Gather sources, compare options, and deliver a concise brief with citations or links.",
-  ),
-  template(
-    "content-draft",
-    "Content Draft",
-    "PenLine",
-    "purple",
-    "creative",
-    "creative-lead",
-    "Draft user-facing content",
-    "Produce clear, on-brand copy with structure suitable for the target surface.",
-  ),
-  template(
-    "regression-suite",
-    "Regression Suite",
-    "ListChecks",
-    "pink",
-    "quality",
-    "qa",
-    "Expand or run regression coverage",
-    "Identify gaps in test coverage for the affected area and add or run tests to prevent recurrence.",
-  ),
-  template(
-    "support-triage",
-    "Support Triage",
-    "LifeBuoy",
-    "cyan",
-    "general",
-    "support",
-    "Triage an operator or user issue",
-    "Classify severity, identify likely cause, and provide step-by-step resolution or escalation.",
-  ),
-  template(
-    "maintenance-sweep",
-    "Maintenance Sweep",
-    "Wrench",
-    "orange",
-    "maintenance",
-    "default",
-    "Routine maintenance pass",
-    "Apply dependency updates, lint fixes, and small hygiene improvements without scope creep.",
-  ),
-];
+const args = process.argv.slice(2);
+const scaffoldIdx = args.indexOf("--scaffold");
+if (scaffoldIdx >= 0) {
+  const slug = args[scaffoldIdx + 1];
+  const manifest = JSON.parse(
+    readFileSync(join(PROFILES_ROOT, "manifest.json"), "utf-8"),
+  );
+  const entry = manifest.profiles.find((p) => p.slug === slug);
+  if (!entry) {
+    console.error(`Unknown slug: ${slug}`);
+    process.exit(1);
+  }
+  scaffoldProfile(entry);
+  console.log(`Scaffolded missing files for profile: ${slug}`);
+  process.exit(0);
+}
 
-mkdirSync(join(SEED_ROOT, "template-packs"), { recursive: true });
-writeFileSync(
-  join(PROFILES_ROOT, "manifest.json"),
-  JSON.stringify(MANIFEST, null, 2) + "\n",
-  "utf-8",
+const errors = validate();
+if (errors.length) {
+  console.error("Seed pack validation failed:");
+  for (const e of errors) {
+    console.error(`  - ${e}`);
+  }
+  process.exit(1);
+}
+
+const manifest = JSON.parse(
+  readFileSync(join(PROFILES_ROOT, "manifest.json"), "utf-8"),
 );
-
-for (const entry of MANIFEST.profiles) {
-  writeProfile(entry.slug, entry.personality, LEGACY_MAP[entry.slug]);
-}
-
-writeFileSync(
-  join(SEED_ROOT, "template-packs", "control-hub-professional-v1.json"),
-  JSON.stringify(
-    {
-      schemaVersion: "1.0.0",
-      id: "control-hub-professional-v1",
-      name: "Control Hub Professional",
-      version: "1.0.0",
-      templates,
-    },
-    null,
-    2,
-  ) + "\n",
-  "utf-8",
-);
-
+const pack = JSON.parse(readFileSync(PACK_PATH, "utf-8"));
 console.log(
-  `Wrote ${MANIFEST.profiles.length} profiles and ${templates.length} templates under data/seed/`,
+  `OK: ${manifest.profiles.length} profiles, ${pack.templates.length} templates`,
 );

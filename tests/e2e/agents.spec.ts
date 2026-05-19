@@ -15,6 +15,12 @@ test.describe("Agents page", () => {
     ).toBeVisible();
   });
 
+  test("profile sync controls are visible", async ({ page }) => {
+    await page.goto("/operations/agents");
+    await expect(page.getByRole("button", { name: /Push all/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Pull all/i })).toBeVisible();
+  });
+
   test("New Agent button is visible", async ({ page }) => {
     await page.goto("/operations/agents");
     await expect(

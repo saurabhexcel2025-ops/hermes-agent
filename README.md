@@ -125,7 +125,8 @@ Shipped under **`data/seed/profiles/`** and **`data/seed/template-packs/`**. Con
 | `tests/unit/` | Jest |
 | `tests/e2e/` | Playwright (keep `app-routes.ts` aligned with the sidebar) |
 | `docs/` | Technical and community documentation |
-| `scripts/` | `bootstrap/`, `application/ch-deploy.sh`, `tooling/`, `lib/`, `hardware/`, `bundled-profiles/`, `git-hooks/` |
+| `data/seed/` | Professional profiles + template packs (see [docs/CATALOG_AND_PROFILES.md](docs/CATALOG_AND_PROFILES.md)) |
+| `scripts/` | `bootstrap/`, `application/ch-deploy.sh`, `tooling/`, `lib/`, `hardware/`, `git-hooks/` |
 
 For a fuller tree and agent rules, see [AGENTS.md](AGENTS.md).
 

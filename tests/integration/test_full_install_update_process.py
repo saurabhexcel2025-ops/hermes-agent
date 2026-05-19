@@ -88,8 +88,8 @@ def _release_scenarios(*, include_hermes_upstream: bool) -> list[str]:
         [
             "install_bootstrap",
             "install_in_repo",
-            "update_preserves_sync_off",
-            "update_sync_on",
+            "update_preserves_user_data",
+            "update_runs_seed_catalog",
         ]
     )
     if include_hermes_upstream:
@@ -103,8 +103,6 @@ def _interactive_scenarios_tail() -> list[str]:
         "setup_interactive",
         "install_in_repo_interactive_profiles_no",
         "install_in_repo_interactive_profiles_yes",
-        "update_interactive_sync_decline",
-        "update_interactive_sync_accept",
         "install_bootstrap_interactive",
     ]
 
@@ -314,28 +312,6 @@ class Harness:
         print(f"[harness] docker exec -t expect … {label}")
         subprocess.run(cmd, check=True, timeout=timeout_sec)
 
-    def strip_env_local_profile_sync_keys(self, container: str) -> None:
-        """Remove ``CH_UPDATE_SYNC_*`` lines so ``ch-deploy update`` can prompt on a TTY."""
-        self.docker_exec(
-            container,
-            r"""python3 - <<'PY'
-from pathlib import Path
-
-p = Path("/workspace/.env.local")
-if not p.is_file():
-    raise SystemExit(0)
-keys = ("CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES",)
-lines = [
-    ln
-    for ln in p.read_text().splitlines()
-    if not any(ln.startswith(k + "=") or ln.startswith(k + " =") for k in keys)
-]
-p.write_text("\n".join(lines) + ("\n" if lines else ""))
-PY
-""",
-            workdir="/",
-        )
-
     # ── seeds ─────────────────────────────────────────────────
 
     def seed_fresh(self, container: str) -> None:
@@ -350,19 +326,19 @@ PY
         """Minimal Hermes for smoke persona (custom QA SOUL must survive setup)."""
         self.docker_exec(
             container,
-            "mkdir -p /root/.hermes/profiles/qa-engineer\n"
-            f"printf '%s\\n' '{MARKER_HERMES_QA_EDIT}' > /root/.hermes/profiles/qa-engineer/SOUL.md\n"
+            "mkdir -p /root/.hermes/profiles/qa\n"
+            f"printf '%s\\n' '{MARKER_HERMES_QA_EDIT}' > /root/.hermes/profiles/qa/SOUL.md\n"
             "printf '%s\\n' 'version: 1' > /root/.hermes/config.yaml\n"
             "mkdir -p /root/.hermes/logs\n",
         )
 
     def seed_hermes_rich(self, container: str) -> None:
-        """Hermes + bundled qa-engineer edit marker + non-bundled profile (immutable)."""
+        """Hermes + bundled qa edit marker + non-bundled profile (immutable)."""
         self.docker_exec(
             container,
-            "mkdir -p /root/.hermes/profiles/qa-engineer /root/.hermes/profiles/custom-operator "
+            "mkdir -p /root/.hermes/profiles/qa /root/.hermes/profiles/custom-operator "
             "/root/.hermes/logs\n"
-            f"printf '%s\\n' '{MARKER_HERMES_QA_EDIT}' > /root/.hermes/profiles/qa-engineer/SOUL.md\n"
+            f"printf '%s\\n' '{MARKER_HERMES_QA_EDIT}' > /root/.hermes/profiles/qa/SOUL.md\n"
             "printf '%s\\n' 'version: 1' > /root/.hermes/config.yaml\n"
             "printf '%s\\n' '# harness placeholder' > /root/.hermes/.env\n"
             f"printf '%s\\n' '{MARKER_CUSTOM_PROFILE}' > "
@@ -458,7 +434,6 @@ PY
             "INSTALL_HERMES_PROFILE_TEMPLATES": (
                 "yes" if install_profile_templates else "no"
             ),
-            "CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES": "no",
         }
         if extra_env:
             env.update(extra_env)
@@ -541,8 +516,8 @@ cd /workspace
             container,
             r"""
 set -e
-test -s /root/.hermes/profiles/qa-engineer/SOUL.md
-test -s /root/.hermes/profiles/qa-engineer/AGENTS.md
+test -s /root/.hermes/profiles/qa/SOUL.md
+test -s /root/.hermes/profiles/qa/AGENTS.md
 """,
         )
 
@@ -569,7 +544,7 @@ test -s /root/.hermes/profiles/qa-engineer/AGENTS.md
     def assert_hermes_qa_marker(self, container: str) -> None:
         out = self.docker_exec_capture(
             container,
-            "cat /root/.hermes/profiles/qa-engineer/SOUL.md",
+            "cat /root/.hermes/profiles/qa/SOUL.md",
         )
         if MARKER_HERMES_QA_EDIT not in out:
             raise AssertionError(
@@ -602,20 +577,40 @@ test -s /root/.hermes/profiles/qa-engineer/AGENTS.md
         if MARKER_CUSTOM_PROFILE not in out:
             raise AssertionError("custom-operator profile should stay immutable")
 
-    def assert_bundled_qa_matches_template(self, container: str) -> None:
+    def assert_seed_qa_matches_template(self, container: str) -> None:
         t = self.docker_exec_capture(
             container,
-            "sha256sum /workspace/scripts/bundled-profiles/qa-engineer/SOUL.md | awk '{print $1}'",
+            "sha256sum /workspace/data/seed/profiles/qa/SOUL.md | awk '{print $1}'",
             workdir="/",
         )
         u = self.docker_exec_capture(
             container,
-            "sha256sum /root/.hermes/profiles/qa-engineer/SOUL.md | awk '{print $1}'",
+            "sha256sum /root/.hermes/profiles/qa/SOUL.md | awk '{print $1}'",
             workdir="/",
         )
         if t.strip() != u.strip():
             raise AssertionError(
-                "bundled qa-engineer SOUL.md should match repo template after sync",
+                "qa SOUL.md on Hermes disk should match data/seed/profiles/qa after push",
+            )
+
+    def assert_agent_profiles_seeded(self, container: str, db_path: str) -> None:
+        dp = db_path.replace("'", "'\"'\"'")
+        out = self.docker_exec_capture(
+            container,
+            "cd /workspace && "
+            f"export CH_HARNESS_DB='{dp}' && "
+            "node -e \""
+            "const Database=require('better-sqlite3');"
+            "const db=new Database(process.env.CH_HARNESS_DB);"
+            "const row=db.prepare(\\\"SELECT COUNT(*) AS c FROM agent_profiles WHERE seed_key IS NOT NULL\\\").get();"
+            "console.log(row?row.c:0);"
+            "\"\n",
+            workdir="/workspace",
+        )
+        count = int(out.strip() or "0")
+        if count < 6:
+            raise AssertionError(
+                f"expected >= 6 seeded agent_profiles after seed-catalog, got {count}",
             )
 
     def assert_hermes_cli(self, container: str) -> None:
@@ -634,8 +629,8 @@ hermes --version
             container,
             r"""
 set -e
-test -s /root/.hermes/profiles/qa-engineer/SOUL.md
-test -s /root/.hermes/profiles/qa-engineer/AGENTS.md
+test -s /root/.hermes/profiles/qa/SOUL.md
+test -s /root/.hermes/profiles/qa/AGENTS.md
 """,
         )
 
@@ -756,24 +751,14 @@ git push origin dev
             escaped = line.replace("'", "'\"'\"'")
             self.docker_exec(container, f"echo '{escaped}' >> /workspace/.env.local")
 
-    def run_update(
-        self,
-        container: str,
-        *,
-        sync_profiles: bool,
-    ) -> None:
-        sync_val = "yes" if sync_profiles else "no"
-        self.append_env_local(
-            container,
-            f"\nCH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES={sync_val}\nCH_UPDATE_GIT_BRANCH=dev\n",
-        )
+    def run_update(self, container: str) -> None:
+        self.append_env_local(container, "\nCH_UPDATE_GIT_BRANCH=dev\n")
         self.docker_exec(
             container,
             "cd /workspace && bash scripts/application/ch-deploy.sh update",
             env={
                 "CI": "1",
                 "CH_INSTALL_NONINTERACTIVE": "1",
-                "CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES": sync_val,
                 "CH_UPDATE_GIT_BRANCH": "dev",
             },
         )
@@ -864,7 +849,7 @@ test -f scripts/.harness-marker
             self.assert_paths(c)
             self.configure_file_origin_and_push_dev(c)
             self.bump_upstream_dev(c)
-            self.run_update(c, sync_profiles=False)
+            self.run_update(c)
             self.assert_updated_to_origin_dev(c)
         finally:
             self._rm_container(c)
@@ -894,7 +879,8 @@ test -f scripts/.harness-marker
         finally:
             self._rm_container(c)
 
-    def scenario_update_preserves_sync_off(self) -> None:
+    def scenario_update_preserves_user_data(self) -> None:
+        """``ch-deploy update`` runs seed-catalog but must not wipe user CH_DATA_DIR or custom Hermes profiles."""
         ws = self.temp_workspace()
         c = self.start_container("update-preserves")
         data_root = "/root/chdata-pre"
@@ -908,40 +894,37 @@ test -f scripts/.harness-marker
             self.assert_paths(c)
 
             manifest_before = self.manifest_data_dir(c, data_root)
-            db_sha_before = self.sha256_file(c, f"{data_root}/control-hub.db")
             schema_before = self.sqlite_schema_version(c, f"{data_root}/control-hub.db")
 
             self.configure_file_origin_and_push_dev(c)
             self.bump_upstream_dev(c)
-            self.run_update(c, sync_profiles=False)
+            self.run_update(c)
             self.assert_updated_to_origin_dev(c)
 
             manifest_after = self.manifest_data_dir(c, data_root)
-            db_sha_after = self.sha256_file(c, f"{data_root}/control-hub.db")
             schema_after = self.sqlite_schema_version(c, f"{data_root}/control-hub.db")
 
             if manifest_before != manifest_after:
                 raise AssertionError(
-                    "CH_DATA_DIR manifest changed after update (sync off); possible data loss",
+                    "CH_DATA_DIR manifest changed after update; possible data loss",
                 )
-            if db_sha_before != db_sha_after:
-                raise AssertionError("control-hub.db changed after update (unexpected)")
             if schema_after < schema_before:
                 raise AssertionError("schema_version regressed")
             self.assert_hermes_qa_marker(c)
             self.assert_custom_profile_unchanged(c)
+            self.assert_sentinel_ch_files(c, data_root)
         finally:
             self._rm_container(c)
 
-    def scenario_update_sync_on(self) -> None:
+    def scenario_update_runs_seed_catalog(self) -> None:
+        """``ch-deploy update`` merges catalog into SQLite and pushes seed profiles to Hermes."""
         ws = self.temp_workspace()
-        c = self.start_container("update-sync-on")
+        c = self.start_container("update-seed-catalog")
         data_root = "/root/chdata-pre"
         try:
             self.docker_cp_workspace(c, ws)
             self.seed_fresh(c)
             self.seed_ch_data_rich(c, data_root)
-            self.seed_hermes_rich(c)
             self.precreate_env_local_ch_data_dir(c, data_root)
             self.run_setup(c, extra_env={"CH_DATA_DIR": data_root})
             self.assert_paths(c)
@@ -950,14 +933,14 @@ test -f scripts/.harness-marker
 
             self.configure_file_origin_and_push_dev(c)
             self.bump_upstream_dev(c)
-            self.run_update(c, sync_profiles=True)
+            self.run_update(c)
             self.assert_updated_to_origin_dev(c)
 
             manifest_after = self.manifest_data_dir(c, data_root)
             if manifest_before != manifest_after:
-                raise AssertionError("CH_DATA_DIR user files changed after update (sync on)")
-            self.assert_bundled_qa_matches_template(c)
-            self.assert_custom_profile_unchanged(c)
+                raise AssertionError("CH_DATA_DIR user files changed after update")
+            self.assert_agent_profiles_seeded(c, f"{data_root}/control-hub.db")
+            self.assert_seed_qa_matches_template(c)
         finally:
             self._rm_container(c)
 
@@ -1015,7 +998,7 @@ exit [lindex $result 3]
             self.assert_paths(c)
             self.docker_exec(
                 container=c,
-                script="test ! -f /root/.hermes/profiles/qa-engineer/SOUL.md",
+                script="test ! -f /root/.hermes/profiles/qa/SOUL.md",
                 workdir="/",
             )
             self.http_smoke(c)
@@ -1051,108 +1034,11 @@ exit [lindex $result 3]
                 container=c,
                 script=r"""
 set -e
-test -s /root/.hermes/profiles/qa-engineer/SOUL.md
-test -s /root/.hermes/profiles/qa-engineer/AGENTS.md
+test -s /root/.hermes/profiles/qa/SOUL.md
+test -s /root/.hermes/profiles/qa/AGENTS.md
 """,
             )
             self.http_smoke(c)
-        finally:
-            self._rm_container(c)
-
-    def scenario_update_interactive_sync_decline(self) -> None:
-        """TTY ``ch-deploy update`` with unset sync flag: decline bundled profile sync."""
-        ws = self.temp_workspace()
-        c = self.start_container("update-int-decline")
-        data_root = "/root/chdata-pre"
-        try:
-            self.docker_cp_workspace(c, ws)
-            self.seed_fresh(c)
-            self.seed_ch_data_rich(c, data_root)
-            self.seed_hermes_rich(c)
-            self.precreate_env_local_ch_data_dir(c, data_root)
-            self.run_setup(c, extra_env={"CH_DATA_DIR": data_root})
-            self.assert_paths(c)
-
-            manifest_before = self.manifest_data_dir(c, data_root)
-            db_sha_before = self.sha256_file(c, f"{data_root}/control-hub.db")
-            schema_before = self.sqlite_schema_version(c, f"{data_root}/control-hub.db")
-
-            self.configure_file_origin_and_push_dev(c)
-            self.bump_upstream_dev(c)
-            self.strip_env_local_profile_sync_keys(c)
-            exp = r"""
-# ch-deploy update (TTY, unset CH_UPDATE_SYNC_*): Sync bundled profile templates now? [y/N]:
-log_user 1
-set timeout -1
-set cmd {cd /workspace && unset CI CH_INSTALL_NONINTERACTIVE CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES && exec bash scripts/application/ch-deploy.sh update}
-spawn bash -lc $cmd
-expect -re {Sync bundled profile templates now\? \[y/N\]:}
-send "n\r"
-expect eof
-catch wait result
-exit [lindex $result 3]
-"""
-            self.docker_exec_expect(c, exp, hint="update_interactive_sync_decline")
-            self.assert_updated_to_origin_dev(c)
-
-            manifest_after = self.manifest_data_dir(c, data_root)
-            db_sha_after = self.sha256_file(c, f"{data_root}/control-hub.db")
-            schema_after = self.sqlite_schema_version(c, f"{data_root}/control-hub.db")
-
-            if manifest_before != manifest_after:
-                raise AssertionError(
-                    "CH_DATA_DIR manifest changed after interactive update (declined sync)",
-                )
-            if db_sha_before != db_sha_after:
-                raise AssertionError("control-hub.db changed after update (unexpected)")
-            if schema_after < schema_before:
-                raise AssertionError("schema_version regressed")
-            self.assert_hermes_qa_marker(c)
-            self.assert_custom_profile_unchanged(c)
-        finally:
-            self._rm_container(c)
-
-    def scenario_update_interactive_sync_accept(self) -> None:
-        """TTY ``ch-deploy update`` with unset sync flag: accept bundled profile sync."""
-        ws = self.temp_workspace()
-        c = self.start_container("update-int-accept")
-        data_root = "/root/chdata-pre"
-        try:
-            self.docker_cp_workspace(c, ws)
-            self.seed_fresh(c)
-            self.seed_ch_data_rich(c, data_root)
-            self.seed_hermes_rich(c)
-            self.precreate_env_local_ch_data_dir(c, data_root)
-            self.run_setup(c, extra_env={"CH_DATA_DIR": data_root})
-            self.assert_paths(c)
-
-            manifest_before = self.manifest_data_dir(c, data_root)
-
-            self.configure_file_origin_and_push_dev(c)
-            self.bump_upstream_dev(c)
-            self.strip_env_local_profile_sync_keys(c)
-            exp = r"""
-# ch-deploy update (TTY, unset CH_UPDATE_SYNC_*): Sync bundled profile templates now? [y/N]:
-log_user 1
-set timeout -1
-set cmd {cd /workspace && unset CI CH_INSTALL_NONINTERACTIVE CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES && exec bash scripts/application/ch-deploy.sh update}
-spawn bash -lc $cmd
-expect -re {Sync bundled profile templates now\? \[y/N\]:}
-send "y\r"
-expect eof
-catch wait result
-exit [lindex $result 3]
-"""
-            self.docker_exec_expect(c, exp, hint="update_interactive_sync_accept")
-            self.assert_updated_to_origin_dev(c)
-
-            manifest_after = self.manifest_data_dir(c, data_root)
-            if manifest_before != manifest_after:
-                raise AssertionError(
-                    "CH_DATA_DIR user files changed after interactive update (accepted sync)",
-                )
-            self.assert_bundled_qa_matches_template(c)
-            self.assert_custom_profile_unchanged(c)
         finally:
             self._rm_container(c)
 
@@ -1231,8 +1117,8 @@ exit [lindex $result 3]
             "update": self.scenario_update,
             "install_bootstrap": self.scenario_install_bootstrap,
             "install_in_repo": self.scenario_install_in_repo,
-            "update_preserves_sync_off": self.scenario_update_preserves_sync_off,
-            "update_sync_on": self.scenario_update_sync_on,
+            "update_preserves_user_data": self.scenario_update_preserves_user_data,
+            "update_runs_seed_catalog": self.scenario_update_runs_seed_catalog,
             "setup_interactive": self.scenario_setup_interactive,
             "install_in_repo_interactive_profiles_no": (
                 self.scenario_install_in_repo_interactive_profiles_no
@@ -1240,8 +1126,6 @@ exit [lindex $result 3]
             "install_in_repo_interactive_profiles_yes": (
                 self.scenario_install_in_repo_interactive_profiles_yes
             ),
-            "update_interactive_sync_decline": self.scenario_update_interactive_sync_decline,
-            "update_interactive_sync_accept": self.scenario_update_interactive_sync_accept,
             "install_bootstrap_interactive": self.scenario_install_bootstrap_interactive,
             "hermes-upstream": self.scenario_hermes_upstream,
         }
@@ -1316,7 +1200,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=(
             "Comma-separated scenario ids, or 'all' (default). Interactive ids: "
             "setup_interactive, install_in_repo_interactive_profiles_no|yes, "
-            "update_interactive_sync_decline|accept, install_bootstrap_interactive. "
+            "install_bootstrap_interactive. "
             "See script docstring."
         ),
     )
@@ -1372,13 +1256,11 @@ def _valid_scenario_ids() -> frozenset[str]:
             "update",
             "install_bootstrap",
             "install_in_repo",
-            "update_preserves_sync_off",
-            "update_sync_on",
+            "update_preserves_user_data",
+            "update_runs_seed_catalog",
             "setup_interactive",
             "install_in_repo_interactive_profiles_no",
             "install_in_repo_interactive_profiles_yes",
-            "update_interactive_sync_decline",
-            "update_interactive_sync_accept",
             "install_bootstrap_interactive",
             "all",
             "update-all",

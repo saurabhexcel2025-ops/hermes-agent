@@ -15,8 +15,12 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/agent/files` | `GET` | List agent behavior files. |
 | `/api/agent/files/[key]` | `GET`, `PUT` | Read/update one behavior file. |
 | `/api/agent/personality` | `PUT` | Update selected personality config. |
-| `/api/agent/profiles` | `GET`, `POST`, `PUT`, `DELETE` | Hermes profile management. |
-| `/api/agent/profiles/[id]` | `GET`, `PUT`, `DELETE` | One Hermes profile. |
+| `/api/agent/profiles` | `GET`, `POST`, `PUT`, `DELETE` | Professional profiles (SQLite source of truth; includes per-row `syncStatus`). |
+| `/api/agent/profiles/[id]` | `GET`, `PUT`, `DELETE` | One professional profile. |
+| `/api/agent/profiles/sync/drift` | `GET` | Drift report for all DB profiles vs Hermes disk. |
+| `/api/agent/profiles/sync/push` | `POST` | Push profile(s) from DB to `HERMES_HOME/profiles/<slug>/` (`{ slug }` or `{ all: true }`). |
+| `/api/agent/profiles/sync/pull` | `POST` | Pull one profile from Hermes disk into DB (`{ slug }` required). |
+| `/api/seed` | `GET`, `POST` | Read seed state / run catalog seed (`target`, `mode`, optional `slug` / `templateId`). |
 | `/api/agents` | `GET` | Inspect running Hermes agent processes (OS-dependent). |
 | `/api/config` | `GET`, `PUT` | Read/update parsed config content. |
 | `/api/credentials` | `GET`, `POST` | API key credentials (masked list). |
@@ -26,7 +30,6 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/cron/hardware/meta` | `GET` | `{ scriptsDir, logDir }` from [`getChScriptsDir()`](../src/lib/paths.ts) / [`getChHardwareLogDir()`](../src/lib/paths.ts). |
 | `/api/fs/git/branches` | `GET` | List git branches for a workspace path. |
 | `/api/fs/list` | `GET` | List directory entries (path-validated). |
-| `/api/gateway` | `GET` | Read gateway/platform status. |
 | `/api/gateway/health` | `GET` | Gateway health probe (`/v1/models`). |
 | `/api/gateway/models` | `GET` | List models from gateway. |
 | `/api/logs` | `GET` | Read recent Hermes logs. |
@@ -37,8 +40,6 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/models` | `GET`, `POST` | Models registry (SQLite); list / create. |
 | `/api/models/[id]` | `GET`, `PUT`, `DELETE` | One model row. |
 | `/api/models/[id]/diff` | `GET` | Diff model row vs Hermes config. |
-| `/api/models/[id]/pull` | `POST` | Pull model from Hermes into DB. |
-| `/api/models/[id]/push` | `POST` | Push model from DB to Hermes. |
 | `/api/models/defaults` | `GET`, `PUT` | Default model per task slot (`agent`, `hindsight`, …). |
 | `/api/models/fallbacks` | `GET`, `POST` | Fallback chain entries. |
 | `/api/models/fallbacks/[id]` | `PUT`, `DELETE` | One fallback entry. |

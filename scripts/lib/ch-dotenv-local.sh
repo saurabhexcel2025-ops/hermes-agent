@@ -16,7 +16,7 @@ ch_load_control_hub_env_local() {
       ''|\#*) continue ;;
     esac
     case "$line" in
-      CH_*=*|INSTALL_HERMES_*=*|HERMES_HOME=*|INSTALL_HERMES_PROFILE_TEMPLATES=*|CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=*)
+      CH_*=*|INSTALL_HERMES_*=*|HERMES_HOME=*|INSTALL_HERMES_PROFILE_TEMPLATES=*)
         local key="${line%%=*}"
         local val="${line#*=}"
         export "${key}=${val}"

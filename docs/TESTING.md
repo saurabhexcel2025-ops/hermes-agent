@@ -8,7 +8,7 @@
 | `tests/e2e/` | Playwright | Browser flows against a real `next start` server (see `playwright.config.ts`). |
 | `tests/jest.setup.ts` | Jest | Global setup and shared mocks (`jest.config.js` → `setupFilesAfterEnv`). |
 | `tests/__mocks__/better-sqlite3.cjs` | Jest | CJS shim so the native `better-sqlite3` addon is never loaded in unit tests. |
-| [`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) | Bash | Validates [`scripts/lib/ch-dotenv-local.sh`](../scripts/lib/ch-dotenv-local.sh), [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh), the update-profile sync gate (mirror of `ch-deploy update`), and a **mocked** run of [`scripts/hardware/ch-backup.sh`](../scripts/hardware/ch-backup.sh) (requires `jq` on the runner). Uses temp dirs under `/tmp` only. CI: **`shell-custom-scripts`** job. |
+| [`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) | Bash | Validates [`scripts/lib/ch-dotenv-local.sh`](../scripts/lib/ch-dotenv-local.sh), [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh) (install-only profile copy from `data/seed/`), and a **mocked** run of [`scripts/hardware/ch-backup.sh`](../scripts/hardware/ch-backup.sh) (requires `jq` on the runner). Uses temp dirs under `/tmp` only. CI: **`shell-custom-scripts`** job. |
 
 ## Shell helper tests (bash)
 
@@ -38,7 +38,7 @@ Config: [`jest.config.js`](../jest.config.js) at repo root. Coverage thresholds 
 - [`tests/unit/db-baseline.test.ts`](../tests/unit/db-baseline.test.ts) — in-memory schema smoke.
 - [`tests/unit/db-upgrade.integration.test.ts`](../tests/unit/db-upgrade.integration.test.ts) — on-disk legacy DB → `rebuildToBaseline` preserves credentials, models, cron, sessions.
 
-**Dual DB paths:** `npm run prebuild` writes `{repo}/data/control-hub.db`; runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). Prebuild deletes the repo DB when `schema_version !== 1`.
+**Dual DB paths:** `npm run prebuild` writes `{repo}/data/control-hub.db`; runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). Prebuild rebuilds the repo DB when `schema_version` is not the current baseline (**v2**).
 
 ### Bootstrap test gate
 
@@ -69,7 +69,7 @@ npm run test:e2e
 
 **Prerequisites:** Docker daemon running; Python 3 (stdlib only).
 
-Default **`--profile smoke`** (core personas + basic update). Use **`--profile release`** for the full matrix (install bootstrap / `bootstrap/install.sh --in-repo`, update with sync off/on).
+Default **`--profile smoke`** (core personas + basic update). Use **`--profile release`** for the full matrix (install bootstrap / `bootstrap/install.sh --in-repo`, update preserving user data + seed-catalog assertions).
 
 ```bash
 python tests/integration/test_full_install_update_process.py --skip-http

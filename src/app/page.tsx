@@ -228,8 +228,35 @@ export default function Dashboard() {
   const [dispatchExpanded, setDispatchExpanded] = useState(false);
   const [errorSev, setErrorSev] = useState<"all" | "error" | "warning">("all");
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [syncNowBusy, setSyncNowBusy] = useState(false);
   const { showToast, toastElement } = useToast();
   const router = useRouter();
+
+  const refreshMonitor = useCallback(async () => {
+    const res = await fetch("/api/monitor", MONITOR_FETCH_INIT).catch(() => null);
+    if (res?.ok) {
+      const d = await res.json().catch(() => null);
+      if (d?.data) setData({ monitor: d.data });
+    }
+  }, [setData]);
+
+  const handleSyncNow = useCallback(async () => {
+    setSyncNowBusy(true);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error ?? "Sync failed", "error");
+        return;
+      }
+      showToast("Background sync completed", "success");
+      await refreshMonitor();
+    } catch {
+      showToast("Sync failed", "error");
+    } finally {
+      setSyncNowBusy(false);
+    }
+  }, [refreshMonitor, showToast]);
 
   const filteredErrors = useMemo(() => {
     if (!monitor?.errors) return [];
@@ -780,19 +807,31 @@ export default function Dashboard() {
                 <div className="text-[10px] text-white/30 text-center py-2">No platforms configured</div>
               )}
             </div>
-            {monitor?.sync.lastRun && (
-              <div className="px-4 py-2 border-t border-white/10">
-                <div className="text-[10px] text-white/30 font-mono flex items-center gap-2">
-                  <RefreshCw className="w-3 h-3" />
-                  Sync: {timeAgo(monitor.sync.lastRun)}
-                  {monitor.sync.allSuccessful ? (
-                    <span className="text-neon-green">✓</span>
-                  ) : (
-                    <span className="text-red-400">✗</span>
-                  )}
-                </div>
+            <div className="px-4 py-2 border-t border-white/10 flex items-center justify-between gap-2">
+              <div className="text-[10px] text-white/30 font-mono flex items-center gap-2 min-w-0">
+                <RefreshCw className="w-3 h-3 shrink-0" />
+                {monitor?.sync.lastRun ? (
+                  <>
+                    Sync: {timeAgo(monitor.sync.lastRun)}
+                    {monitor.sync.allSuccessful ? (
+                      <span className="text-neon-green">✓</span>
+                    ) : (
+                      <span className="text-red-400">✗</span>
+                    )}
+                  </>
+                ) : (
+                  <span>Background sync idle</span>
+                )}
               </div>
-            )}
+              <button
+                type="button"
+                disabled={syncNowBusy}
+                onClick={() => void handleSyncNow()}
+                className="shrink-0 px-2 py-1 text-[10px] font-mono rounded border border-neon-cyan/30 text-neon-cyan/80 hover:bg-neon-cyan/10 disabled:opacity-50"
+              >
+                {syncNowBusy ? "Syncing…" : "Sync now"}
+              </button>
+            </div>
           </div>
 
           {/* Errors Panel */}
