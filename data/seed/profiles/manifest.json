@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0",
+  "profiles": [
+    {
+      "slug": "qa",
+      "displayName": "QA",
+      "description": "Quality assurance, reproduction, and test-driven fixes",
+      "personality": "technical",
+      "seedKey": "ch.prof.qa"
+    },
+    {
+      "slug": "swe",
+      "displayName": "SWE",
+      "description": "Software engineering, features, and refactors",
+      "personality": "technical",
+      "seedKey": "ch.prof.swe"
+    },
+    {
+      "slug": "devops",
+      "displayName": "DevOps",
+      "description": "CI/CD, infrastructure, deploy and verify",
+      "personality": "technical",
+      "seedKey": "ch.prof.devops"
+    },
+    {
+      "slug": "data-scientist",
+      "displayName": "Data Scientist",
+      "description": "Analysis, forecasting, and reproducible data pipelines",
+      "personality": "technical",
+      "seedKey": "ch.prof.data-scientist"
+    },
+    {
+      "slug": "creative-lead",
+      "displayName": "Creative Lead",
+      "description": "Content, UX copy, and narrative quality",
+      "personality": "creative",
+      "seedKey": "ch.prof.creative-lead"
+    },
+    {
+      "slug": "support",
+      "displayName": "Support",
+      "description": "Triage, customer impact, and clear operator guidance",
+      "personality": "friendly",
+      "seedKey": "ch.prof.support"
+    }
+  ]
+}

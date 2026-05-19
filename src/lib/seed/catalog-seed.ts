@@ -13,7 +13,20 @@ import { CH_DATA_DIR, PATHS } from "../paths";
 import { pushProfileToHermes, pushAllProfiles } from "../hermes-profile-sync";
 import { writeFileSync, mkdirSync } from "fs";
 
-const REPO_ROOT = join(__dirname, "..", "..", "..");
+function resolveRepoRoot(): string {
+  const candidates = [
+    join(__dirname, "..", "..", ".."),
+    process.cwd(),
+  ];
+  for (const root of candidates) {
+    if (existsSync(join(root, "data/seed/profiles/manifest.json"))) {
+      return root;
+    }
+  }
+  return candidates[0];
+}
+
+const REPO_ROOT = resolveRepoRoot();
 const PROFILES_MANIFEST = join(REPO_ROOT, "data/seed/profiles/manifest.json");
 const TEMPLATE_PACK = join(
   REPO_ROOT,
@@ -102,12 +115,17 @@ function seedCategories(mode: SeedMode): number {
   db().exec(sql);
   const row = db()
     .prepare("SELECT COUNT(*) AS c FROM mission_categories WHERE seed_key IS NOT NULL")
-    .get() as { c: number };
-  return row.c ?? 0;
+    .get() as { c: number } | undefined;
+  return row?.c ?? 0;
 }
 
 function seedProfiles(mode: SeedMode, slugFilter?: string): number {
-  if (!existsSync(PROFILES_MANIFEST)) return 0;
+  if (!existsSync(PROFILES_MANIFEST)) {
+    console.warn(
+      `catalog-seed: missing ${PROFILES_MANIFEST} — run: node scripts/tooling/generate-seed-pack.mjs`,
+    );
+    return 0;
+  }
   const manifest = JSON.parse(readFileSync(PROFILES_MANIFEST, "utf-8")) as ProfileManifest;
   let count = 0;
   for (const entry of manifest.profiles) {
@@ -131,7 +149,10 @@ function seedProfiles(mode: SeedMode, slugFilter?: string): number {
 }
 
 function seedTemplates(mode: SeedMode, idFilter?: string): number {
-  if (!existsSync(TEMPLATE_PACK)) return 0;
+  if (!existsSync(TEMPLATE_PACK)) {
+    console.warn(`catalog-seed: missing ${TEMPLATE_PACK}`);
+    return 0;
+  }
   const pack = JSON.parse(readFileSync(TEMPLATE_PACK, "utf-8")) as TemplatePack;
   let count = 0;
   for (const t of pack.templates) {
