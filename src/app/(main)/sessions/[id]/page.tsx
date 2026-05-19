@@ -4,8 +4,9 @@
 
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import {
   User,
   Bot,
@@ -20,8 +21,6 @@ import {
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ErrorMessage, useAsync } from "@/components/ui/DataLoader";
-import { apiGet } from "@/lib/api-client";
 import { messageSummary } from "@/lib/utils";
 
 interface SessionMessage {
@@ -191,20 +190,51 @@ function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index
 export default function SessionDetailPage() {
   const params = useParams();
   const sessionId = params.id as string;
+  const [data, setData] = useState<SessionData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  const fetchSession = useCallback(
-    () => apiGet<SessionData>("/api/sessions/" + encodeURIComponent(sessionId)).then(r => r.data),
-    [sessionId],
-  );
+  useEffect(() => {
+    const controller = new AbortController();
 
-  const session = useAsync(fetchSession, [sessionId]);
+    setLoading(true);
+    setError(null);
+
+    void (async () => {
+      const url = "/api/sessions/" + encodeURIComponent(sessionId);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) {
+          const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(errBody?.error || "Failed to load session");
+        }
+        const json = await res.json() as { data?: SessionData };
+        if (json.data) {
+          setData(json.data);
+        } else {
+          throw new Error("Invalid session data format");
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, [sessionId]);
 
   // Count messages by role
   const roleCounts = useMemo(() => {
-    if (!session.data?.messages) return {};
-    return session.data.messages.reduce(
+    if (!data?.messages) return {};
+    return data.messages.reduce(
       (acc, msg) => {
         const role = msg.role || "unknown";
         acc[role] = (acc[role] || 0) + 1;
@@ -212,21 +242,21 @@ export default function SessionDetailPage() {
       },
       {} as Record<string, number>
     );
-  }, [session.data?.messages]);
+  }, [data?.messages]);
 
   // Filtered messages
   const filteredMessages = useMemo(() => {
-    if (!session.data?.messages) return [];
-    if (!roleFilter) return session.data.messages.map((msg, i) => ({ msg, originalIndex: i }));
-    return session.data.messages
+    if (!data?.messages) return [];
+    if (!roleFilter) return data.messages.map((msg, i) => ({ msg, originalIndex: i }));
+    return data.messages
       .map((msg, i) => ({ msg, originalIndex: i }))
       .filter(({ msg }) => (msg.role || "unknown").toLowerCase() === roleFilter);
-  }, [session.data?.messages, roleFilter]);
+  }, [data?.messages, roleFilter]);
 
   // Scroll to next message of a given role from current scroll position
   const scrollToNextRole = useCallback((role: string) => {
-    if (!session.data?.messages) return;
-    const roleMessages = session.data.messages
+    if (!data?.messages) return;
+    const roleMessages = data.messages
       .map((msg, i) => ({ msg, index: i }))
       .filter(({ msg }) => (msg.role || "unknown").toLowerCase() === role);
     if (roleMessages.length === 0) return;
@@ -243,9 +273,11 @@ export default function SessionDetailPage() {
     // Wrap around — scroll to first message of this role
     const firstEl = messageRefs.current.get(roleMessages[0].index);
     if (firstEl) firstEl.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [session.data?.messages]);
+  }, [data?.messages]);
 
-  if (session.loading) {
+  // Reuse roleMeta for filter-button styling
+
+  if (loading) {
     return (
       <AppPageShell>
         <div className="min-h-[60vh] flex items-center justify-center">
@@ -255,27 +287,35 @@ export default function SessionDetailPage() {
     );
   }
 
-  if (session.error || !session.data) {
+  if (error || !data) {
     return (
       <AppPageShell>
-        <ErrorMessage
-          error={session.error}
-          onRetry={session.execute}
-        />
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-white mb-2">Session Not Found</h2>
+            <p className="text-white/40 font-mono mb-4">{error || "Unknown error"}</p>
+            <Link
+              href="/sessions"
+              className="text-neon-orange text-sm font-mono hover:underline"
+            >
+              ← Back to Sessions
+            </Link>
+          </div>
+        </div>
       </AppPageShell>
     );
   }
 
   const subtitleParts: string[] = [];
-  if (session.data.model) subtitleParts.push(session.data.model);
-  subtitleParts.push(`${session.data.messageCount} messages`);
-  subtitleParts.push(`${(session.data.size / 1024).toFixed(1)} KB`);
+  if (data.model) subtitleParts.push(data.model);
+  subtitleParts.push(`${data.messageCount} messages`);
+  subtitleParts.push(`${(data.size / 1024).toFixed(1)} KB`);
 
   return (
     <AppPageShell>
       <PageHeader
         icon={MessageSquare}
-        title={session.data.title || session.data.id}
+        title={data.title || data.id}
         subtitle={subtitleParts.join(" · ")}
         color="orange"
         backHref="/sessions"
@@ -319,7 +359,7 @@ export default function SessionDetailPage() {
       <div className="max-w-4xl mx-auto px-6 py-6 flex-1 w-full">
         {roleFilter && (
           <div className="text-xs text-white/30 font-mono mb-3">
-            Showing {filteredMessages.length} {roleFilter} messages of {session.data.messages.length} total
+            Showing {filteredMessages.length} {roleFilter} messages of {data.messages.length} total
           </div>
         )}
         <div className="space-y-3">
@@ -328,7 +368,7 @@ export default function SessionDetailPage() {
           ))}
         </div>
 
-        {session.data.messages.length === 0 && (
+        {data.messages.length === 0 && (
           <div className="text-center py-12">
             <MessageSquare className="w-8 h-8 text-white/20 mx-auto mb-3" />
             <p className="text-white/40 font-mono">No messages in this session</p>
