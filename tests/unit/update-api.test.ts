@@ -55,6 +55,19 @@ jest.mock("@/lib/api-auth", () => ({
   requireSignedRequest: () => null,
 }));
 
+const mockReadDeployStatus = jest.fn();
+const mockIsDeployInProgress = jest.fn();
+const mockWriteDeployStatusRunning = jest.fn();
+const mockTailLogHint = jest.fn();
+
+jest.mock("@/lib/deploy-status", () => ({
+  readDeployStatus: () => mockReadDeployStatus(),
+  isDeployInProgress: () => mockIsDeployInProgress(),
+  writeDeployStatusRunning: (...args: unknown[]) =>
+    mockWriteDeployStatusRunning(...args),
+  tailLogHint: (...args: unknown[]) => mockTailLogHint(...args),
+}));
+
 function getReq(url: string): { url: string } {
   return { url };
 }
@@ -113,6 +126,46 @@ describe("GET /api/update", () => {
     expect(body.data.comparedBranch).toBe("dev");
     expect(body.data.checkoutBranch).toBe("dev");
   });
+
+  it("GET ?deploy=1 returns deploy status", async () => {
+    mockReadDeployStatus.mockReturnValue({
+      state: "running",
+      action: "rebuild",
+      phase: "build",
+      message: "Building production bundle…",
+      startedAt: "2026-05-19T12:00:00.000Z",
+      finishedAt: "",
+      exitCode: "",
+      logHint: "ch-build.log",
+    });
+    mockTailLogHint.mockReturnValue([]);
+    const { GET } = await import("@/app/api/update/route");
+    const res = await GET(getReq("http://localhost/api/update?deploy=1") as never);
+    const body = await res.json();
+    expect(res.ok).toBe(true);
+    expect(body.data.deploy.state).toBe("running");
+    expect(body.data.deploy.action).toBe("rebuild");
+    expect(body.data.deploy.logTail).toEqual([]);
+  });
+
+  it("GET ?deploy=1 includes log tail on failure", async () => {
+    mockReadDeployStatus.mockReturnValue({
+      state: "failed",
+      action: "rebuild",
+      phase: "build",
+      message: "Build failed",
+      startedAt: "",
+      finishedAt: "",
+      exitCode: "1",
+      logHint: "ch-build.log",
+    });
+    mockTailLogHint.mockReturnValue(["npm ERR! build failed"]);
+    const { GET } = await import("@/app/api/update/route");
+    const res = await GET(getReq("http://localhost/api/update?deploy=1") as never);
+    const body = await res.json();
+    expect(body.data.deploy.logTail).toContain("npm ERR! build failed");
+    expect(mockTailLogHint).toHaveBeenCalledWith("ch-build.log");
+  });
 });
 
 function mockGitForDeploy(
@@ -146,8 +199,13 @@ describe("POST /api/update", () => {
     mockExecSync.mockReset();
     mockExecFileSync.mockReset();
     mockSpawn.mockReset();
+    mockReadDeployStatus.mockReset();
+    mockIsDeployInProgress.mockReset();
+    mockWriteDeployStatusRunning.mockReset();
+    mockTailLogHint.mockReset();
     deployApiEnabled = true;
     readOnlyGate = null;
+    mockIsDeployInProgress.mockReturnValue(false);
     mockGitForDeploy(mockExecFileSync);
     mockSpawn.mockReturnValue({ pid: 4242, unref: jest.fn() });
   });
@@ -199,5 +257,39 @@ describe("POST /api/update", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(String(body.error)).toContain("origin");
+  });
+
+  it("returns 409 when deploy already in progress", async () => {
+    mockIsDeployInProgress.mockReturnValue(true);
+    const { POST } = await import("@/app/api/update/route");
+    const res = await POST(postReq({ action: "rebuild" }));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(String(body.error)).toMatch(/in progress/i);
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it("POST rebuild spawns without --branch when branch omitted", async () => {
+    const { POST } = await import("@/app/api/update/route");
+    const res = await POST(postReq({ action: "rebuild" }));
+    expect(res.status).toBe(200);
+    expect(mockWriteDeployStatusRunning).toHaveBeenCalledWith(
+      "rebuild",
+      "build",
+      expect.stringMatching(/queued/i),
+    );
+    const spawnArgs = mockSpawn.mock.calls[0];
+    const flat = JSON.stringify(spawnArgs);
+    expect(flat).toContain("rebuild");
+    expect(flat).not.toContain("--branch");
+  });
+
+  it("POST rebuild includes --branch when provided", async () => {
+    const { POST } = await import("@/app/api/update/route");
+    const res = await POST(postReq({ action: "rebuild", branch: "dev" }));
+    expect(res.status).toBe(200);
+    const flat = JSON.stringify(mockSpawn.mock.calls[0]);
+    expect(flat).toContain("--branch");
+    expect(flat).toContain("dev");
   });
 });

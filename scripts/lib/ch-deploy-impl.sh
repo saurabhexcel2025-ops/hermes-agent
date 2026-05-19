@@ -24,16 +24,27 @@ source "$CH_SCRIPTS_ROOT/lib/ch-port.sh"
 # shellcheck source=ch-env.sh
 source "$CH_SCRIPTS_ROOT/lib/ch-env.sh"
 
-# Atomic lock using flock (kernel-level, auto-released on process exit).
-# No stale locks, no race windows, no cleanup needed — when the process exits,
-# the kernel releases the flock and closes the fd automatically.
+# shellcheck source=ch-deploy-status.sh
+source "$CH_SCRIPTS_ROOT/lib/ch-deploy-status.sh"
+
 LOCK_FILE="${TMPDIR:-/tmp}/ch-deploy.lock"
 LOG_FILE="$HOME/.hermes/logs/ch-update.log"
+CH_RESTART_LOG="$HOME/.hermes/logs/ch-restart.log"
+CH_BUILD_LOG="$HOME/.hermes/logs/ch-build.log"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 
 ch_deploy_log_update() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+ch_deploy_log_restart() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$CH_RESTART_LOG"
+}
+
+ch_deploy_log_both() {
+  ch_deploy_log_update "$@"
+  ch_deploy_log_restart "$@"
 }
 
 # Kill every PID ss reports listening on TCP port $1 (multiple socat / fork).
@@ -46,81 +57,90 @@ ch_deploy_kill_tcp_listeners_on_port() {
 }
 
 ch_deploy_acquire_lock() {
-  # Open/create the lock file on fd 200. This fd persists for the lifetime of
-  # this shell. When the process exits (normally or via kill -9), the kernel
-  # closes all fds and releases the flock. No EXIT trap needed.
   exec 200>"$LOCK_FILE"
-
-  # Try non-blocking exclusive lock. flock -n fails immediately if another
-  # process holds the lock. Within the same process, flock on the same fd
-  # always succeeds — so re-entrant calls are safe with no special handling.
   if ! flock -n 200; then
-    # Another process holds the lock. No PID file to read — flock's holder
-    # is tracked by the kernel. fuser can reveal the PID if we need it.
     local LOCK_PID
     LOCK_PID=$(fuser "$LOCK_FILE" 2>/dev/null | head -1 || echo "")
     if [ -n "$LOCK_PID" ]; then
-      ch_deploy_log_update "ERROR: Deploy already running (PID $LOCK_PID)"
-      exit 1
+      ch_deploy_log_both "ERROR: Deploy already running (PID $LOCK_PID)"
+    else
+      ch_deploy_log_both "ERROR: Could not acquire deploy lock"
     fi
-    # Process died but fd linger? Kernel should have released. Wait and retry once.
-    sleep 1
-    if ! flock -n 200; then
-      ch_deploy_log_update "ERROR: Could not acquire deploy lock"
-      exit 1
-    fi
+    return 1
   fi
-
-  # Lock held. No cleanup needed — kernel releases on process exit.
   return 0
 }
 
-ch_deploy_cmd_restart() {
-  # Guard against concurrent restarts: try a non-blocking flock probe.
-  # If the lock is held by another process, a restart is already in progress.
-  # Exit cleanly — a second restart would kill the server the first just started.
-  exec 201>"$LOCK_FILE"
-  if ! flock -n 201; then
-    ch_deploy_log_update "Restart already in progress — exiting cleanly"
-    exec 201>&-
-    exit 0
-  fi
-  # Release probe — the actual lock is acquired inside ch_deploy_restart_once
-  flock -u 201
-  exec 201>&-
-
-  # Lock is acquired inside ch_deploy_restart_once so the lock covers the
-  # entire restart operation (including the wait-for-ready loop), not just
-  # the spawn of the detached subprocess.
-  ch_deploy_restart_once
+ch_deploy_release_lock() {
+  flock -u 200 2>/dev/null || true
+  exec 200>&- 2>/dev/null || true
 }
 
-# One-shot restart: kill zombies, restart next-server, optional socat relay, exit.
-# Lock is held for the entire operation (not just the spawn) so concurrent restarts
-# cannot interfere with each other's server lifecycle.
-ch_deploy_restart_once() {
-  ch_deploy_acquire_lock
+ch_deploy_fail() {
+  local action="$1"
+  local phase="$2"
+  local message="$3"
+  local exit_code="${4:-1}"
+  local log_hint="${5:-ch-restart.log}"
+  ch_deploy_status_write "failed" "$action" "$phase" "$message" "$exit_code" "$log_hint"
+  ch_deploy_log_both "ERROR: $message"
+  ch_deploy_release_lock
+  exit "$exit_code"
+}
+
+ch_deploy_resolve_tooling() {
+  NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
+  NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+  if [ ! -x "$NPM_BIN" ]; then
+    return 1
+  fi
+  export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
+  return 0
+}
+
+ch_deploy_npm_install_if_needed() {
+  local action="$1"
+  local lock="$CH_APP_DIR/package-lock.json"
+  local marker="$CH_APP_DIR/.next/BUILD_ID"
+  local need=0
+
+  if [ -f "$lock" ]; then
+    if [ ! -f "$marker" ] || [ "$lock" -nt "$marker" ]; then
+      need=1
+    fi
+  fi
+
+  if [ "$need" -eq 0 ]; then
+    return 0
+  fi
+
+  ch_deploy_status_write "running" "$action" "install" "Installing dependencies…" "" ""
+  ch_deploy_log_restart "package-lock.json newer than build — running npm install…"
+  if ! "$NPM_BIN" install --prefer-offline >>"$CH_BUILD_LOG" 2>&1; then
+    ch_deploy_fail "$action" "install" "npm install failed — see ch-build.log" 1 "ch-build.log"
+  fi
+  ch_deploy_log_restart "Dependencies installed"
+}
+
+ch_deploy_run_build() {
+  local action="$1"
+  ch_deploy_status_write "running" "$action" "build" "Building production bundle…" "" "ch-build.log"
+  ch_deploy_log_restart "Build started (npm=$(which npm), node=$(which node))…"
+  if ! "$NPM_BIN" run build >>"$CH_BUILD_LOG" 2>&1; then
+    ch_deploy_fail "$action" "build" "Build failed — see ch-build.log" 1 "ch-build.log"
+  fi
+  ch_deploy_log_restart "Build complete."
+}
+
+# Restart next-server. Caller must hold deploy lock; lock is released before server spawn.
+ch_deploy_do_restart_body() {
   cd "$CH_APP_DIR"
 
-  local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
   local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
   local SOCAT_PID_FILE="$HOME/.hermes/logs/ch-socat.pid"
 
-  mkdir -p "$(dirname "$LOG_FILE_RESTART")"
+  ch_deploy_log_restart "Restarting server…"
 
-  log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE_RESTART"
-  }
-
-  cd "$CH_APP_DIR"
-
-  local NODE_BIN
-  NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
-  local NPM_BIN
-  NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
-  export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
-
-  # ── 1. Kill stale listener on configured PORT (from .env.local) ───────────
   local ENV_PORT=""
   if [ -f "$CH_APP_DIR/.env.local" ]; then
     ENV_PORT="$(grep -E '^PORT=' "$CH_APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
@@ -131,30 +151,25 @@ ch_deploy_restart_once() {
   if [ -n "$ZOMBIE_PIDS" ]; then
     for zp in $ZOMBIE_PIDS; do
       if kill -0 "$zp" 2>/dev/null; then
-        log "Killing stale next-server on port $STALE_PORT (PID $zp)..."
+        ch_deploy_log_restart "Killing stale next-server on port $STALE_PORT (PID $zp)…"
         kill -9 "$zp" 2>/dev/null || true
       fi
     done
     sleep 1
   fi
 
-  # ── 2. Stop any existing socat relay ───────────────────────────────────────
   local OLD_SOCAT_PID
   OLD_SOCAT_PID=$(cat "$SOCAT_PID_FILE" 2>/dev/null || true)
   if [ -n "$OLD_SOCAT_PID" ] && kill -0 "$OLD_SOCAT_PID" 2>/dev/null; then
-    log "Stopping old socat relay (PID $OLD_SOCAT_PID)..."
+    ch_deploy_log_restart "Stopping old socat relay (PID $OLD_SOCAT_PID)…"
     kill -9 "$OLD_SOCAT_PID" 2>/dev/null || true
     sleep 1
   fi
   local RELAY_PORT="${CH_SOCAT_RELAY_PORT:-42069}"
-  log "Stopping all listeners on relay port ${RELAY_PORT}..."
+  ch_deploy_log_restart "Stopping all listeners on relay port ${RELAY_PORT}…"
   ch_deploy_kill_tcp_listeners_on_port "$RELAY_PORT"
   sleep 1
 
-  # ── 3. Find available port ─────────────────────────────────────────────────
-  # Always prefer 42069 — kill whatever is on it first (stale socat orphans from
-  # failed restarts must not block us, and we must not trust a stale PORT= in
-  # .env.local that was written by a previous failed attempt).
   local PORT="42069"
   while ch_tcp_port_in_use "$PORT" 2>/dev/null; do
     local BLOCKER_PIDS
@@ -162,25 +177,23 @@ ch_deploy_restart_once() {
     if [ -n "$BLOCKER_PIDS" ]; then
       for p in $BLOCKER_PIDS; do
         if kill -0 "$p" 2>/dev/null; then
-          log "Port $PORT held by PID $p — killing..."
+          ch_deploy_log_restart "Port $PORT held by PID $p — killing…"
           kill -9 "$p" 2>/dev/null || true
         fi
       done
       sleep 2
     fi
-    # After killing, re-check — if still in use, walk forward
     if ch_tcp_port_in_use "$PORT" 2>/dev/null; then
-      log "Port $PORT still in use — trying next port..."
+      ch_deploy_log_restart "Port $PORT still in use — trying next port…"
       PORT=$((PORT + 1))
       if [ "$PORT" -gt 42100 ]; then
-        log "ERROR: No free port in 42069–42100"
-        exit 1
+        ch_deploy_log_restart "ERROR: No free port in 42069–42100"
+        return 1
       fi
     fi
   done
-  [ "$PORT" != "42069" ] && log "Port 42069 unavailable — using $PORT"
+  [ "$PORT" != "42069" ] && ch_deploy_log_restart "Port 42069 unavailable — using $PORT"
 
-  # ── 4. Write port to .env.local ───────────────────────────────────────────
   if [ -f "$CH_APP_DIR/.env.local" ]; then
     if grep -q '^PORT=' "$CH_APP_DIR/.env.local" 2>/dev/null; then
       sed -i "s/^PORT=.*/PORT=$PORT/" "$CH_APP_DIR/.env.local"
@@ -189,24 +202,17 @@ ch_deploy_restart_once() {
     fi
   fi
 
-  # ── 5. Kill any existing next-server on this port ──────────────────────────
-  # (socat is stopped above — next-server and socat share the port so we kill
-  # next-server first, then the port is free for the new server to bind)
   if [ -f "$PID_FILE" ]; then
     local OLD_SERVER_PID
     OLD_SERVER_PID=$(cat "$PID_FILE" 2>/dev/null || true)
     if [ -n "$OLD_SERVER_PID" ] && kill -0 "$OLD_SERVER_PID" 2>/dev/null; then
-      log "Stopping old next-server (PID $OLD_SERVER_PID)..."
+      ch_deploy_log_restart "Stopping old next-server (PID $OLD_SERVER_PID)…"
       kill -9 "$OLD_SERVER_PID" 2>/dev/null || true
     fi
     rm -f "$PID_FILE"
     sleep 1
   fi
 
-  # ── 6. Start next-server ─────────────────────────────────────────────────────
-  # Match `npm run start:network` (0.0.0.0) when no relay. With relay, Next stays on
-  # loopback so socat owns CH_SOCAT_RELAY_PORT (default 42069) on all interfaces (0.0.0.0)
-  # unless CH_SOCAT_BIND overrides the listen address.
   local use_relay=0
   local relay_listen
   case "${CH_SOCAT_RELAY:-}" in 1 | yes | YES | true | True) use_relay=1 ;; esac
@@ -222,126 +228,107 @@ ch_deploy_restart_once() {
   fi
   export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
-  log "Starting next-server on $HOST:$PORT..."
+  ch_deploy_log_restart "Starting next-server on $HOST:$PORT…"
   rm -f "$PID_FILE"
-  # Release the deploy lock BEFORE spawning nohup child — otherwise the child
-  # inherits fd 200 (the flock file) and the kernel never releases the lock.
-  exec 200>&-
-  # nohup + detached stdin: survive dashboard-spawned systemd-run/nohup transient shells exiting.
+  ch_deploy_release_lock
   nohup "$NODE_BIN" node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
-    >>"$LOG_FILE_RESTART" 2>&1 </dev/null &
+    >>"$CH_RESTART_LOG" 2>&1 </dev/null &
   local SERVER_PID=$!
   echo "$SERVER_PID" >"$PID_FILE"
-  log "Server started (PID $SERVER_PID)"
+  ch_deploy_log_restart "Server started (PID $SERVER_PID)"
 
-  local i
+  local i ready=0
   for i in $(seq 1 20); do
     if curl -s -o /dev/null -w '' "http://127.0.0.1:${PORT}" 2>/dev/null; then
-      log "Server is ready on http://127.0.0.1:${PORT}"
+      ch_deploy_log_restart "Server is ready on http://127.0.0.1:${PORT}"
+      ready=1
       break
     fi
     if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-      log "ERROR: next-server died during startup"
-      exit 1
+      ch_deploy_log_restart "ERROR: next-server died during startup"
+      return 1
     fi
     sleep 1
   done
 
-  # ── 7. Optional socat relay (CH_SOCAT_RELAY_PORT → loopback:$PORT) ──────────
+  if [ "$ready" -ne 1 ]; then
+    ch_deploy_log_restart "ERROR: Server did not become ready in time"
+    return 1
+  fi
+
   if [ "$use_relay" -eq 1 ]; then
-    log "Starting socat relay on ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT..."
+    ch_deploy_log_restart "Starting socat relay on ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT…"
     nohup /usr/bin/socat TCP-LISTEN:"$RELAY_PORT",fork,reuseaddr,bind="${relay_listen}" TCP:127.0.0.1:"$PORT" \
-      >>"$LOG_FILE_RESTART" 2>&1 </dev/null &
+      >>"$CH_RESTART_LOG" 2>&1 </dev/null &
     local SOCAT_PID=$!
     echo "$SOCAT_PID" >"$SOCAT_PID_FILE"
-    log "socat relay started (PID $SOCAT_PID)"
-
+    ch_deploy_log_restart "socat relay started (PID $SOCAT_PID)"
     sleep 1
     if ss -tlnp "sport = :$RELAY_PORT" 2>/dev/null | grep -q LISTEN; then
-      log "Relay active: ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT"
+      ch_deploy_log_restart "Relay active: ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT"
     else
-      log "WARNING: socat relay may not have started correctly"
+      ch_deploy_log_restart "WARNING: socat relay may not have started correctly"
     fi
   else
     rm -f "$SOCAT_PID_FILE"
-    log "Skipping socat (set CH_SOCAT_RELAY=yes for relay on CH_SOCAT_RELAY_PORT, or CH_SOCAT_BIND=ip for legacy)"
   fi
 
-  log "Restart complete."
-
-  # Wait for children to fully daemonize before we exit.
-  # This prevents systemd transient units from seeing exit-code 1 when the
-  # shell exits while backgrounded children are still forking.
+  ch_deploy_log_restart "Restart complete."
   sleep 2
+  return 0
+}
 
-  # Signal success explicitly — we don't want any trailing subshell result
-  # (e.g. from `|| true` or the log function) leaking into the exit code.
+ch_deploy_cmd_restart() {
+  if ! ch_deploy_acquire_lock; then
+    ch_deploy_fail "restart" "lock" "Deploy already in progress" 1 "ch-restart.log"
+  fi
+  ch_deploy_status_write "running" "restart" "restart" "Restarting server…" "" "ch-restart.log"
+  if ! ch_deploy_resolve_tooling; then
+    ch_deploy_fail "restart" "restart" "npm not found — cannot restart" 1 "ch-restart.log"
+  fi
+  if ! ch_deploy_do_restart_body; then
+    ch_deploy_fail "restart" "restart" "Restart failed — see ch-restart.log" 1 "ch-restart.log"
+  fi
+  ch_deploy_status_write "success" "restart" "done" "Restart complete" 0 "ch-restart.log"
   exit 0
 }
 
 ch_deploy_cmd_rebuild() {
-  # Guard against concurrent rebuilds: try a non-blocking flock probe.
-  # If the lock is held by another process, a rebuild is already in progress.
-  exec 201>"$LOCK_FILE"
-  if ! flock -n 201; then
-    ch_deploy_log_update "Rebuild already in progress — exiting cleanly"
-    exec 201>&-
-    exit 0
+  local CH_BRANCH="${CH_DEPLOY_BRANCH:-}"
+
+  if ! ch_deploy_acquire_lock; then
+    ch_deploy_fail "rebuild" "lock" "Deploy already in progress" 1 "ch-restart.log"
   fi
-  # Release probe — the actual lock is acquired inside ch_deploy_restart_once
-  # at the end of the rebuild flow.
-  flock -u 201
-  exec 201>&-
 
-  ch_deploy_cmd_rebuild_impl
-}
+  ch_deploy_status_write "running" "rebuild" "build" "Rebuild started…" "" "ch-build.log"
+  cd "$CH_APP_DIR"
 
-ch_deploy_cmd_rebuild_impl() {
-  local CH_BRANCH="${CH_DEPLOY_BRANCH:-${CH_UPDATE_GIT_BRANCH:-dev}}"
-  local APP_DIR="$CH_APP_DIR"
-  local LOG_FILE_RESTART="$HOME/.hermes/logs/ch-restart.log"
-  local BUILD_LOG="$HOME/.hermes/logs/ch-build.log"
-
-  mkdir -p "$(dirname "$LOG_FILE_RESTART")"
-
-  log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE_RESTART"
-  }
-
-  cd "$APP_DIR"
+  if ! ch_deploy_resolve_tooling; then
+    ch_deploy_fail "rebuild" "build" "npm not found — cannot build" 1 "ch-build.log"
+  fi
 
   if [ -n "$CH_BRANCH" ]; then
-    log "Checking out branch: $CH_BRANCH"
-    git checkout "$CH_BRANCH" --quiet 2>>"$LOG_FILE_RESTART" || {
-      log "ERROR: Branch '$CH_BRANCH' not found locally"
-      exit 1
-    }
+    local current_branch
+    current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+    if [ -n "$current_branch" ] && [ "$current_branch" != "$CH_BRANCH" ]; then
+      ch_deploy_status_write "running" "rebuild" "git" "Checking out $CH_BRANCH…" "" ""
+      ch_deploy_log_restart "Checking out branch: $CH_BRANCH"
+      if ! git checkout "$CH_BRANCH" --quiet 2>>"$CH_RESTART_LOG"; then
+        ch_deploy_fail "rebuild" "git" "Branch '$CH_BRANCH' not found locally" 1 "ch-restart.log"
+      fi
+    fi
   fi
 
-  local NODE_BIN
-  NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
-  local NPM_BIN
-  NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
+  ch_deploy_npm_install_if_needed "rebuild"
+  ch_deploy_run_build "rebuild"
 
-  if [ ! -x "$NPM_BIN" ]; then
-    log "ERROR: npm not found at $NPM_BIN — cannot build"
-    exit 1
+  ch_deploy_status_write "running" "rebuild" "restart" "Restarting server…" "" "ch-restart.log"
+  if ! ch_deploy_do_restart_body; then
+    ch_deploy_fail "rebuild" "restart" "Restart failed after build — see ch-restart.log" 1 "ch-restart.log"
   fi
 
-  export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
-
-  log "Build started (npm=$(which npm), node=$(which node))..."
-  "$NPM_BIN" run build >>"$BUILD_LOG" 2>&1
-  if [ $? -ne 0 ]; then
-    log "ERROR: Build failed — check $BUILD_LOG"
-    exit 1
-  fi
-  log "Build complete."
-  log "Restarting server..."
-  ch_deploy_restart_once
-  # ch_deploy_restart_once exits; if we reach here something went wrong
-  log "ERROR: restart returned unexpectedly"
-  exit 1
+  ch_deploy_status_write "success" "rebuild" "done" "Rebuild complete" 0 "ch-restart.log"
+  exit 0
 }
 
 ch_deploy_run_update() {
@@ -350,51 +337,48 @@ ch_deploy_run_update() {
   local APP_DIR="$CH_APP_DIR"
   local SCRIPT_DIR="$CH_SCRIPTS_ROOT"
 
-  ch_deploy_acquire_lock
-
-  cd "$APP_DIR"
-
-  local NODE_BIN
-  NODE_BIN="$(which node 2>/dev/null || echo "$HOME/.local/bin/node")"
-  local NPM_BIN
-  NPM_BIN="$(which npm 2>/dev/null || echo "$HOME/.local/bin/npm")"
-
-  if [ ! -x "$NPM_BIN" ]; then
-    ch_deploy_log_update "ERROR: npm not found at $NPM_BIN — cannot build"
-    exit 1
+  if ! ch_deploy_acquire_lock; then
+    ch_deploy_fail "update" "lock" "Deploy already in progress" 1 "ch-update.log"
   fi
 
-  export PATH="$(dirname "$NODE_BIN"):$(dirname "$NPM_BIN"):$PATH"
+  ch_deploy_status_write "running" "update" "git" "Update started…" "" "ch-update.log"
+  cd "$APP_DIR"
+
+  if ! ch_deploy_resolve_tooling; then
+    ch_deploy_fail "update" "git" "npm not found — cannot update" 1 "ch-update.log"
+  fi
 
   if ! git rev-parse --is-inside-work-tree &>/dev/null; then
-    ch_deploy_log_update "ERROR: $APP_DIR is not a git repository — cannot update"
-    exit 1
+    ch_deploy_fail "update" "git" "$APP_DIR is not a git repository" 1 "ch-update.log"
   fi
 
   if [ "$RESTART_ONLY" = false ]; then
-    ch_deploy_log_update "Fetching latest from origin/${CH_BRANCH}..."
+    ch_deploy_log_update "Fetching latest from origin/${CH_BRANCH}…"
     git fetch origin "$CH_BRANCH" --quiet 2>>"$LOG_FILE"
 
-    ch_deploy_log_update "Checking out ${CH_BRANCH} branch..."
+    ch_deploy_log_update "Checking out ${CH_BRANCH} branch…"
     git checkout "$CH_BRANCH" --quiet 2>>"$LOG_FILE"
 
-    ch_deploy_log_update "Resetting to origin/${CH_BRANCH}..."
+    ch_deploy_log_update "Resetting to origin/${CH_BRANCH}…"
     git reset --hard "origin/${CH_BRANCH}" --quiet 2>>"$LOG_FILE"
 
     ch_deploy_log_update "Code updated to $(git rev-parse --short HEAD)"
 
     if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "package-lock.json\|package.json"; then
-      ch_deploy_log_update "package.json changed — running npm install..."
-      "$NPM_BIN" install --prefer-offline 2>>"$LOG_FILE"
+      ch_deploy_status_write "running" "update" "install" "Installing dependencies…" "" "ch-update.log"
+      ch_deploy_log_update "package.json changed — running npm install…"
+      if ! "$NPM_BIN" install --prefer-offline 2>>"$LOG_FILE"; then
+        ch_deploy_fail "update" "install" "npm install failed — see ch-update.log" 1 "ch-update.log"
+      fi
       ch_deploy_log_update "Dependencies installed"
     else
       ch_deploy_log_update "No dependency changes — skipping npm install"
     fi
 
-    ch_deploy_log_update "Building production bundle..."
+    ch_deploy_status_write "running" "update" "build" "Building production bundle…" "" "ch-update.log"
+    ch_deploy_log_update "Building production bundle…"
     if ! "$NPM_BIN" run build >>"$LOG_FILE" 2>&1; then
-      ch_deploy_log_update "ERROR: Build failed — aborting deploy"
-      exit 1
+      ch_deploy_fail "update" "build" "Build failed — see ch-update.log" 1 "ch-update.log"
     fi
     ch_deploy_log_update "Build successful"
 
@@ -435,7 +419,7 @@ ch_deploy_run_update() {
 
     if [ "$sync_profiles" = true ]; then
       ch_profiles_log() { ch_deploy_log_update "$*"; }
-      ch_deploy_log_update "Updating bundled Hermes agent profiles from templates..."
+      ch_deploy_log_update "Updating bundled Hermes agent profiles from templates…"
       ch_bundled_profiles_sync "$APP_DIR"
       ch_deploy_log_update "Bundled Hermes agent profiles updated"
     fi
@@ -444,12 +428,12 @@ ch_deploy_run_update() {
   local HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
   if command -v hermes &>/dev/null && [ -f "$HERMES_HOME/.env" ]; then
     if ! grep -q "API_SERVER_ENABLED=true" "$HERMES_HOME/.env" 2>/dev/null; then
-      ch_deploy_log_update "Enabling API_SERVER_ENABLED=true in ~/.hermes/.env for Story Weaver..."
+      ch_deploy_log_update "Enabling API_SERVER_ENABLED=true in ~/.hermes/.env for Story Weaver…"
       echo "" >>"$HERMES_HOME/.env"
       echo "# Enable API server for Control Hub Rec Room (added by ch-deploy)" >>"$HERMES_HOME/.env"
       echo "API_SERVER_ENABLED=true" >>"$HERMES_HOME/.env"
     fi
-    ch_deploy_log_update "Restarting Hermes gateway..."
+    ch_deploy_log_update "Restarting Hermes gateway…"
     if hermes gateway stop 2>/dev/null; then
       hermes gateway start 2>/dev/null || ch_deploy_log_update "WARNING: Gateway start failed — restart manually"
     else
@@ -464,9 +448,15 @@ ch_deploy_run_update() {
       ch_deploy_log_update "WARNING: discover-agents.mjs failed"
   fi
 
-  ch_deploy_log_update "Restarting server..."
-  ch_deploy_restart_once
+  ch_deploy_status_write "running" "update" "restart" "Restarting server…" "" "ch-restart.log"
+  ch_deploy_log_update "Restarting server…"
+  if ! ch_deploy_do_restart_body; then
+    ch_deploy_fail "update" "restart" "Restart failed — see ch-restart.log" 1 "ch-restart.log"
+  fi
+
+  ch_deploy_status_write "success" "update" "done" "Update complete" 0 "ch-update.log"
   ch_deploy_log_update "Update complete"
+  exit 0
 }
 
 ch_deploy_dispatch_update() {
@@ -486,7 +476,7 @@ ch_deploy_dispatch_update() {
 }
 
 ch_deploy_dispatch_rebuild() {
-  CH_DEPLOY_BRANCH="${CH_UPDATE_GIT_BRANCH:-dev}"
+  CH_DEPLOY_BRANCH=""
   while [ "${1:-}" ]; do
     case "${1}" in
       --branch)

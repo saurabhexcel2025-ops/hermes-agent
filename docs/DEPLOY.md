@@ -28,12 +28,26 @@ Deploy from a shell (same commands the dashboard triggers via **`POST /api/updat
 bash scripts/application/ch-deploy.sh update
 bash scripts/application/ch-deploy.sh update --branch dev
 bash scripts/application/ch-deploy.sh restart
-bash scripts/application/ch-deploy.sh rebuild --branch dev
+bash scripts/application/ch-deploy.sh rebuild
+bash scripts/application/ch-deploy.sh rebuild --branch dev   # optional local checkout only
 ```
+
+### Deploy actions (dashboard + CLI)
+
+| Action | Git | Build | Restart |
+|--------|-----|-------|---------|
+| **update** | `fetch` + `reset --hard origin/<branch>` | `npm install` if lockfiles changed, then `npm run build` | yes |
+| **rebuild** | optional `git checkout` **only** when `--branch` is passed | `npm install` if `package-lock.json` is newer than `.next/BUILD_ID`, then `npm run build` | yes |
+| **restart** | — | — | yes |
+
+**Status file:** `~/.hermes/logs/ch-deploy.status` (`state`, `action`, `phase`, `message`, …). The sidebar polls **`GET /api/update?deploy=1`** until `success` or `failed`. Concurrent deploys return **exit 1** from the script and **409** from the API.
+
+**Logs:** full npm output → `ch-build.log`; restart steps → `ch-restart.log`; git/update steps → `ch-update.log` (also listed under **Logs** in the UI).
 
 ### Destructive git and `PORT`
 
-- **`ch-deploy.sh update`** and **`rebuild`** (after aligning rebuild with update) run **`git reset --hard origin/<branch>`** when a remote tip exists. That **discards local commits** on the checked-out branch. Use only on machines where the app directory is a throwaway deploy checkout.
+- **`ch-deploy.sh update`** runs **`git reset --hard origin/<branch>`**. That **discards local commits** on the checked-out branch. Use only on machines where the app directory is a throwaway deploy checkout.
+- **`rebuild`** does **not** pull or reset; it builds the **current working tree** unless you pass **`--branch`** to switch local checkout first.
 - **`ch-deploy.sh restart`** stops whatever is listening on **`PORT`** (from the environment or the last `PORT=` line in `.env.local`, default **42069**) using **`fuser`** / **`lsof`**. A wrong **`PORT`** can kill an unrelated process; set it deliberately. If you migrated from an old install on **3000**, do a **one-time manual** cleanup of stale listeners; the script does not clear arbitrary ports by default.
 
 ## Required environment

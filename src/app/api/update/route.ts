@@ -6,6 +6,12 @@ import { tmpdir } from "os";
 import { logApiError } from "@/lib/api-logger";
 import { getCorrelationId, requireAuth, requireDeployApiEnabled, requireSignedRequest } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
+import {
+  isDeployInProgress,
+  readDeployStatus,
+  tailLogHint,
+  writeDeployStatusRunning,
+} from "@/lib/deploy-status";
 import { sanitizeGitBranch } from "@/lib/git-branch";
 
 // ═══════════════════════════════════════════════════════════════
@@ -13,7 +19,8 @@ import { sanitizeGitBranch } from "@/lib/git-branch";
 // ═══════════════════════════════════════════════════════════════
 // GET  /api/update                       → check for updates
 // POST /api/update { action: "update" }  → spawn scripts/application/ch-deploy.sh update (gated)
-// POST /api/update { action: "rebuild" } → build + restart (no git, gated)
+// POST /api/update { action: "rebuild" } → build current tree + restart (optional branch checkout)
+// GET  /api/update?deploy=1            → deploy status from ch-deploy.status
 // POST /api/update { action: "restart" } → restart only (gated)
 //
 // CH_ENABLE_DEPLOY_API=true required for POST.
@@ -218,6 +225,17 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
 
+    if (searchParams.get("deploy") === "1") {
+      const deploy = readDeployStatus();
+      const logTail =
+        deploy.state === "failed" && deploy.logHint
+          ? tailLogHint(deploy.logHint)
+          : [];
+      return NextResponse.json({
+        data: { deploy: { ...deploy, logTail } },
+      });
+    }
+
     // Branch listing endpoint
     if (searchParams.get("branches") === "1") {
       const branches = listRemoteBranches();
@@ -255,9 +273,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const action = body.action || "update";
 
+    if (isDeployInProgress()) {
+      return NextResponse.json(
+        { error: "Deploy already in progress" },
+        { status: 409 },
+      );
+    }
+
     if (action === "restart") {
       const missing = deployScriptMissingResponse();
       if (missing) return missing;
+      writeDeployStatusRunning("restart", "restart", "Restart queued…");
       const spawned = spawnChDeploy("ch-restart", ["restart"]);
       if (!spawned.ok) {
         return NextResponse.json(
@@ -275,19 +301,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "rebuild") {
-      const rebuildBranch = body.branch
-        ? sanitizeGitBranch(String(body.branch))
-        : sanitizeGitBranch(process.env.CH_UPDATE_GIT_BRANCH || "dev");
-      // Run build as a detached background process so the server's memory
-      // context is not consumed by npm/build child processes (avoids OOM
-      // kills on memory-constrained systems). Uses systemd-run like restart.
       const missing = deployScriptMissingResponse();
       if (missing) return missing;
-      const spawnedRebuild = spawnChDeploy("ch-rebuild", [
-        "rebuild",
-        "--branch",
-        rebuildBranch,
-      ]);
+
+      const rebuildArgs = ["rebuild"];
+      let rebuildBranch: string | undefined;
+      if (body.branch && typeof body.branch === "string" && body.branch.trim()) {
+        rebuildBranch = sanitizeGitBranch(String(body.branch));
+        rebuildArgs.push("--branch", rebuildBranch);
+      }
+
+      writeDeployStatusRunning("rebuild", "build", "Rebuild queued…");
+      const spawnedRebuild = spawnChDeploy("ch-rebuild", rebuildArgs);
       if (!spawnedRebuild.ok) {
         logApiError("POST /api/update", "spawn rebuild", new Error(spawnedRebuild.error ?? ""));
         appendAuditLine({
@@ -308,7 +333,13 @@ export async function POST(request: NextRequest) {
         ok: true,
         correlationId,
       });
-      return NextResponse.json({ data: { action: "rebuild", status: "started", branch: rebuildBranch } });
+      return NextResponse.json({
+        data: {
+          action: "rebuild",
+          status: "started",
+          ...(rebuildBranch ? { branch: rebuildBranch } : {}),
+        },
+      });
     }
 
     if (action === "update") {
@@ -321,6 +352,7 @@ export async function POST(request: NextRequest) {
       }
       const missing = deployScriptMissingResponse();
       if (missing) return missing;
+      writeDeployStatusRunning("update", "git", "Update queued…");
       const spawnedUpdate = spawnChDeploy("ch-update", ["update", "--branch", updateBranch]);
       if (!spawnedUpdate.ok) {
         logApiError("POST /api/update", "spawn update", new Error(spawnedUpdate.error ?? ""));
@@ -382,7 +414,7 @@ function spawnChDeploy(
   }
 
   const command =
-    `sleep 3; bash ${quoteShellSingle(CH_DEPLOY_SCRIPT)} ${deployArgs.map(quoteShellSingle).join(" ")}`.trimEnd();
+    `sleep 1; bash ${quoteShellSingle(CH_DEPLOY_SCRIPT)} ${deployArgs.map(quoteShellSingle).join(" ")}`.trimEnd();
 
   try {
     // Clear any stale failed systemd transient unit before spawning

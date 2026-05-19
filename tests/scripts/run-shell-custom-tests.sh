@@ -226,12 +226,89 @@ pass "ch-backup.sh wrote valid merged snapshot"
 
 rm -rf "$BKROOT"
 
+# ── ch-deploy status + lock / build failure (mocked npm) ─────────
+echo ""
+echo "== ch-deploy rebuild status (mock npm)"
+
+ORIG_PATH="$PATH"
+FAKE_HOME=$(mktemp -d)
+export HOME="$FAKE_HOME"
+mkdir -p "$HOME/.hermes/logs"
+export CH_DEPLOY_STATUS_FILE="$HOME/.hermes/logs/ch-deploy.status"
+DEPLOY_TMP=$(mktemp -d)
+export TMPDIR="$DEPLOY_TMP"
+MOCK_BIN="$DEPLOY_TMP/mock-bin"
+mkdir -p "$MOCK_BIN"
+
+cat >"$MOCK_BIN/npm" <<'MOCKNPM'
+#!/usr/bin/env bash
+if [[ "$1" == "run" && "$2" == "build" ]]; then
+  if [[ "${CH_DEPLOY_TEST_BUILD_FAIL:-}" == "1" ]]; then
+    echo "mock build failed" >&2
+    exit 1
+  fi
+  echo "mock build ok"
+  exit 0
+fi
+if [[ "$1" == "install" ]]; then
+  exit 0
+fi
+echo "mock npm: $*" >&2
+exit 0
+MOCKNPM
+chmod +x "$MOCK_BIN/npm"
+ln -sf "$MOCK_BIN/npm" "$MOCK_BIN/node"
+export PATH="$MOCK_BIN:$ORIG_PATH"
+
+# shellcheck source=../../scripts/lib/ch-deploy-status.sh
+source "$REPO_ROOT/scripts/lib/ch-deploy-status.sh"
+ch_deploy_status_write "running" "rebuild" "build" "test" "" "ch-build.log"
+grep -q '^state=running' "$CH_DEPLOY_STATUS_FILE" || fail "status file missing running state"
+pass "ch_deploy_status_write"
+
+LOCK_FILE="${TMPDIR}/ch-deploy.lock"
+(
+  exec 200>"$LOCK_FILE"
+  flock 200
+  sleep 60
+) &
+LOCK_HOLDER=$!
+sleep 0.2
+set +e
+bash "$REPO_ROOT/scripts/application/ch-deploy.sh" rebuild >/dev/null 2>&1
+REBUILD_RC=$?
+set -e
+kill "$LOCK_HOLDER" 2>/dev/null || true
+wait "$LOCK_HOLDER" 2>/dev/null || true
+
+[[ "$REBUILD_RC" -eq 1 ]] || fail "rebuild should exit 1 on lock contention (got $REBUILD_RC)"
+grep -q '^state=failed' "$CH_DEPLOY_STATUS_FILE" || fail "status should be failed after lock contention"
+pass "rebuild exits 1 when deploy lock held"
+
+export CH_DEPLOY_TEST_BUILD_FAIL=1
+rm -f "$LOCK_FILE"
+set +e
+bash "$REPO_ROOT/scripts/application/ch-deploy.sh" rebuild >/dev/null 2>&1
+FAIL_RC=$?
+set -e
+unset CH_DEPLOY_TEST_BUILD_FAIL
+[[ "$FAIL_RC" -eq 1 ]] || fail "rebuild should exit 1 on build failure (got $FAIL_RC)"
+grep -q '^state=failed' "$CH_DEPLOY_STATUS_FILE" || fail "status should be failed after build failure"
+grep -q 'ch-build.log' "$CH_DEPLOY_STATUS_FILE" || fail "expected ch-build.log logHint"
+pass "rebuild exits 1 and records failed status on build failure"
+
+rm -rf "$FAKE_HOME" "$DEPLOY_TMP"
+export PATH="$ORIG_PATH"
+unset HOME CH_DEPLOY_STATUS_FILE TMPDIR
+
 # bash -n on touched scripts
 echo ""
 echo "== bash -n on scripts"
 for f in \
   "$REPO_ROOT/scripts/bootstrap/install.sh" \
   "$REPO_ROOT/scripts/application/ch-deploy.sh" \
+  "$REPO_ROOT/scripts/lib/ch-deploy-impl.sh" \
+  "$REPO_ROOT/scripts/lib/ch-deploy-status.sh" \
   "$REPO_ROOT/scripts/lib/ch-hermes-profile-templates.sh" \
   "$REPO_ROOT/scripts/lib/ch-dotenv-local.sh" \
   "$REPO_ROOT/scripts/hardware/ch-backup.sh"; do

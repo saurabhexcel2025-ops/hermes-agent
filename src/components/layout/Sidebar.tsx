@@ -167,15 +167,12 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
   const [updating, setUpdating] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
-  // serverRestarting tracks the gap between "background build/restart fired" and "server actually back up"
-  const [serverRestarting, setServerRestarting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   // Synchronous busy guard — ref, not state, so it updates immediately on click
   const busyRef = useRef(false);
 
-  // Dropdown state
+  // Dropdown state (Check for updates only)
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [dropdownPurpose, setDropdownPurpose] = useState<"check" | "rebuild">("check");
   const [branches, setBranches] = useState<string[]>(["main", "dev"]);
   const [selectedBranch, setSelectedBranch] = useState("main");
   /** Branch last used for GET /api/update?branch=… — POST update uses the same branch. */
@@ -195,9 +192,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
     };
   }, []);
 
-  // Fetch branch list and open dropdown
-  const openDropdown = async (purpose: "check" | "rebuild") => {
-    setDropdownPurpose(purpose);
+  const openCheckDropdown = async () => {
     setDropdownOpen(true);
     const pickBranch = (list: string[], apiDefault: unknown): string => {
       const def =
@@ -221,11 +216,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
 
   const handleDropdownConfirm = async (branch: string) => {
     setDropdownOpen(false);
-    if (dropdownPurpose === "check") {
-      await doCheck(branch);
-    } else {
-      await doRebuild(branch);
-    }
+    await doCheck(branch);
   };
 
   // Check version against a specific branch
@@ -262,16 +253,25 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           ...(deployBranch ? { branch: deployBranch } : {}),
         }),
       });
+      if (!res.ok) {
+        let msg = "Update failed";
+        try {
+          const body = await res.json();
+          if (body?.error) msg = body.error;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
       const d = await res.json();
       if (d.error) {
         setMessage(d.error);
         setUpdating(false);
         return;
       }
-      setMessage("Update running in background (~/.hermes/logs/ch-update.log)…");
-      pollForReturn();
-    } catch {
-      setMessage("Update failed");
+      setMessage("Update running…");
+      pollDeployStatus("update");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Update failed";
+      setMessage(msg);
       setUpdating(false);
     }
   };
@@ -295,29 +295,26 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
-      setServerRestarting(true);
-      setMessage("Restarting server (~/.hermes/logs/ch-restart.log)…");
-      pollForReturn();
+      setMessage("Restarting server…");
+      pollDeployStatus("restart");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Restart failed";
       setMessage(msg);
       setRestarting(false);
-      setServerRestarting(false);
       busyRef.current = false;
     }
   };
 
-  const doRebuild = async (branch: string) => {
+  const doRebuild = async () => {
     if (busyRef.current) return;
     busyRef.current = true;
     setRebuilding(true);
-    setDeployBranch(branch);
-    setMessage("Rebuilding...");
+    setMessage("Rebuild started…");
     try {
       const res = await fetch("/api/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "rebuild", branch }),
+        body: JSON.stringify({ action: "rebuild" }),
       });
       if (!res.ok) {
         let msg = "Rebuild failed";
@@ -327,63 +324,92 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
-      setMessage("Build started — restarting server…");
-      setServerRestarting(true);
-      pollForReturn();
+      pollDeployStatus("rebuild");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Rebuild failed";
       setMessage(msg);
       setRebuilding(false);
-      setServerRestarting(false);
       busyRef.current = false;
     }
   };
 
-  const pollForReturn = () => {
+  const clearDeployBusy = () => {
+    setUpdating(false);
+    setRestarting(false);
+    setRebuilding(false);
+    busyRef.current = false;
+  };
+
+  const pollDeployStatus = (expectedAction: "rebuild" | "restart" | "update") => {
     if (pollIntervalRef.current !== null) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
     let attempts = 0;
-    const maxAttempts = 30;
+    const maxAttempts = 450;
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const branchQs =
-          deployBranch != null
-            ? `?branch=${encodeURIComponent(deployBranch)}`
-            : "";
-        const res = await fetch(`/api/update${branchQs}`, {
-          signal: AbortSignal.timeout(3000),
+        const res = await fetch("/api/update?deploy=1", {
+          signal: AbortSignal.timeout(8000),
         });
-        if (res.ok) {
+        if (!res.ok) return;
+        const d = await res.json();
+        const deploy = d.data?.deploy as {
+          state?: string;
+          action?: string;
+          phase?: string;
+          message?: string;
+          logHint?: string;
+        } | undefined;
+        if (!deploy || !isMountedRef.current) return;
+
+        if (deploy.state === "running") {
+          const phaseLabel =
+            deploy.phase === "build"
+              ? "Building…"
+              : deploy.phase === "install"
+                ? "Installing dependencies…"
+                : deploy.phase === "restart"
+                  ? "Restarting server…"
+                  : deploy.phase === "git"
+                    ? "Updating code…"
+                    : deploy.message || "Working…";
+          setMessage(phaseLabel);
+          return;
+        }
+
+        if (deploy.state === "success") {
           clearInterval(interval);
           pollIntervalRef.current = null;
-          const d = await res.json();
-          if (!isMountedRef.current) return;
-          if (d.data) setVersion(d.data);
-          setUpdating(false);
-          setRestarting(false);
-          setRebuilding(false);
-          setServerRestarting(false);
-          busyRef.current = false;
-          setCheckState(d.data?.updateAvailable ? "update-available" : "up-to-date");
-          setMessage("Done!");
+          clearDeployBusy();
+          const label =
+            expectedAction === "rebuild"
+              ? "Rebuild complete"
+              : expectedAction === "restart"
+                ? "Restart complete"
+                : "Update complete";
+          setMessage(label);
           setTimeout(() => {
             if (isMountedRef.current) setMessage(null);
-          }, 3000);
+          }, 4000);
+          return;
+        }
+
+        if (deploy.state === "failed") {
+          clearInterval(interval);
+          pollIntervalRef.current = null;
+          clearDeployBusy();
+          const hint = deploy.logHint ? ` — see Logs → ${deploy.logHint}` : "";
+          setMessage((deploy.message || "Deploy failed") + hint);
         }
       } catch {
         if (attempts >= maxAttempts) {
           clearInterval(interval);
           pollIntervalRef.current = null;
           if (!isMountedRef.current) return;
-          setUpdating(false);
-          setRestarting(false);
-          setRebuilding(false);
-          setServerRestarting(false);
-          busyRef.current = false;
-          setMessage("Timeout — check server");
+          clearDeployBusy();
+          setMessage("Timed out — check ch-restart.log in Logs");
         }
       }
     }, 2000);
@@ -422,7 +448,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             </button>
           ) : (
             <button
-              onClick={() => openDropdown("check")}
+              onClick={() => openCheckDropdown()}
               disabled={checkState === "checking" || isBusy}
               className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
               title={checkState === "checking" ? "Checking..." : "Check for Update"}
@@ -433,7 +459,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
 
           {/* Rebuild */}
           <button
-            onClick={() => openDropdown("rebuild")}
+            onClick={() => doRebuild()}
             disabled={isBusy}
             className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
             title={message || "Rebuild App"}
@@ -464,7 +490,7 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
     if (checkState === "idle") {
       return (
         <button
-          onClick={() => openDropdown("check")}
+          onClick={() => openCheckDropdown()}
           disabled={isBusy}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs font-mono text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
         >
@@ -521,9 +547,12 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         {/* Status message — visible inline when operation is in progress */}
         {message && (
           <div className="min-h-[1.25rem] px-1 text-[10px] font-mono text-white/50 text-center leading-tight">
-            {serverRestarting ? "Restarting server…" : message}
+            {message}
           </div>
         )}
+        <p className="px-1 text-[9px] font-mono text-white/25 text-center leading-tight">
+          Check = compare to remote · Update = pull · Rebuild = build + restart
+        </p>
 
         {/* Check — full width on its own row */}
         {renderCheckButton()}
@@ -531,7 +560,9 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
         {/* Rebuild + Restart — side by side */}
         <div className="flex gap-1.5">
           <button
-            onClick={() => openDropdown("rebuild")}
+            type="button"
+            title="npm run build + restart (current checkout)"
+            onClick={() => doRebuild()}
             disabled={isBusy}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-mono transition-colors disabled:opacity-50 ${
               rebuilding
@@ -544,6 +575,8 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
           </button>
 
           <button
+            type="button"
+            title="Restart next-server only (no build)"
             onClick={handleRestart}
             disabled={isBusy}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-mono transition-colors disabled:opacity-50 ${

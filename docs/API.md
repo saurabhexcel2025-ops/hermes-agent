@@ -66,7 +66,7 @@ All error handlers must call `logApiError(route, context, error)` from `@/lib/ap
 | `/api/sync` | `GET`, `POST` | Background sync control and status. |
 | `/api/templates` | `GET`, `POST`, `PUT`, `DELETE` | Mission template CRUD. |
 | `/api/tools` | `GET`, `PUT` | Read/update toolset configuration. |
-| `/api/update` | `GET`, `POST` | Check release status (`?branch=`, `?branches=1`). `POST` body: `action` = `restart` \| `rebuild` \| `update`; optional `branch`. Spawns `scripts/application/ch-deploy.sh`. |
+| `/api/update` | `GET`, `POST` | **GET** `?branch=` — compare local `HEAD` to `origin/<branch>`; `?branches=1` — branch list; **`?deploy=1`** — read `ch-deploy.status` (+ log tail on failure). **POST** `action` = `restart` \| `rebuild` \| `update`; optional `branch` (update/rebuild checkout only; rebuild omits branch = current tree). Returns **409** if a deploy is already `running`. Requires `CH_ENABLE_DEPLOY_API`. Spawns `scripts/application/ch-deploy.sh`. |
 
 ## System cron notes
 
