@@ -15,7 +15,7 @@ import {
 import { dirname, join } from "path";
 import { PATHS } from "../paths";
 
-export const BASELINE_SCHEMA_VERSION = 1;
+export const BASELINE_SCHEMA_VERSION = 2;
 
 const SCHEMA_VERSION_KEY = "schema_version";
 

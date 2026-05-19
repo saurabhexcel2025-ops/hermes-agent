@@ -10,7 +10,7 @@ import { logApiError } from "@/lib/api-logger";
 import { ensureDb } from "@/lib/db";
 import { PATHS } from "@/lib/paths";
 import { requireAuth } from "@/lib/api-auth";
-import { TEMPLATES } from "@/lib/mission-helpers";
+import { listCatalogTemplates } from "@/lib/catalog-template-repository";
 import { resolveTemplateCategoryId } from "@/lib/mission-category-repository";
 import type { LocalDirEntry } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
@@ -167,26 +167,31 @@ export async function GET() {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-    const builtInTemplates = TEMPLATES.map((t) => ({
+    const builtInTemplates = listCatalogTemplates().map((t) => ({
       id: t.id,
       name: t.name,
       icon: t.icon,
       color: t.color,
-      category: t.category,
-      categoryId: resolveTemplateCategoryId(t.category) ?? "general",
-      profile: t.profile,
+      category: t.categoryId ?? "general",
+      categoryId: t.categoryId ?? resolveTemplateCategoryId(undefined) ?? "general",
+      profile: t.profileSlug,
       description: t.description,
       instruction: t.instruction,
       context: t.context,
       goals: t.goals,
       suggestedSkills: t.suggestedSkills,
+      outputFormat: t.outputFormat,
+      constraints: t.constraints,
+      localDirs: t.localDirs,
+      references: t.references,
+      missionTimeMinutes: t.missionTimeMinutes,
+      timeoutMinutes: t.timeoutMinutes,
       dispatchMode: "now" as const,
       schedule: "every 5m",
-      defaultModel: t.defaultModel,
-      defaultProvider: t.defaultProvider,
       createdAt: new Date(0).toISOString(),
       updatedAt: new Date(0).toISOString(),
       isCustom: false as const,
+      seedKey: t.seedKey,
     }));
 
     const templates = [...customTemplates, ...builtInTemplates];

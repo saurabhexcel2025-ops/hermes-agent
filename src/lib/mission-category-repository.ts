@@ -12,7 +12,7 @@ export interface MissionCategory {
   name: string;
   color: string;
   sortOrder: number;
-  isSystem: boolean;
+  seedKey: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,7 +22,7 @@ interface CategoryRow {
   name: string;
   color: string;
   sort_order: number;
-  is_system: number;
+  seed_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,7 +43,7 @@ function rowToCategory(row: CategoryRow): MissionCategory {
     name: row.name,
     color: row.color,
     sortOrder: row.sort_order,
-    isSystem: row.is_system === 1,
+    seedKey: row.seed_key,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -170,8 +170,8 @@ export function createCategory(data: {
 
   db()
     .prepare(
-      `INSERT INTO mission_categories (id, name, color, sort_order, is_system, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`,
+      `INSERT INTO mission_categories (id, name, color, sort_order, seed_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, ?, ?)`,
     )
     .run(id, name, color, sortOrder, ts, ts);
 
@@ -263,10 +263,6 @@ export function deleteCategory(
 ): boolean {
   const existing = getCategory(id);
   if (!existing) return false;
-  if (existing.isSystem) {
-    throw new Error("System categories cannot be deleted");
-  }
-
   const missionCount = countMissionsInCategory(id);
   const templateCount = countTemplatesInCategory(id);
   if (missionCount > 0 || templateCount > 0) {
@@ -287,10 +283,16 @@ export function deleteCategory(
 }
 
 const DEFAULT_CATEGORY_SEED_SQL = `
-INSERT OR IGNORE INTO mission_categories (id, name, color, sort_order, is_system)
+INSERT OR IGNORE INTO mission_categories (id, name, color, sort_order, seed_key)
 VALUES
-  ('general', 'General', 'cyan', 0, 1),
-  ('engineering', 'Engineering', 'purple', 1, 1);
+  ('general', 'General', 'cyan', 0, 'ch.cat.general'),
+  ('engineering', 'Engineering', 'purple', 1, 'ch.cat.engineering'),
+  ('research', 'Research & Report', 'blue', 2, 'ch.cat.research'),
+  ('quality', 'Quality & Testing', 'pink', 3, 'ch.cat.quality'),
+  ('operations', 'Operations', 'orange', 4, 'ch.cat.operations'),
+  ('data', 'Data & Analytics', 'green', 5, 'ch.cat.data'),
+  ('creative', 'Creative & Content', 'purple', 6, 'ch.cat.creative'),
+  ('maintenance', 'Maintenance', 'orange', 7, 'ch.cat.maintenance');
 `;
 
 /** Seed system categories when the table exists but has no rows. */

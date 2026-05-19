@@ -315,7 +315,7 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-3000}
 
 **Scripts:**
 
-- `scripts/application/ch-deploy.sh` — **`restart`** (no git/build), **`rebuild`** (build current tree + restart; optional `--branch` for local checkout only — no pull), or **`update`** (pull **CH_UPDATE_GIT_BRANCH**, install deps if needed, build, profile gate, restart); status in **`~/.hermes/logs/ch-deploy.status`**; reads **`CH_*` / `HERMES_HOME` / `INSTALL_HERMES_*`** from `.env.local`; bundled Hermes profile sync gated by **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES`** (see `scripts/lib/ch-deploy-impl.sh`)
+- `scripts/application/ch-deploy.sh` — **`restart`** (no git/build), **`rebuild`** (build current tree + restart; optional `--branch` for local checkout only — no pull), or **`update`** (pull **CH_UPDATE_GIT_BRANCH**, install deps if needed, build, **`seed-catalog.ts --merge`**, restart); status in **`~/.hermes/logs/ch-deploy.status`**; reads **`CH_*` / `HERMES_HOME`** from `.env.local`
 
 - `scripts/bootstrap/install.sh` — Bootstrap clone + setup, or **`--in-repo`**; optional **`INSTALL_HERMES_PROFILE_TEMPLATES`** for bundled Hermes templates (see script header)
 
@@ -323,7 +323,7 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-3000}
 
 - `scripts/bootstrap/stop.sh` — Stop listeners on PORT (used standalone; `ch-deploy restart` stops port inline)
 
-- `scripts/lib/ch-hermes-profile-templates.sh` — Shared bundled Hermes profile install/sync (used by bootstrap install + `ch-deploy update`)
+- `scripts/lib/ch-hermes-profile-templates.sh` — Optional install-only copy from **`data/seed/profiles/`** (bootstrap `install.sh`; update uses **`seed-catalog.ts`**)
 
 - **Scripts layout** (bootstrap vs tooling vs `ch-deploy`): **[docs/DEPLOY.md](docs/DEPLOY.md)**
 

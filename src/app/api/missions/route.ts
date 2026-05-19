@@ -23,6 +23,7 @@ import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
 import { createCronJob, pushJobToHermes } from "@/lib/cron-repository";
 import { getCategory } from "@/lib/mission-category-repository";
+import { listProfiles } from "@/lib/profiles-repository";
 import {
   deleteMissionCron,
   enrichMissionCron,
@@ -157,19 +158,25 @@ export async function POST(request: NextRequest) {
         constraints: constraints ?? "",
       });
 
-      // Resolve Hermes profile name to the DB profile_id for the mission record.
-      // listProfiles() returns profiles keyed by their Hermes directory name
-      // (which is what hermes --profile <name> expects). We use it directly
-      // as the profile_id so the mission record shows which profile was used.
+      // Resolve profile slug from Control Hub registry (matches Hermes --profile <slug>).
       let resolvedProfileId: string | undefined;
-      if (profileName) {
-        try {
-          const profiles = await agentBackend.listProfiles();
-          const match = profiles.find(
-            (p) => p.name === profileName || p.id === profileName
-          );
-          resolvedProfileId = match?.id;
-        } catch { /* profile lookup failed — leave undefined */ }
+      const profileKey = profileName ?? profileId;
+      if (profileKey) {
+        if (profileKey === "default") {
+          resolvedProfileId = "default";
+        } else {
+          try {
+            const profiles = listProfiles();
+            const match = profiles.find(
+              (p) =>
+                p.slug === profileKey ||
+                p.displayName === profileKey,
+            );
+            resolvedProfileId = match?.slug ?? profileKey;
+          } catch {
+            resolvedProfileId = profileKey;
+          }
+        }
       }
 
       const mission = createMission({

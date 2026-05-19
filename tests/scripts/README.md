@@ -9,7 +9,7 @@ docker run --rm -v "$(pwd)":/work -w /work bash:5 bash tests/scripts/run-shell-c
 
 Exit code **0** = all checks passed.
 
-The update-profile gate assertions **must stay aligned** with the `case` / TTY block in `scripts/lib/ch-deploy-impl.sh` (search for `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES`).
+Profile templates are validated via `ch-hermes-profile-templates.sh` (install-only). **`ch-deploy update`** runs `seed-catalog.ts --merge` instead of the legacy `CH_UPDATE_SYNC_*` gate.
 
 ## Docker — dashboard restart smoke
 

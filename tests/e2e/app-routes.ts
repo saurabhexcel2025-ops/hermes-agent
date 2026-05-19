@@ -24,6 +24,7 @@ export const APP_NAV_ROUTES: readonly string[] = [
   "/config/logging",
   "/config/memory",
   "/config/models",
+  "/config/seed",
   "/config/platform_toolsets",
   "/config/privacy",
   "/config/security",

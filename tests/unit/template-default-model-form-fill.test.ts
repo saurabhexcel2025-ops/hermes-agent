@@ -41,6 +41,35 @@ jest.mock("@/lib/paths", () => ({
   CH_DATA_DIR: "/tmp/ch",
 }));
 
+jest.mock("@/lib/db", () => ({
+  ensureDb: jest.fn(),
+}));
+
+jest.mock("@/lib/catalog-template-repository", () => ({
+  listCatalogTemplates: jest.fn(() => [
+    {
+      id: "bug-hunt",
+      seedKey: "ch.tpl.bug-hunt",
+      name: "Bug Hunt",
+      icon: "Bug",
+      color: "pink",
+      categoryId: "quality",
+      profileSlug: "qa",
+      description: "Test",
+      instruction: "Fix bugs",
+      context: "",
+      goals: ["Reproduce"],
+      outputFormat: "Markdown",
+      constraints: "Scope only",
+      suggestedSkills: [],
+      localDirs: [],
+      references: [],
+      missionTimeMinutes: null,
+      timeoutMinutes: 30,
+    },
+  ]),
+}));
+
 describe("/api/templates GET — built-in template defaults", () => {
   it("built-in template entries carry no explicit defaultModel or defaultProvider", async () => {
     const { GET } = require("@/app/api/templates/route") as typeof import("@/app/api/templates/route");

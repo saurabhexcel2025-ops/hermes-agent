@@ -96,6 +96,7 @@ export const configGroups: ConfigGroup[] = [
     defaultOpen: false,
     links: [
       { icon: Cpu, label: "Agent", href: "/config/agent", color: "cyan" },
+      { icon: RotateCcw, label: "Seed", href: "/config/seed", color: "cyan" },
       { icon: Activity, label: "Display", href: "/config/display", color: "green" },
       { icon: Layers, label: "Memory", href: "/config/memory", color: "pink" },
     ],

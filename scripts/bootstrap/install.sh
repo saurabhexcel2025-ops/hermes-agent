@@ -91,7 +91,7 @@ if [ "$IN_REPO" = true ]; then
     ch_resolve_hermes_home
 
     if ! ch_hermes_config_present; then
-        info "Skipping optional Hermes profile templates (no $HERMES_HOME/config.yaml). Run Hermes setup, then re-run install or apply templates from scripts/bundled-profiles/."
+        info "Skipping optional Hermes profile templates (no $HERMES_HOME/config.yaml). Run Hermes setup, then re-run install or apply templates from data/seed/profiles/."
     else
         run_profile_templates=false
         if noninteractive; then

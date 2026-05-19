@@ -122,6 +122,9 @@ export interface AgentProfile {
   skillsCount: number;
   toolsCount: number;
   files: ProfileFile[];
+  syncStatus?: "synced" | "drift" | "error";
+  syncedAt?: string | null;
+  syncError?: string | null;
 }
 
 export interface ProfilesData {

@@ -8,7 +8,7 @@ Control Hub missions are stored in SQLite (`missions` table) with optional JSON 
 - The API builds the stored `prompt` via `buildMissionPrompt()` in `src/lib/build-mission-prompt.ts` — XML under `<hermes_mission>` (agent payload).
 - The composer preview can toggle **Human** (form mirror) vs **AI** (stored agent prompt).
 - Editing uses `parseMissionPrompt()` for instruction/context/output/constraints; goals, dirs, refs, and skills load from DB columns.
-- `output_format` and `constraints` columns (migration `003_mission_output_constraints.sql`) persist those fields for edit round-trip.
+- `output_format` and `constraints` columns (baseline schema) persist those fields for edit round-trip.
 - Missions saved before the XML format may need re-save after deploy.
 
 ## Categories
@@ -16,7 +16,7 @@ Control Hub missions are stored in SQLite (`missions` table) with optional JSON 
 - User-managed categories live in `mission_categories` (SQLite).
 - Missions use `category_id` (nullable). Templates store `categoryId` in custom JSON.
 - APIs: `GET/POST/PUT/DELETE /api/mission-categories`.
-- Migration `002_mission_categories.sql` seeds **General** and **Engineering** system categories.
+- Default categories are seeded via `src/lib/db/seeds/001_mission_categories.sql` and **`npm run db:seed`** (8 categories with `seed_key`).
 
 ### Database migrations (operator)
 

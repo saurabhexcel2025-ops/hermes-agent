@@ -80,7 +80,7 @@ Mission and template Zod schemas live in **`src/lib/schema/`**; regenerate JSON 
 |--------|------|
 | `scripts/bootstrap/install.sh` | Clone + `scripts/bootstrap/setup.sh`, or `--in-repo`. Optional Hermes templates: `INSTALL_HERMES_PROFILE_TEMPLATES=yes` or interactive prompt when `HERMES_HOME/config.yaml` exists |
 | `scripts/bootstrap/setup.sh` | `.env.local`, PORT, optional Hermes/Hindsight, `npm install`, build |
-| `scripts/application/ch-deploy.sh` | **`update`** \| **`restart`** \| **`rebuild`** — single CLI / dashboard deploy entry (`POST /api/update`; pull, conditional npm, build, profile gate, discover-agents, restart). Options: `--branch` |
+| `scripts/application/ch-deploy.sh` | **`update`** \| **`restart`** \| **`rebuild`** — single CLI / dashboard deploy entry (`POST /api/update`; pull, conditional npm, build, `db:migrate` + `db:seed`, discover-agents, restart). Options: `--branch` |
 | `scripts/bootstrap/stop.sh` | Stop `next start` listeners on PORT |
 | `scripts/tooling/prebuild-db.mjs` | Invoked via `npm run prebuild` |
 | `scripts/tooling/discover-agents.mjs` | `npm run discover-hermes` |
@@ -89,7 +89,7 @@ Mission and template Zod schemas live in **`src/lib/schema/`**; regenerate JSON 
 | `scripts/bootstrap/setup-hindsight.sh` | Hindsight-only install |
 | `scripts/git-hooks/pre-push` | Optional: `git config core.hooksPath scripts/git-hooks` |
 
-Preset system cron shells: **`scripts/hardware/`**. Hermes markdown templates: **`scripts/bundled-profiles/`**. Shared bash modules: **`scripts/lib/`**. Full layout: [docs/DEPLOY.md](docs/DEPLOY.md).
+Preset system cron shells: **`scripts/hardware/`**. Professional profiles/templates: **`data/seed/`** (SQLite + Hermes push). Shared bash modules: **`scripts/lib/`**. Full layout: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ---
 
@@ -106,14 +106,12 @@ Control Hub reads and writes Hermes **`config.yaml`** (and related files) throug
 
 ---
 
-## Bundled Hermes profile templates
+## Professional catalog (profiles + templates)
 
-Markdown templates live under [`scripts/bundled-profiles/`](scripts/bundled-profiles/) (QA, DevOps, SWE, plus reserved names for future packs). They install under **`HERMES_HOME/profiles/<name>/`** (default **`~/.hermes`**).
+Shipped under **`data/seed/profiles/`** and **`data/seed/template-packs/`**. Control Hub SQLite is the source of truth; **`npm run db:seed`** (also run from `setup.sh` and `ch-deploy update`) upserts categories, templates, and profiles, then pushes profile trees to **`HERMES_HOME/profiles/<slug>/`**.
 
-- **Install** (`scripts/bootstrap/install.sh` after `scripts/bootstrap/setup.sh`): optional. Requires **`HERMES_HOME/config.yaml`**. Copies **only missing** `SOUL.md` / `AGENTS.md` / `auth.json`. Non-interactive installs need **`INSTALL_HERMES_PROFILE_TEMPLATES=yes`**.
-- **Update** (`bash scripts/application/ch-deploy.sh update`): refreshes those bundled files from the repo when enabled. Interactive runs prompt before overwriting; dashboard deploy (`POST /api/update`) runs non-interactively and syncs by default unless **`CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no`**. Custom profiles you created are untouched.
-
-Shared logic: [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-hermes-profile-templates.sh). Keys **`HERMES_HOME`** / **`CH_*`** / **`INSTALL_HERMES_*`** in `.env.local` are read by **`ch-deploy`** and **`scripts/bootstrap/install.sh`** where documented.
+- **Restore defaults:** Config → Seed (`/config/seed`) or `POST /api/seed`.
+- **Install-only bash copy:** optional `INSTALL_HERMES_PROFILE_TEMPLATES=yes` on non-interactive `scripts/bootstrap/install.sh` via [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-hermes-profile-templates.sh).
 
 ---
 

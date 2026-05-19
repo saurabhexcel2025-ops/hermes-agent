@@ -9,7 +9,7 @@ export interface ManagedCategory {
   id: string;
   name: string;
   color: string;
-  isSystem?: boolean;
+  seedKey?: string | null;
   missionCount: number;
   templateCount: number;
 }
@@ -198,8 +198,8 @@ export default function CategoryManagerModal({
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-mono text-white/80 truncate">
                     {c.name}
-                    {c.isSystem ? (
-                      <span className="text-white/30 ml-1">(system)</span>
+                    {c.seedKey ? (
+                      <span className="text-white/30 ml-1">(default)</span>
                     ) : null}
                   </div>
                   <div className="text-[10px] font-mono text-white/30">
@@ -213,18 +213,16 @@ export default function CategoryManagerModal({
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
-                {!c.isSystem && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeleteTarget(c.id);
-                      setReassignId(null);
-                    }}
-                    className="p-1 text-white/30 hover:text-red-400"
-                  >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteTarget(c.id);
+                    setReassignId(null);
+                  }}
+                  className="p-1 text-white/30 hover:text-red-400"
+                >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                )}
               </>
             )}
           </div>

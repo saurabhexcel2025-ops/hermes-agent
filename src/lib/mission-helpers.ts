@@ -38,44 +38,5 @@ export interface TemplateDef {
 // scope, and safety headers before sending to the agent.
 // ═══════════════════════════════════════════════════════════════
 
-export const TEMPLATES: TemplateDef[] = [
-  {
-    id: "agent-general",
-    name: "Agent Task",
-    icon: "Bot",
-    color: "cyan",
-    category: "General",
-    profile: "default",
-    description: "Run a general-purpose coding or research task",
-    instruction: "Execute the task described below. Work in ~/control-hub/ for any file operations. Keep your working directory tidy. Report what you did and what changed.",
-    context: "",
-    goals: ["Understand the task", "Plan your approach", "Execute", "Report results"],
-    suggestedSkills: [],
-  },
-  {
-    id: "agent-refactor",
-    name: "Refactor",
-    icon: "RefreshCw",
-    color: "cyan",
-    category: "Engineering",
-    profile: "default",
-    description: "Improve code quality and structure without changing behaviour",
-    instruction: "Refactor the specified code. Do NOT change external behaviour — the refactored code must produce identical results. Run tests after each change. Report every change made.",
-    context: "Code to refactor:\n",
-    goals: ["Read & understand code", "Plan refactor", "Execute refactor", "Run tests"],
-    suggestedSkills: ["refactoring-patterns"],
-  },
-  {
-    id: "agent-debug",
-    name: "Debug",
-    icon: "Bug",
-    color: "pink",
-    category: "Engineering",
-    profile: "default",
-    description: "Find and fix a specific bug or error",
-    instruction: "Reproduce the bug, find its root cause, implement a fix, verify the fix works, and run the test suite. Report: root cause, what was changed, test results.",
-    context: "Bug description (error, steps to reproduce):\n",
-    goals: ["Reproduce the bug", "Find root cause", "Implement fix", "Verify & build"],
-    suggestedSkills: ["systematic-debugging"],
-  },
-];
+/** Built-in templates are loaded from SQLite catalog_templates (see seed-catalog). */
+export const TEMPLATES: TemplateDef[] = [];

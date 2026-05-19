@@ -47,33 +47,35 @@ ch_deploy_log_both() {
   ch_deploy_log_restart "$@"
 }
 
-# Kill every PID ss reports listening on TCP port $1 (multiple socat / fork).
-ch_deploy_kill_tcp_listeners_on_port() {
-  local port="$1"
-  local p
-  for p in $(ss -tlnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u); do
-    kill -9 "$p" 2>/dev/null || true
-  done
-}
-
 ch_deploy_acquire_lock() {
-  exec 200>"$LOCK_FILE"
-  if ! flock -n 200; then
-    local LOCK_PID
-    LOCK_PID=$(fuser "$LOCK_FILE" 2>/dev/null | head -1 || echo "")
-    if [ -n "$LOCK_PID" ]; then
-      ch_deploy_log_both "ERROR: Deploy already running (PID $LOCK_PID)"
-    else
-      ch_deploy_log_both "ERROR: Could not acquire deploy lock"
+  if command -v flock &>/dev/null; then
+    exec 200>"$LOCK_FILE"
+    if ! flock -n 200; then
+      ch_deploy_log_both "ERROR: Deploy already running (lock held)"
+      return 1
     fi
+    CH_DEPLOY_LOCK_MODE=flock
+    return 0
+  fi
+  local lock_dir="${LOCK_FILE}.d"
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    ch_deploy_log_both "ERROR: Deploy already running (lock held)"
     return 1
   fi
+  CH_DEPLOY_LOCK_MODE=mkdir
+  CH_DEPLOY_LOCK_DIR="$lock_dir"
   return 0
 }
 
 ch_deploy_release_lock() {
-  flock -u 200 2>/dev/null || true
-  exec 200>&- 2>/dev/null || true
+  if [ "${CH_DEPLOY_LOCK_MODE:-}" = "flock" ]; then
+    flock -u 200 2>/dev/null || true
+    exec 200>&- 2>/dev/null || true
+  elif [ -n "${CH_DEPLOY_LOCK_DIR:-}" ]; then
+    rmdir "${CH_DEPLOY_LOCK_DIR}" 2>/dev/null || true
+    unset CH_DEPLOY_LOCK_DIR
+  fi
+  unset CH_DEPLOY_LOCK_MODE
 }
 
 ch_deploy_fail() {
@@ -138,69 +140,34 @@ ch_deploy_do_restart_body() {
 
   local PID_FILE="$HOME/.hermes/logs/ch-server.pid"
   local SOCAT_PID_FILE="$HOME/.hermes/logs/ch-socat.pid"
+  local ENV_FILE="$CH_APP_DIR/.env.local"
 
   ch_deploy_log_restart "Restarting server…"
 
-  local ENV_PORT=""
-  if [ -f "$CH_APP_DIR/.env.local" ]; then
-    ENV_PORT="$(grep -E '^PORT=' "$CH_APP_DIR/.env.local" | tail -n1 | sed 's/^PORT=//' | tr -d '\r')"
-  fi
-  local STALE_PORT="${ENV_PORT:-42069}"
-  local ZOMBIE_PIDS
-  ZOMBIE_PIDS=$(ss -tlnp "sport = :$STALE_PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
-  if [ -n "$ZOMBIE_PIDS" ]; then
-    for zp in $ZOMBIE_PIDS; do
-      if kill -0 "$zp" 2>/dev/null; then
-        ch_deploy_log_restart "Killing stale next-server on port $STALE_PORT (PID $zp)…"
-        kill -9 "$zp" 2>/dev/null || true
-      fi
-    done
-    sleep 1
+  local use_relay=0
+  local relay_listen
+  case "${CH_SOCAT_RELAY:-}" in 1 | yes | YES | true | True) use_relay=1 ;; esac
+  if [ -n "${CH_SOCAT_BIND:-}" ]; then
+    use_relay=1
   fi
 
-  local OLD_SOCAT_PID
-  OLD_SOCAT_PID=$(cat "$SOCAT_PID_FILE" 2>/dev/null || true)
-  if [ -n "$OLD_SOCAT_PID" ] && kill -0 "$OLD_SOCAT_PID" 2>/dev/null; then
-    ch_deploy_log_restart "Stopping old socat relay (PID $OLD_SOCAT_PID)…"
-    kill -9 "$OLD_SOCAT_PID" 2>/dev/null || true
-    sleep 1
+  local deploy_port="${PORT:-}"
+  if [ -z "$deploy_port" ] && [ -f "$ENV_FILE" ]; then
+    deploy_port="$(ch_env_read_port "$ENV_FILE" 2>/dev/null || true)"
   fi
-  local RELAY_PORT="${CH_SOCAT_RELAY_PORT:-42069}"
-  ch_deploy_log_restart "Stopping all listeners on relay port ${RELAY_PORT}…"
-  ch_deploy_kill_tcp_listeners_on_port "$RELAY_PORT"
-  sleep 1
-
-  local PORT="42069"
-  while ch_tcp_port_in_use "$PORT" 2>/dev/null; do
-    local BLOCKER_PIDS
-    BLOCKER_PIDS=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)
-    if [ -n "$BLOCKER_PIDS" ]; then
-      for p in $BLOCKER_PIDS; do
-        if kill -0 "$p" 2>/dev/null; then
-          ch_deploy_log_restart "Port $PORT held by PID $p — killing…"
-          kill -9 "$p" 2>/dev/null || true
-        fi
-      done
-      sleep 2
-    fi
-    if ch_tcp_port_in_use "$PORT" 2>/dev/null; then
-      ch_deploy_log_restart "Port $PORT still in use — trying next port…"
-      PORT=$((PORT + 1))
-      if [ "$PORT" -gt 42100 ]; then
-        ch_deploy_log_restart "ERROR: No free port in 42069–42100"
-        return 1
-      fi
-    fi
-  done
-  [ "$PORT" != "42069" ] && ch_deploy_log_restart "Port 42069 unavailable — using $PORT"
-
-  if [ -f "$CH_APP_DIR/.env.local" ]; then
-    if grep -q '^PORT=' "$CH_APP_DIR/.env.local" 2>/dev/null; then
-      sed -i "s/^PORT=.*/PORT=$PORT/" "$CH_APP_DIR/.env.local"
-    else
-      echo "PORT=$PORT" >>"$CH_APP_DIR/.env.local"
-    fi
+  if [ -z "$deploy_port" ]; then
+    deploy_port="$(ch_auto_pick_port 2>/dev/null || true)"
   fi
+  if [ -z "$deploy_port" ]; then
+    deploy_port="42069"
+  fi
+  if ! ch_validate_port_number "$deploy_port"; then
+    ch_deploy_log_restart "ERROR: Invalid PORT in .env.local: $deploy_port"
+    return 1
+  fi
+
+  ch_deploy_log_restart "Stopping listeners on configured port $deploy_port…"
+  ch_kill_tcp_listeners_on_port "$deploy_port"
 
   if [ -f "$PID_FILE" ]; then
     local OLD_SERVER_PID
@@ -213,11 +180,38 @@ ch_deploy_do_restart_body() {
     sleep 1
   fi
 
-  local use_relay=0
-  local relay_listen
-  case "${CH_SOCAT_RELAY:-}" in 1 | yes | YES | true | True) use_relay=1 ;; esac
-  if [ -n "${CH_SOCAT_BIND:-}" ]; then
-    use_relay=1
+  if [ "$use_relay" -eq 1 ]; then
+    local RELAY_PORT="${CH_SOCAT_RELAY_PORT:-42069}"
+    local OLD_SOCAT_PID
+    OLD_SOCAT_PID=$(cat "$SOCAT_PID_FILE" 2>/dev/null || true)
+    if [ -n "$OLD_SOCAT_PID" ] && kill -0 "$OLD_SOCAT_PID" 2>/dev/null; then
+      ch_deploy_log_restart "Stopping old socat relay (PID $OLD_SOCAT_PID)…"
+      kill -9 "$OLD_SOCAT_PID" 2>/dev/null || true
+      sleep 1
+    fi
+    ch_deploy_log_restart "Stopping listeners on relay port ${RELAY_PORT}…"
+    ch_kill_tcp_listeners_on_port "$RELAY_PORT"
+    sleep 1
+  else
+    rm -f "$SOCAT_PID_FILE"
+  fi
+
+  if ch_tcp_port_in_use "$deploy_port" 2>/dev/null; then
+    ch_deploy_log_restart "Port $deploy_port still in use after stop — killing blockers…"
+    ch_kill_tcp_listeners_on_port "$deploy_port"
+    sleep 2
+    if ch_tcp_port_in_use "$deploy_port" 2>/dev/null; then
+      local fallback
+      fallback="$(ch_auto_pick_port 2>/dev/null || true)"
+      if [ -n "$fallback" ] && [ "$fallback" != "$deploy_port" ]; then
+        ch_deploy_log_restart "Port $deploy_port unavailable — using $fallback (updating .env.local)"
+        deploy_port="$fallback"
+        ch_env_set "$ENV_FILE" "PORT" "$deploy_port"
+      else
+        ch_deploy_log_restart "ERROR: Port $deploy_port still in use and no free port in 42069–42100"
+        return 1
+      fi
+    fi
   fi
   local HOST
   if [ "$use_relay" -eq 1 ]; then
@@ -228,10 +222,10 @@ ch_deploy_do_restart_body() {
   fi
   export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
-  ch_deploy_log_restart "Starting next-server on $HOST:$PORT…"
+  ch_deploy_log_restart "Starting next-server on $HOST:$deploy_port…"
   rm -f "$PID_FILE"
   ch_deploy_release_lock
-  nohup "$NODE_BIN" node_modules/next/dist/bin/next start -p "$PORT" -H "$HOST" \
+  nohup "$NODE_BIN" node_modules/next/dist/bin/next start -p "$deploy_port" -H "$HOST" \
     >>"$CH_RESTART_LOG" 2>&1 </dev/null &
   local SERVER_PID=$!
   echo "$SERVER_PID" >"$PID_FILE"
@@ -239,8 +233,8 @@ ch_deploy_do_restart_body() {
 
   local i ready=0
   for i in $(seq 1 20); do
-    if curl -s -o /dev/null -w '' "http://127.0.0.1:${PORT}" 2>/dev/null; then
-      ch_deploy_log_restart "Server is ready on http://127.0.0.1:${PORT}"
+    if curl -s -o /dev/null -w '' "http://127.0.0.1:${deploy_port}" 2>/dev/null; then
+      ch_deploy_log_restart "Server is ready on http://127.0.0.1:${deploy_port}"
       ready=1
       break
     fi
@@ -257,15 +251,15 @@ ch_deploy_do_restart_body() {
   fi
 
   if [ "$use_relay" -eq 1 ]; then
-    ch_deploy_log_restart "Starting socat relay on ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT…"
-    nohup /usr/bin/socat TCP-LISTEN:"$RELAY_PORT",fork,reuseaddr,bind="${relay_listen}" TCP:127.0.0.1:"$PORT" \
+    ch_deploy_log_restart "Starting socat relay on ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$deploy_port…"
+    nohup /usr/bin/socat TCP-LISTEN:"$RELAY_PORT",fork,reuseaddr,bind="${relay_listen}" TCP:127.0.0.1:"$deploy_port" \
       >>"$CH_RESTART_LOG" 2>&1 </dev/null &
     local SOCAT_PID=$!
     echo "$SOCAT_PID" >"$SOCAT_PID_FILE"
     ch_deploy_log_restart "socat relay started (PID $SOCAT_PID)"
     sleep 1
     if ss -tlnp "sport = :$RELAY_PORT" 2>/dev/null | grep -q LISTEN; then
-      ch_deploy_log_restart "Relay active: ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$PORT"
+      ch_deploy_log_restart "Relay active: ${relay_listen}:${RELAY_PORT} → 127.0.0.1:$deploy_port"
     else
       ch_deploy_log_restart "WARNING: socat relay may not have started correctly"
     fi
@@ -321,6 +315,13 @@ ch_deploy_cmd_rebuild() {
 
   ch_deploy_npm_install_if_needed "rebuild"
   ch_deploy_run_build "rebuild"
+
+  ch_deploy_log_restart "Running database migrations…"
+  "$NPM_BIN" run db:migrate >>"$CH_BUILD_LOG" 2>&1 || ch_deploy_log_restart "WARNING: db:migrate failed"
+  if command -v npx &>/dev/null; then
+    npx tsx "$CH_SCRIPTS_ROOT/tooling/seed-catalog.ts" --merge >>"$CH_BUILD_LOG" 2>&1 ||
+      ch_deploy_log_restart "WARNING: seed-catalog failed"
+  fi
 
   ch_deploy_status_write "running" "rebuild" "restart" "Restarting server…" "" "ch-restart.log"
   if ! ch_deploy_do_restart_body; then
@@ -382,46 +383,18 @@ ch_deploy_run_update() {
     fi
     ch_deploy_log_update "Build successful"
 
-    # shellcheck source=ch-hermes-profile-templates.sh
-    source "$SCRIPT_DIR/lib/ch-hermes-profile-templates.sh"
+    ch_deploy_log_update "Running database migrations…"
+    if ! "$NPM_BIN" run db:migrate >>"$LOG_FILE" 2>&1; then
+      ch_deploy_log_update "WARNING: db:migrate failed — see ch-update.log"
+    fi
 
-    local sync_profiles=false
-    case "${CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES:-}" in
-      no | NO | 0 | false | False)
-        ch_deploy_log_update "Skipping Hermes bundled profile sync (CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no)"
-        ;;
-      yes | YES | 1 | true | True)
-        sync_profiles=true
-        ;;
-      *)
-        if [ -t 0 ]; then
-          echo ""
-          echo "Control Hub update: refresh bundled Hermes profiles?" >&2
-          echo "" >&2
-          echo "  This replaces SOUL.md and AGENTS.md only for Control Hub's bundled profiles" >&2
-          echo "  (e.g. qa-engineer, devops-engineer, swe-engineer, and related defaults)." >&2
-          echo "  Any other profiles you created yourself are not touched." >&2
-          echo "" >&2
-          echo "  If you edited those bundled files, save or commit your changes first — they will be overwritten." >&2
-          echo "" >&2
-          read -r -p "Sync bundled profile templates now? [y/N]: " REPLY_SYNC_PROFILES
-          echo ""
-          if [[ "$REPLY_SYNC_PROFILES" =~ ^[Yy]$ ]]; then
-            sync_profiles=true
-          else
-            ch_deploy_log_update "Skipping Hermes bundled profile sync (declined at prompt)"
-          fi
-        else
-          sync_profiles=true
-        fi
-        ;;
-    esac
-
-    if [ "$sync_profiles" = true ]; then
-      ch_profiles_log() { ch_deploy_log_update "$*"; }
-      ch_deploy_log_update "Updating bundled Hermes agent profiles from templates…"
-      ch_bundled_profiles_sync "$APP_DIR"
-      ch_deploy_log_update "Bundled Hermes agent profiles updated"
+    ch_deploy_log_update "Seeding professional catalog (merge)…"
+    if command -v npx &>/dev/null; then
+      if ! npx tsx "$SCRIPT_DIR/tooling/seed-catalog.ts" --merge >>"$LOG_FILE" 2>&1; then
+        ch_deploy_log_update "WARNING: seed-catalog failed — see ch-update.log"
+      else
+        ch_deploy_log_update "Catalog seed complete"
+      fi
     fi
   fi
 

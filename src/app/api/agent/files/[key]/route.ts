@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "fs";
 
-import {
-  buildProfileHermesPathBundle,
-  resolveProfileHermesHome,
-} from "@/lib/hermes-agent-runtime";
+import { resolveProfileHermesHome, buildProfileHermesPathBundle } from "@/lib/hermes-profile-paths";
 import { getBehaviorFiles } from "@/lib/behavior-files";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
 import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
+import { ensureDb } from "@/lib/db";
+import { getProfile, updateProfileContent } from "@/lib/profiles-repository";
+import { pushProfileToHermes } from "@/lib/hermes-profile-sync";
 
 /** Resolve file path for a given key and optional profile */
 function resolveFilePath(
@@ -71,6 +71,28 @@ export async function GET(
   }
 
   try {
+    const prof = resolveSafeProfileName(profile);
+    const profileSlug = prof.ok ? prof.profile : "default";
+
+    if (profileSlug !== "default" && (key === "soul" || key === "agent")) {
+      ensureDb();
+      const row = getProfile(profileSlug);
+      if (row) {
+        const content = key === "soul" ? row.soulMd : row.agentsMd;
+        return NextResponse.json({
+          data: {
+            key,
+            content,
+            name: resolved.name,
+            description: resolved.description,
+            exists: content.length > 0,
+            size: content.length,
+            lastModified: row.updatedAt,
+          },
+        });
+      }
+    }
+
     if (!existsSync(resolved.path)) {
       return NextResponse.json({
         data: {
@@ -150,7 +172,26 @@ export async function PUT(
       }
     }
 
-    writeFileSync(resolved.path, content, "utf-8");
+    const prof = resolveSafeProfileName(profile);
+    const profileSlug = prof.ok ? prof.profile : "default";
+
+    if (profileSlug !== "default" && (key === "soul" || key === "agent") && getProfile(profileSlug)) {
+      ensureDb();
+      if (key === "soul") {
+        updateProfileContent(profileSlug, { soulMd: content });
+      } else {
+        updateProfileContent(profileSlug, { agentsMd: content });
+      }
+      const push = pushProfileToHermes(profileSlug);
+      if (!push.success) {
+        return NextResponse.json(
+          { error: push.error ?? "Failed to sync profile to Hermes" },
+          { status: 500 },
+        );
+      }
+    } else {
+      writeFileSync(resolved.path, content, "utf-8");
+    }
 
     appendAuditLine({
       action: "agent.file.put",

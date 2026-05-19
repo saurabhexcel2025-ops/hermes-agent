@@ -19,7 +19,7 @@ Override the host port in Docker Compose with **`PORT`** (see `docker-compose.ym
 | `scripts/lib/` | Shared bash modules (`ch-deploy-impl.sh`, Hermes profile templates, dotenv, port helpers, …) |
 | `scripts/tooling/` | **`prebuild-db.mjs`**, **`discover-agents.mjs`**, **`generate-json-schema.ts`** (also run via `npm run prebuild`, `npm run discover-agents`, `npm run generate:schema-json`) |
 | `scripts/hardware/` | Preset cron scripts; copied into **`CH_DATA_DIR/scripts`** when missing during **`scripts/bootstrap/setup.sh`**. Behaviour: **[SYSTEM-CRON.md](SYSTEM-CRON.md)**. |
-| `scripts/bundled-profiles/` | Hermes markdown templates synced by install/update when enabled |
+| `scripts/bundled-profiles/` | **Deprecated** — see `data/seed/profiles/` |
 | `scripts/git-hooks/` | Optional Git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
 
 Deploy from a shell (same commands the dashboard triggers via **`POST /api/update`**):
@@ -78,16 +78,18 @@ The production image includes the full **`scripts/`** tree (and `bash`, `git`, `
 
 Mount `CH_DATA_DIR` (and optionally `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR` if you keep hardware cron scripts outside the data tree) so the active Hermes install and Control Hub state match the host.
 
-## Hermes bundled profile templates
+## Database migrate + professional catalog seed
 
-Control Hub can copy **shipped** Hermes profile markdown from `scripts/bundled-profiles/` into **`HERMES_HOME/profiles/`** (see [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh)).
+After **`npm run build`**, **`setup.sh`**, and **`ch-deploy update` / `rebuild`**:
 
-| Variable | When | Behaviour |
-|----------|------|-----------|
-| `INSTALL_HERMES_PROFILE_TEMPLATES` | `scripts/bootstrap/install.sh`, non-interactive | Set to `yes` to install missing template files; omit/`no` skips (interactive defaults to a prompt when Hermes `config.yaml` exists). |
-| `CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES` | `scripts/application/ch-deploy.sh update` | `yes`: overwrite bundled `SOUL.md`/`AGENTS.md` from the repo. `no`: skip profile sync. Unset + interactive TTY: prompt. Unset + non-TTY (e.g. dashboard deploy spawn): sync by default. |
+1. **`npm run db:migrate`** — SQLite migrations on `CH_DATA_DIR/control-hub.db`
+2. **`npm run db:seed`** — upsert categories, catalog templates, and `agent_profiles`, then push profiles to **`HERMES_HOME/profiles/<slug>/`**
 
-`ch-deploy` loads **`HERMES_HOME`** and the variables above from **`.env.local`** when present (same keys as Next.js). For **systemd** or Docker **without** `.env.local**, export these in the unit file or Compose `environment` block.
+Control Hub SQLite is the **source of truth** for professional profiles; Hermes disk is the **runtime target** for missions/cron. Restore defaults at **Config → Seed** (`/config/seed`).
+
+Shipped seeds: **`data/seed/profiles/`**, **`data/seed/template-packs/control-hub-professional-v1.json`**. Optional install-only bash copy from **`data/seed/profiles/`**: [`scripts/lib/ch-hermes-profile-templates.sh`](../scripts/lib/ch-hermes-profile-templates.sh) (`INSTALL_HERMES_PROFILE_TEMPLATES=yes` on non-interactive `install.sh`).
+
+`ch-deploy` loads **`HERMES_HOME`** and **`CH_DATA_DIR`** from **`.env.local`** when present.
 
 ## TLS
 

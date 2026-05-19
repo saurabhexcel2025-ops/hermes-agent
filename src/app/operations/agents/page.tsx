@@ -270,6 +270,12 @@ export default function BehaviourPage() {
                     />
                     <span className="font-semibold text-white text-sm truncate">{profile.name}</span>
                     {profile.isDefault && <Badge color="cyan" size="sm">Default</Badge>}
+                    {!profile.isDefault && profile.syncStatus === "drift" && (
+                      <Badge color="orange" size="sm">Drift</Badge>
+                    )}
+                    {!profile.isDefault && profile.syncStatus === "error" && (
+                      <Badge color="orange" size="sm">Sync error</Badge>
+                    )}
                   </div>
                   <p className="text-xs text-white/40 line-clamp-2 mb-2">{profile.description}</p>
                   <div className="flex items-center gap-2 text-[10px] text-white/30 font-mono">

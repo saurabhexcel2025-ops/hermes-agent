@@ -68,3 +68,75 @@ ch_tcp_port_in_use() {
   fi
   return 1
 }
+
+# Print unique PIDs listening on TCP port (one per line). Portable (no grep -oP).
+ch_pids_on_tcp_port() {
+  local port="$1"
+  local p line
+  if command -v ss &>/dev/null; then
+    while IFS= read -r line; do
+      case "$line" in
+        *pid=*)
+          p="${line#*pid=}"
+          p="${p%%,*}"
+          p="${p%%)*}"
+          [ -n "$p" ] && printf '%s\n' "$p"
+          ;;
+      esac
+    done < <(ss -tlnp "sport = :$port" 2>/dev/null || true)
+    return 0
+  fi
+  if command -v lsof &>/dev/null; then
+    lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+    return 0
+  fi
+  return 0
+}
+
+# Kill all processes listening on TCP port (best-effort).
+ch_kill_tcp_listeners_on_port() {
+  local port="$1"
+  local p
+  for p in $(ch_pids_on_tcp_port "$port" | sort -u); do
+    kill -9 "$p" 2>/dev/null || true
+  done
+}
+
+# Stop Control Hub server + optional socat relay. $1 = app root directory.
+ch_stop_control_hub() {
+  local app_dir="$1"
+  local env_file="${app_dir}/.env.local"
+  local port="${PORT:-}"
+  if [ -z "$port" ] && [ -f "$env_file" ]; then
+    port="$(ch_env_read_port "$env_file" 2>/dev/null || true)"
+  fi
+  port="${port:-42069}"
+
+  ch_kill_tcp_listeners_on_port "$port"
+
+  local socat_pid_file="${HOME}/.hermes/logs/ch-socat.pid"
+  local server_pid_file="${HOME}/.hermes/logs/ch-server.pid"
+  local old_pid
+
+  old_pid="$(cat "$server_pid_file" 2>/dev/null || true)"
+  if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+    kill -9 "$old_pid" 2>/dev/null || true
+  fi
+  rm -f "$server_pid_file"
+
+  old_pid="$(cat "$socat_pid_file" 2>/dev/null || true)"
+  if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+    kill -9 "$old_pid" 2>/dev/null || true
+  fi
+  rm -f "$socat_pid_file"
+
+  local use_relay=0
+  case "${CH_SOCAT_RELAY:-}" in 1 | yes | YES | true | True) use_relay=1 ;; esac
+  if [ -n "${CH_SOCAT_BIND:-}" ]; then
+    use_relay=1
+  fi
+  if [ "$use_relay" -eq 1 ]; then
+    local relay_port="${CH_SOCAT_RELAY_PORT:-42069}"
+    ch_kill_tcp_listeners_on_port "$relay_port"
+  fi
+}

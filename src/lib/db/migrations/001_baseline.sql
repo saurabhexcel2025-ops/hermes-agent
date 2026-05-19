@@ -29,13 +29,17 @@ CREATE TABLE missions (
   mission_time_minutes INTEGER,
   timeout_minutes      INTEGER,
   schedule             TEXT,
-  cron_job_id          TEXT
+  cron_job_id          TEXT,
+  category_id          TEXT,
+  output_format        TEXT,
+  constraints          TEXT
 );
 
 CREATE INDEX idx_missions_status   ON missions(status);
 CREATE INDEX idx_missions_profile  ON missions(profile_id);
 CREATE INDEX idx_missions_session  ON missions(session_id);
 CREATE INDEX idx_mission_cron_job  ON missions(cron_job_id) WHERE cron_job_id IS NOT NULL;
+CREATE INDEX idx_missions_category ON missions(category_id);
 
 -- ── credentials ─────────────────────────────────────────────
 CREATE TABLE credentials (
@@ -221,6 +225,69 @@ CREATE TABLE error_log_entries (
 );
 
 CREATE INDEX idx_errors_timestamp ON error_log_entries(timestamp DESC);
+
+-- ── mission_categories ──────────────────────────────────────
+CREATE TABLE mission_categories (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  color       TEXT NOT NULL DEFAULT 'cyan',
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  seed_key    TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX idx_mission_categories_name
+  ON mission_categories(lower(name));
+
+CREATE UNIQUE INDEX idx_mission_categories_seed_key
+  ON mission_categories(seed_key) WHERE seed_key IS NOT NULL;
+
+-- ── agent_profiles (Control Hub source of truth) ─────────────
+CREATE TABLE agent_profiles (
+  slug            TEXT PRIMARY KEY,
+  display_name    TEXT NOT NULL,
+  description     TEXT NOT NULL DEFAULT '',
+  personality     TEXT NOT NULL DEFAULT 'technical',
+  config_yaml     TEXT NOT NULL DEFAULT '',
+  soul_md         TEXT NOT NULL DEFAULT '',
+  agents_md       TEXT NOT NULL DEFAULT '',
+  seed_key        TEXT,
+  synced_at       TEXT,
+  sync_error      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX idx_agent_profiles_seed_key
+  ON agent_profiles(seed_key) WHERE seed_key IS NOT NULL;
+
+-- ── catalog_templates (seeded mission templates) ─────────────
+CREATE TABLE catalog_templates (
+  id                  TEXT PRIMARY KEY,
+  seed_key            TEXT,
+  name                TEXT NOT NULL,
+  icon                TEXT NOT NULL DEFAULT 'target',
+  color               TEXT NOT NULL DEFAULT 'cyan',
+  category_id         TEXT,
+  profile_slug        TEXT NOT NULL DEFAULT 'default',
+  description         TEXT NOT NULL DEFAULT '',
+  instruction         TEXT NOT NULL DEFAULT '',
+  context             TEXT NOT NULL DEFAULT '',
+  goals               TEXT NOT NULL DEFAULT '[]',
+  output_format       TEXT NOT NULL DEFAULT '',
+  constraints         TEXT NOT NULL DEFAULT '',
+  suggested_skills    TEXT NOT NULL DEFAULT '[]',
+  local_dirs          TEXT NOT NULL DEFAULT '[]',
+  references_json     TEXT NOT NULL DEFAULT '[]',
+  mission_time_minutes INTEGER,
+  timeout_minutes     INTEGER NOT NULL DEFAULT 30,
+  created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX idx_catalog_templates_seed_key
+  ON catalog_templates(seed_key) WHERE seed_key IS NOT NULL;
 
 -- ── agent_processes ─────────────────────────────────────────
 CREATE TABLE agent_processes (

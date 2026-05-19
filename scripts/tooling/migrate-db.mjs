@@ -110,13 +110,11 @@ const catTable = db
 if (catTable) {
   const count = db.prepare("SELECT COUNT(*) AS c FROM mission_categories").get();
   if ((count?.c ?? 0) === 0) {
-    db.exec(`
-      INSERT OR IGNORE INTO mission_categories (id, name, color, sort_order, is_system)
-      VALUES
-        ('general', 'General', 'cyan', 0, 1),
-        ('engineering', 'Engineering', 'purple', 1, 1);
-    `);
-    console.log("Seeded default mission categories");
+    const seedPath = join(ROOT, "src/lib/db/seeds/001_mission_categories.sql");
+    if (existsSync(seedPath)) {
+      db.exec(readFileSync(seedPath, "utf-8"));
+      console.log("Seeded default mission categories from 001_mission_categories.sql");
+    }
   }
   const after = db.prepare("SELECT COUNT(*) AS c FROM mission_categories").get();
   console.log(`mission_categories rows: ${after?.c ?? 0}`);

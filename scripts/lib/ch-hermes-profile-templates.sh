@@ -7,16 +7,15 @@
 # Control Hub data (CH_DATA_DIR) is never used for profile paths here.
 # ═══════════════════════════════════════════════════════════════
 
-# Ordered list (single source of truth; templates exist only where scripts/bundled-profiles has files).
+# Ordered list (must match data/seed/profiles/manifest.json).
+# Slugs must match data/seed/profiles/manifest.json (Control Hub DB is source of truth).
 CH_BUNDLED_PROFILE_LIST=(
-  qa-engineer
-  devops-engineer
-  swe-engineer
-  data-engineer
+  qa
+  swe
+  devops
   data-scientist
-  ops-director
   creative-lead
-  support-agent
+  support
 )
 
 ch_resolve_hermes_home() {
@@ -43,7 +42,7 @@ _ch_hermes_cli_ok() {
 # Install mode: create missing profile dirs; copy SOUL.md / AGENTS.md / auth.json only if destination missing.
 ch_bundled_profiles_install() {
   local repo_root="$1"
-  local templates="$repo_root/scripts/bundled-profiles"
+  local templates="$repo_root/data/seed/profiles"
   local profile profile_dir
 
   ch_resolve_hermes_home
@@ -82,7 +81,7 @@ ch_bundled_profiles_install() {
 # Update mode: ensure dirs exist; overwrite SOUL.md / AGENTS.md from repo templates when present.
 ch_bundled_profiles_sync() {
   local repo_root="$1"
-  local templates="$repo_root/scripts/bundled-profiles"
+  local templates="$repo_root/data/seed/profiles"
   local profile profile_dir
 
   ch_resolve_hermes_home

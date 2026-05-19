@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /** @jest-environment node */
 
+import { readFileSync } from "fs";
 import { join } from "path";
 
 const repoRoot = join(__dirname, "..", "..");
@@ -10,7 +11,7 @@ function loadRealBetterSqlite3(): typeof import("better-sqlite3") {
 }
 
 describe("ensureDefaultCategories", () => {
-  it("seeds general and engineering when table is empty", () => {
+  it("seeds all default categories when table is empty", () => {
     const Database = loadRealBetterSqlite3();
     const db = new (Database as unknown as new (
       path: string,
@@ -23,7 +24,7 @@ describe("ensureDefaultCategories", () => {
         name        TEXT NOT NULL,
         color       TEXT NOT NULL DEFAULT 'cyan',
         sort_order  INTEGER NOT NULL DEFAULT 0,
-        is_system   INTEGER NOT NULL DEFAULT 0,
+        seed_key    TEXT,
         created_at  TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -38,19 +39,23 @@ describe("ensureDefaultCategories", () => {
       ).c,
     ).toBe(0);
 
-    db.exec(`
-      INSERT OR IGNORE INTO mission_categories (id, name, color, sort_order, is_system)
-      VALUES
-        ('general', 'General', 'cyan', 0, 1),
-        ('engineering', 'Engineering', 'purple', 1, 1);
-    `);
+    const seedSql = readFileSync(
+      join(repoRoot, "src/lib/db/seeds/001_mission_categories.sql"),
+      "utf-8",
+    );
+    db.exec(seedSql);
 
     const count = (
       db.prepare("SELECT COUNT(*) AS c FROM mission_categories").get() as {
         c: number;
       }
     ).c;
-    expect(count).toBe(2);
+    expect(count).toBe(8);
+
+    const general = db
+      .prepare("SELECT seed_key FROM mission_categories WHERE id = 'general'")
+      .get() as { seed_key: string };
+    expect(general.seed_key).toBe("ch.cat.general");
     db.close();
   });
 });

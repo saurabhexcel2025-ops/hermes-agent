@@ -186,6 +186,18 @@ echo "Building production bundle..."
 npm run build
 echo "✓ Build complete"
 
+# ── Database migrate + catalog seed ───────────────────────────
+echo ""
+echo "Applying database migrations…"
+CH_DATA_DIR="$CH_DATA_ROOT" npm run db:migrate
+echo "✓ Migrations applied"
+echo "Seeding professional catalog (merge)…"
+if npx tsx "$REPO_ROOT/scripts/tooling/seed-catalog.ts" --merge; then
+  echo "✓ Catalog seeded"
+else
+  echo "⚠  Catalog seed failed — run: npx tsx scripts/tooling/seed-catalog.ts --merge"
+fi
+
 # ── Summary ───────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"

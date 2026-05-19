@@ -1,12 +1,31 @@
-import { TEMPLATES } from "@/lib/mission-helpers";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-describe("built-in mission templates", () => {
-  it("ships a minimal Hermes-aligned template set", () => {
-    expect(TEMPLATES.length).toBe(3);
+const packPath = join(
+  __dirname,
+  "..",
+  "..",
+  "data/seed/template-packs/control-hub-professional-v1.json",
+);
+
+describe("professional mission template pack", () => {
+  const pack = JSON.parse(readFileSync(packPath, "utf-8")) as {
+    templates: Array<{ id: string; outputFormat: string; constraints: string }>;
+  };
+
+  it("ships the professional template set", () => {
+    expect(pack.templates.length).toBeGreaterThanOrEqual(10);
   });
 
   it("has unique ids", () => {
-    const ids = TEMPLATES.map((t) => t.id);
+    const ids = pack.templates.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("includes outputFormat and constraints on every template", () => {
+    for (const t of pack.templates) {
+      expect(t.outputFormat.length).toBeGreaterThan(0);
+      expect(t.constraints.length).toBeGreaterThan(0);
+    }
   });
 });

@@ -4,6 +4,7 @@
 
 import Database from "better-sqlite3";
 import { readFileSync, readdirSync, existsSync, mkdirSync, unlinkSync } from "fs";
+import { spawnSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { importHermesRegistry } from "./hermes-registry-import.mjs";
@@ -47,7 +48,7 @@ function setSchemaVersion(database, version) {
   setMeta(database, "schema_version", String(version));
 }
 
-const BASELINE_VERSION = 1;
+const BASELINE_VERSION = 2;
 
 const currentVersion = getSchemaVersion(db);
 if (currentVersion !== BASELINE_VERSION) {
@@ -113,3 +114,19 @@ try {
 }
 
 db.close();
+
+const seedCatalog = spawnSync(
+  "npx",
+  ["tsx", join(ROOT, "scripts/tooling/seed-catalog.ts"), "--merge"],
+  {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: { ...process.env, CH_DATA_DIR: DB_DIR },
+    shell: process.platform === "win32",
+  },
+);
+if (seedCatalog.status !== 0) {
+  console.warn("⚠  seed-catalog.ts failed — templates/profiles may be empty until npm run db:seed");
+} else {
+  console.log("✓ Professional catalog seeded");
+}

@@ -8,7 +8,7 @@ export interface CategoryLike {
   id: string;
   name: string;
   color: string;
-  isSystem?: boolean;
+  seedKey?: string | null;
 }
 
 export const CATEGORY_COLOR_CLASSES: Record<string, string> = {
@@ -50,7 +50,7 @@ export interface CategoryCount {
   name: string;
   color: string;
   count: number;
-  isSystem?: boolean;
+  isDefault?: boolean;
 }
 
 export function categoryFilterPills(
@@ -68,7 +68,7 @@ export function categoryFilterPills(
         name: cat.name,
         color: cat.color,
         count,
-        isSystem: cat.isSystem,
+        isDefault: Boolean(cat.seedKey),
       });
     }
   }

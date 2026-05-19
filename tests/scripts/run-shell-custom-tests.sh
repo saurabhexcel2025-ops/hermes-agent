@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
 # Validates scripts/lib/ch-dotenv-local.sh and ch-hermes-profile-templates.sh
-# plus the CH_UPDATE_SYNC_* decision logic (mirror of scripts/lib/ch-deploy-impl.sh).
+# plus ch-hermes-profile-templates.sh (install-only; update uses seed-catalog.ts).
 #
 # Safe: uses mktemp fake HERMES_HOME only.
 # ═══════════════════════════════════════════════════════════════
@@ -74,61 +74,6 @@ pass "strips CR on keys"
 rm -rf "$TMP_ENV"
 TMP_ENV=""
 
-# ── eval_sync_gate — MUST match ch-deploy-impl.sh gate ──────────
-echo ""
-echo "== update profile sync gate (mirror of ch-deploy update)"
-
-eval_sync_gate() {
-  local sync_profiles=false
-  case "${CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES:-}" in
-    no|NO|0|false|False)
-      ;;
-    yes|YES|1|true|True)
-      sync_profiles=true
-      ;;
-    *)
-      if [ -t 0 ]; then
-        read -r -p "Sync bundled profile templates now? [y/N]: " REPLY_SYNC_PROFILES || true
-        echo ""
-        if [[ "${REPLY_SYNC_PROFILES:-}" =~ ^[Yy]$ ]]; then
-          sync_profiles=true
-        fi
-      else
-        sync_profiles=true
-      fi
-      ;;
-  esac
-  if [ "$sync_profiles" = true ]; then
-    echo yes
-  else
-    echo no
-  fi
-}
-
-want_gate() {
-  local env_exports="$1"
-  local expect="$2"
-  local got
-  # stdin is not a TTY → unset CH_* branch matches API/non-interactive deploy behaviour.
-  # Minimal env so gate sees unset CH_*; PATH required so nested bash exists (env -i clears PATH).
-  got="$(env -i HOME=/tmp PATH="/usr/bin:/bin" /bin/bash -c "${env_exports}
-$(declare -f eval_sync_gate)
-eval_sync_gate
-" </dev/null)"
-  got="$(echo "$got" | tail -n1 | tr -d '\r')"
-  if [[ "$got" != "$expect" ]]; then
-    fail "gate want=$expect got='$got' (exports: ${env_exports//$'\n'/; })"
-  else
-    pass "gate → $expect"
-  fi
-}
-
-unset CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES || true
-want_gate "export CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=no" "no"
-want_gate "export CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=yes" "yes"
-want_gate "export CH_UPDATE_SYNC_HERMES_PROFILE_TEMPLATES=YES" "yes"
-want_gate "" "yes"
-
 # ── Hermes profile library ────────────────────────────────────
 echo ""
 echo "== ch-hermes-profile-templates.sh"
@@ -162,29 +107,29 @@ ch_resolve_hermes_home
 ch_hermes_config_present || fail "config present should be true"
 pass "ch_hermes_config_present true with config.yaml"
 
-# Install must not overwrite existing SOUL.md
-mkdir -p "$HERMES_HOME/profiles/qa-engineer"
-echo 'USER_CUSTOM_SOUL' >"$HERMES_HOME/profiles/qa-engineer/SOUL.md"
+# Install must not overwrite existing SOUL.md (data/seed/profiles/<slug>)
+mkdir -p "$HERMES_HOME/profiles/qa"
+echo 'USER_CUSTOM_SOUL' >"$HERMES_HOME/profiles/qa/SOUL.md"
 printf '{}' >"$HERMES_HOME/auth.json"
 
 ch_bundled_profiles_install "$REPO_ROOT"
-[[ "$(cat "$HERMES_HOME/profiles/qa-engineer/SOUL.md")" == "USER_CUSTOM_SOUL" ]] || fail "install overwrote existing qa-engineer/SOUL.md"
+[[ "$(cat "$HERMES_HOME/profiles/qa/SOUL.md")" == "USER_CUSTOM_SOUL" ]] || fail "install overwrote existing qa/SOUL.md"
 pass "install preserves existing SOUL.md"
 
-[[ -f "$HERMES_HOME/profiles/qa-engineer/AGENTS.md" ]] || fail "install should add missing AGENTS.md for qa-engineer"
-grep -q "QA Engineer Agent" "$HERMES_HOME/profiles/qa-engineer/AGENTS.md" || fail "qa AGENTS content unexpected"
+[[ -f "$HERMES_HOME/profiles/qa/AGENTS.md" ]] || fail "install should add missing AGENTS.md for qa"
+grep -q "QA — Development Guide" "$HERMES_HOME/profiles/qa/AGENTS.md" || fail "qa AGENTS content unexpected"
 pass "install adds missing AGENTS.md from template"
 
-rm -rf "$HERMES_HOME/profiles/devops-engineer"
+rm -rf "$HERMES_HOME/profiles/devops"
 ch_bundled_profiles_install "$REPO_ROOT"
-[[ -f "$HERMES_HOME/profiles/devops-engineer/SOUL.md" ]] || fail "devops SOUL missing after install"
-grep -q "DevOps specialist" "$HERMES_HOME/profiles/devops-engineer/AGENTS.md" || fail "devops AGENTS missing expected phrase"
+[[ -f "$HERMES_HOME/profiles/devops/SOUL.md" ]] || fail "devops SOUL missing after install"
+grep -q "DevOps — Development Guide" "$HERMES_HOME/profiles/devops/AGENTS.md" || fail "devops AGENTS missing expected phrase"
 pass "install creates missing profile dirs and copies templates"
 
-echo 'STALE' >"$HERMES_HOME/profiles/qa-engineer/SOUL.md"
+echo 'STALE' >"$HERMES_HOME/profiles/qa/SOUL.md"
 ch_bundled_profiles_sync "$REPO_ROOT"
-grep -q "subject matter expert" "$HERMES_HOME/profiles/qa-engineer/SOUL.md" || fail "sync did not overwrite SOUL from template"
-[[ "$(cat "$HERMES_HOME/profiles/qa-engineer/SOUL.md")" == STALE ]] && fail "sync left stale SOUL"
+grep -q "quality assurance specialist" "$HERMES_HOME/profiles/qa/SOUL.md" || fail "sync did not overwrite SOUL from template"
+[[ "$(cat "$HERMES_HOME/profiles/qa/SOUL.md")" == STALE ]] && fail "sync left stale SOUL"
 pass "sync overwrites SOUL.md from repo templates"
 
 # ── ch-backup.sh (mock hindsight_bridge.py) ───────────────────
