@@ -116,6 +116,9 @@ export function useMissionsPage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [missionCategoryFilter, setMissionCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<ManagedCategory[]>([]);
+  const [categoriesLoadError, setCategoriesLoadError] = useState<string | null>(
+    null,
+  );
   const [newCategoryId, setNewCategoryId] = useState<string | null>(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const LAST_CATEGORY_KEY = "ch-last-mission-category";
@@ -214,15 +217,20 @@ export function useMissionsPage() {
     try {
       const list = await fetchCategories();
       setCategories(list);
+      setCategoriesLoadError(null);
     } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : "Failed to load categories";
       console.error("Failed to load categories:", error);
+      setCategoriesLoadError(msg);
+      showToast(msg, "error");
     }
-  }, [fetchCategories]);
+  }, [fetchCategories, showToast]);
 
   const handleCreateCategory = useCallback(
-    async (name: string): Promise<string | null> => {
+    async (name: string, color?: string): Promise<string | null> => {
       try {
-        const cat = await createCategory(name);
+        const cat = await createCategory(name, color);
         if (cat?.id) {
           await loadCategories();
           showToast(`Category "${name}" created`, "success");
@@ -343,6 +351,7 @@ export function useMissionsPage() {
       }
     } catch (error) {
       console.error("Failed to load templates:", error);
+      showToast("Failed to load templates", "error");
     }
   }, [fetchMissions, fetchTemplates, showToast, scrollToCreateForm, loadCategories]);
 
@@ -547,8 +556,26 @@ export function useMissionsPage() {
     setTemplateDescription("");
     setTemplateIcon("Zap");
     setTemplateColor("cyan");
+    setEditingTemplateId(null);
     setShowTemplateEditor(true);
   };
+
+  const handleCreateNewTemplate = useCallback(() => {
+    setEditingTemplateId(null);
+    setTemplateName("");
+    setTemplateDescription("");
+    setTemplateIcon("Zap");
+    setTemplateColor("cyan");
+    setNewInstruction("");
+    setNewContext("");
+    setNewGoals("");
+    setNewLocalDirs([]);
+    setLocalDirDraft({ path: "", branch: null });
+    setNewReferences([]);
+    setNewSkills([]);
+    setShowTemplateManager(false);
+    setShowTemplateEditor(true);
+  }, []);
 
   const handleTemplateSave = async () => {
     if (!templateName.trim()) return;
@@ -841,12 +868,14 @@ export function useMissionsPage() {
     missionCategoryFilter,
     setMissionCategoryFilter,
     categories,
+    categoriesLoadError,
     newCategoryId,
     setNewCategoryId,
     showCategoryManager,
     setShowCategoryManager,
     loadCategories,
     handleCreateCategory,
+    handleCreateNewTemplate,
     handleUpdateCategory,
     handleDeleteCategory,
     setCategoryId,

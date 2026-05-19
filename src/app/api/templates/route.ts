@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlink
 import { parseTemplatePackManifestV1 } from "@/lib/schema";
 import { zodErrorResponse } from "@/lib/api-schemas";
 import { logApiError } from "@/lib/api-logger";
+import { ensureDb } from "@/lib/db";
 import { PATHS } from "@/lib/paths";
 import { requireAuth } from "@/lib/api-auth";
 import { TEMPLATES } from "@/lib/mission-helpers";
@@ -139,6 +140,7 @@ function saveTemplate(template: CustomTemplate) {
 
 export async function GET() {
   try {
+    ensureDb();
     // Return cached result if fresh
     const cached = getTemplatesCached();
     if (cached) {

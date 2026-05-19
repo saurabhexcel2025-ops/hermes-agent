@@ -87,6 +87,8 @@ export default function MissionsPage() {
     handleCreateCategory,
     handleUpdateCategory,
     handleDeleteCategory,
+    categoriesLoadError,
+    handleCreateNewTemplate,
   } = vm;
 
   if (loading) {
@@ -178,6 +180,8 @@ export default function MissionsPage() {
             onCategoryChange={setCategoryId}
             onCreateCategory={handleCreateCategory}
             onManageCategories={() => setShowCategoryManager(true)}
+            categoriesLoadError={categoriesLoadError}
+            onRetryCategories={() => void loadCategories()}
             onSubmit={handleCreate}
             onSaveAsTemplate={handleSaveAsTemplate}
             onClose={() => {
@@ -193,7 +197,9 @@ export default function MissionsPage() {
         open={showCategoryManager}
         onClose={() => setShowCategoryManager(false)}
         categories={categories}
+        categoriesLoadError={categoriesLoadError}
         onRefresh={() => void loadCategories()}
+        onCreateCategory={handleCreateCategory}
         onUpdate={handleUpdateCategory}
         onDelete={handleDeleteCategory}
       />
@@ -206,6 +212,7 @@ export default function MissionsPage() {
         categoryFilter={categoryFilter}
         onEditTemplate={handleEditTemplate}
         onDeleteTemplate={handleDeleteTemplate}
+        onCreateTemplate={handleCreateNewTemplate}
       />
 
       <TemplateEditorModal

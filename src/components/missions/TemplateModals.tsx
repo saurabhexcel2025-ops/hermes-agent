@@ -8,6 +8,7 @@
 import {
   Edit3,
   Layers,
+  Plus,
   Save,
   Trash2,
   X,
@@ -176,6 +177,7 @@ export interface TemplateManagerModalProps {
     },
   ) => void;
   onDeleteTemplate: (id: string) => void;
+  onCreateTemplate: () => void;
 }
 
 // ── Template Editor Modal Props ────────────────────────────────
@@ -242,8 +244,10 @@ export function TemplateManagerModal({
   categoryFilter,
   onEditTemplate,
   onDeleteTemplate,
+  onCreateTemplate,
 }: TemplateManagerModalProps) {
   const grouped = groupTemplatesByCategory(templates, categories);
+  const isEmpty = templates.length === 0 || grouped.length === 0;
 
   return (
     <Modal
@@ -254,12 +258,31 @@ export function TemplateManagerModal({
       iconColor="text-neon-cyan"
       size="lg"
       footer={
-        <Button variant="ghost" onClick={onClose}>
-          Close
-        </Button>
+        <div className="flex flex-wrap gap-2 justify-end w-full">
+          <Button variant="secondary" onClick={onCreateTemplate}>
+            <Plus className="w-3.5 h-3.5" />
+            New template
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        </div>
       }
     >
       <div className="space-y-2">
+        {isEmpty && (
+          <div className="py-8 text-center space-y-3">
+            <p className="text-xs font-mono text-white/40">
+              No templates to show. Built-in templates load from the server —
+              if this stays empty, check the browser console and restart Control
+              Hub after <code className="text-neon-cyan">npm run db:migrate</code>.
+            </p>
+            <Button onClick={onCreateTemplate}>
+              <Plus className="w-3.5 h-3.5" />
+              New custom template
+            </Button>
+          </div>
+        )}
         {grouped.map((group) => {
           const filterKey = group.categoryId ?? "__uncategorized__";
           const color = categoryAccentColor(group.color);

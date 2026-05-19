@@ -54,18 +54,35 @@ export interface MissionCreateFormProps {
   onCategoryChange: (id: string | null) => void;
   onCreateCategory?: (name: string) => Promise<string | null>;
   onManageCategories?: () => void;
+  categoriesLoadError?: string | null;
+  onRetryCategories?: () => void;
   onSubmit: () => void;
   onSaveAsTemplate: () => void;
   onClose: () => void;
   dispatching: boolean;
 }
 
-const DISPATCH_MODES = [
-  { id: "save" as const, label: "Save Draft" },
-  { id: "now" as const, label: "Run Now" },
+export const DISPATCH_MODES = [
+  { id: "save" as const, label: "Save" },
   { id: "queue" as const, label: "Queue" },
-  { id: "cron" as const, label: "Recurring" },
-];
+  { id: "now" as const, label: "Run now" },
+  { id: "cron" as const, label: "Schedule" },
+] as const;
+
+export function dispatchSubmitLabel(
+  dispatch: MissionFormState["newDispatch"],
+  options: {
+    isReDispatch?: boolean;
+    isActiveEdit?: boolean;
+  } = {},
+): string {
+  if (options.isReDispatch) return "Re-Dispatch Now";
+  if (options.isActiveEdit) return "Update Mission";
+  if (dispatch === "save") return "Save draft";
+  if (dispatch === "queue") return "Queue mission";
+  if (dispatch === "now") return "Dispatch now";
+  return "Schedule mission";
+}
 
 export function MissionComposerActions({
   editingId,
@@ -97,14 +114,10 @@ export function MissionComposerActions({
     existing &&
     (existing.status === "queued" || existing.status === "dispatched");
 
-  const submitLabel = (() => {
-    if (isReDispatch) return "Re-Dispatch Now";
-    if (isActiveEdit) return "Update Mission";
-    if (formState.newDispatch === "save") return "Save Mission";
-    if (formState.newDispatch === "now") return "Dispatch Now";
-    if (formState.newDispatch === "queue") return "Queue Mission";
-    return "Schedule Mission";
-  })();
+  const submitLabel = dispatchSubmitLabel(formState.newDispatch, {
+    isReDispatch: Boolean(isReDispatch),
+    isActiveEdit: Boolean(isActiveEdit),
+  });
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -143,6 +156,8 @@ export default function MissionCreateForm({
   onCategoryChange,
   onCreateCategory,
   onManageCategories,
+  categoriesLoadError = null,
+  onRetryCategories,
   onSubmit,
   onSaveAsTemplate,
   onClose,
@@ -175,9 +190,20 @@ export default function MissionCreateForm({
         </div>
       )}
 
-      {categories.length === 0 && (
+      {(categoriesLoadError || categories.length === 0) && (
         <p className="text-xs font-mono text-neon-orange/80 bg-neon-orange/5 border border-neon-orange/20 rounded-lg px-3 py-2">
-          No categories loaded — run database migrations or{" "}
+          {categoriesLoadError ??
+            "No categories loaded — run npm run db:migrate or restart Control Hub, then"}{" "}
+          {onRetryCategories && (
+            <button
+              type="button"
+              onClick={onRetryCategories}
+              className="text-neon-cyan underline"
+            >
+              retry
+            </button>
+          )}
+          {onRetryCategories && onManageCategories ? " · " : null}
           {onManageCategories ? (
             <button
               type="button"
@@ -186,10 +212,8 @@ export default function MissionCreateForm({
             >
               manage categories
             </button>
-          ) : (
-            "open category manager"
-          )}
-          .
+          ) : null}
+          {!categoriesLoadError && !onManageCategories ? "." : null}
         </p>
       )}
 
@@ -376,16 +400,6 @@ export default function MissionCreateForm({
           />
         </div>
 
-        <MissionPromptPreview
-          instruction={formState.newInstruction}
-          context={formState.newContext}
-          goals={formState.newGoals}
-          localDirs={formState.newLocalDirs}
-          references={formState.newReferences}
-          skills={formState.newSkills}
-          missionTimeMinutes={formState.newMissionTime}
-          timeoutMinutes={formState.newTimeout}
-        />
       </ComposerAccordion>
 
       <ComposerAccordion
@@ -412,6 +426,23 @@ export default function MissionCreateForm({
       </ComposerAccordion>
 
       <ComposerAccordion
+        title="Assembled agent prompt"
+        description="Preview of the mission prompt sent to the agent"
+        defaultOpen={false}
+      >
+        <MissionPromptPreview
+          instruction={formState.newInstruction}
+          context={formState.newContext}
+          goals={formState.newGoals}
+          localDirs={formState.newLocalDirs}
+          references={formState.newReferences}
+          skills={formState.newSkills}
+          missionTimeMinutes={formState.newMissionTime}
+          timeoutMinutes={formState.newTimeout}
+        />
+      </ComposerAccordion>
+
+      <ComposerAccordion
         title="Dispatch"
         description="When and how this mission runs"
         defaultOpen={false}
@@ -432,6 +463,9 @@ export default function MissionCreateForm({
             </button>
           ))}
         </div>
+        <p className="text-xs text-white/30 font-mono">
+          The button below runs the selected dispatch mode.
+        </p>
         {formState.newDispatch === "cron" && (
           <ScheduleSelector
             value={formState.newSchedule}

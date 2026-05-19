@@ -33,7 +33,7 @@ export default function BehaviourPage() {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [previewMode, setPreviewMode] = useState(false);
+  const [previewMode, setPreviewMode] = useState(true);
   const [savingPersonality, setSavingPersonality] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
@@ -145,7 +145,7 @@ export default function BehaviourPage() {
         content,
         original: content,
       });
-      setPreviewMode(false);
+      setPreviewMode(true);
       setSaveStatus("idle");
     } catch {
       showToast("Failed to load file", "error");

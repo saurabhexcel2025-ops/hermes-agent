@@ -68,7 +68,25 @@ function uniqueCategoryId(baseSlug: string): string {
   return candidate;
 }
 
+export function hasMissionCategoriesTable(): boolean {
+  try {
+    const row = db()
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mission_categories'",
+      )
+      .get() as { name: string } | undefined;
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
 export function listCategories(): MissionCategory[] {
+  if (!hasMissionCategoriesTable()) {
+    throw new Error(
+      "mission_categories table is missing — run database migrations (restart Control Hub or npm run db:migrate)",
+    );
+  }
   const rows = db()
     .prepare(
       "SELECT * FROM mission_categories ORDER BY sort_order ASC, lower(name) ASC",
@@ -268,26 +286,56 @@ export function deleteCategory(
   return true;
 }
 
+const DEFAULT_CATEGORY_SEED_SQL = `
+INSERT OR IGNORE INTO mission_categories (id, name, color, sort_order, is_system)
+VALUES
+  ('general', 'General', 'cyan', 0, 1),
+  ('engineering', 'Engineering', 'purple', 1, 1);
+`;
+
+/** Seed system categories when the table exists but has no rows. */
+export function ensureDefaultCategories(): void {
+  if (!hasMissionCategoriesTable()) return;
+  const row = db()
+    .prepare("SELECT COUNT(*) AS c FROM mission_categories")
+    .get() as { c: number };
+  if ((row.c ?? 0) > 0) return;
+  db().exec(DEFAULT_CATEGORY_SEED_SQL);
+}
+
+function resolveTemplateCategoryIdWithoutDb(
+  category?: string,
+  categoryId?: string,
+): string | undefined {
+  if (categoryId === "general" || categoryId === "engineering") {
+    return categoryId;
+  }
+  if (!category) return undefined;
+  const slug = slugifyCategoryName(category);
+  if (slug === "general" || category === "General") return "general";
+  if (slug === "engineering" || category === "Engineering") return "engineering";
+  return undefined;
+}
+
 /** Map legacy template category string to system category id. */
 export function resolveTemplateCategoryId(
   category?: string,
   categoryId?: string,
 ): string | undefined {
+  if (!hasMissionCategoriesTable()) {
+    return resolveTemplateCategoryIdWithoutDb(category, categoryId);
+  }
   if (categoryId && getCategory(categoryId)) {
     return categoryId;
   }
   if (!category) return undefined;
   const slug = slugifyCategoryName(category);
   if (getCategory(slug)) return slug;
-  if (slug === "general" || category === "General") return "general";
-  if (slug === "engineering" || category === "Engineering") return "engineering";
-  return undefined;
+  return resolveTemplateCategoryIdWithoutDb(category, categoryId);
 }
 
-export function ensureDefaultCategories(): void {
-  try {
-    listCategories();
-  } catch {
-    // table may not exist yet
-  }
+/** List categories, seeding defaults when the table is empty. */
+export function listCategoriesWithDefaults(): MissionCategory[] {
+  ensureDefaultCategories();
+  return listCategories();
 }

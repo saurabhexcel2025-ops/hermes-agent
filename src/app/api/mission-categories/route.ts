@@ -6,18 +6,20 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
+import { ensureDb, getSchemaHealth } from "@/lib/db";
 import {
   countMissionsInCategory,
   countTemplatesInCategory,
   createCategory,
   deleteCategory,
+  ensureDefaultCategories,
   getCategory,
-  listCategories,
+  listCategoriesWithDefaults,
   updateCategory,
 } from "@/lib/mission-category-repository";
 
 function withCounts() {
-  return listCategories().map((cat) => ({
+  return listCategoriesWithDefaults().map((cat) => ({
     ...cat,
     missionCount: countMissionsInCategory(cat.id),
     templateCount: countTemplatesInCategory(cat.id),
@@ -26,13 +28,30 @@ function withCounts() {
 
 export async function GET() {
   try {
-    return NextResponse.json({ data: { categories: withCounts() } });
+    ensureDb();
+    ensureDefaultCategories();
+    const health = getSchemaHealth();
+    if (!health.hasMissionCategoriesTable) {
+      return NextResponse.json(
+        {
+          error:
+            "mission_categories table is missing — restart Control Hub or run npm run db:migrate",
+          migrationRequired: true,
+          schemaVersion: health.schemaVersion,
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({
+      data: {
+        categories: withCounts(),
+        schemaVersion: health.schemaVersion,
+      },
+    });
   } catch (error) {
     logApiError("GET /api/mission-categories", "list", error);
-    return NextResponse.json(
-      { error: "Failed to load categories" },
-      { status: 500 },
-    );
+    const msg = error instanceof Error ? error.message : "Failed to load categories";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
@@ -41,6 +60,8 @@ export async function POST(request: NextRequest) {
   if (auth) return auth;
 
   try {
+    ensureDb();
+    ensureDefaultCategories();
     const body = await request.json();
     const name = typeof body.name === "string" ? body.name : "";
     const color = typeof body.color === "string" ? body.color : undefined;

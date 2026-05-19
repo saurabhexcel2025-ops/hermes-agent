@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import { CATEGORY_COLOR_CLASSES } from "@/lib/mission-categories";
 
@@ -18,7 +18,9 @@ export interface CategoryManagerModalProps {
   open: boolean;
   onClose: () => void;
   categories: ManagedCategory[];
+  categoriesLoadError?: string | null;
   onRefresh: () => void;
+  onCreateCategory: (name: string, color?: string) => Promise<string | null>;
   onUpdate: (
     id: string,
     patch: { name?: string; color?: string },
@@ -32,7 +34,9 @@ export default function CategoryManagerModal({
   open,
   onClose,
   categories,
+  categoriesLoadError = null,
   onRefresh,
+  onCreateCategory,
   onUpdate,
   onDelete,
 }: CategoryManagerModalProps) {
@@ -41,6 +45,9 @@ export default function CategoryManagerModal({
   const [editColor, setEditColor] = useState("cyan");
   const [reassignId, setReassignId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState("cyan");
+  const [creating, setCreating] = useState(false);
 
   const startEdit = (c: ManagedCategory) => {
     setEditingId(c.id);
@@ -63,9 +70,85 @@ export default function CategoryManagerModal({
     onRefresh();
   };
 
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name || creating) return;
+    setCreating(true);
+    try {
+      const id = await onCreateCategory(name, newColor);
+      if (id) {
+        setNewName("");
+        setNewColor("cyan");
+        onRefresh();
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <Modal open={open} onClose={onClose} title="Manage categories" size="lg">
-      <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+      <div className="mb-4 p-3 rounded-lg border border-white/10 bg-dark-900/50 space-y-2">
+        <label className="text-xs text-white/40 font-mono block">
+          New category
+        </label>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleCreate();
+              }
+            }}
+            placeholder="Category name"
+            className="flex-1 min-w-[140px] h-9 px-3 text-sm font-mono bg-dark-950 border border-white/10 rounded-lg text-white/80"
+          />
+          <select
+            value={newColor}
+            onChange={(e) => setNewColor(e.target.value)}
+            className="h-9 px-2 text-xs font-mono bg-dark-950 border border-white/10 rounded-lg"
+          >
+            {COLORS.map((col) => (
+              <option key={col} value={col}>
+                {col}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={!newName.trim() || creating}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-mono border border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan disabled:opacity-40"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Create category
+          </button>
+        </div>
+      </div>
+
+      {categoriesLoadError && (
+        <div className="mb-4 p-3 rounded-lg border border-neon-orange/30 bg-neon-orange/5 text-xs font-mono text-neon-orange/80">
+          {categoriesLoadError}
+          <button
+            type="button"
+            onClick={() => onRefresh()}
+            className="ml-2 text-neon-cyan underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+        {categories.length === 0 && !categoriesLoadError && (
+          <p className="text-xs font-mono text-white/40 py-4 text-center">
+            No categories yet. Create one above, or run{" "}
+            <code className="text-neon-cyan">npm run db:migrate</code> if you
+            upgraded from an older install.
+          </p>
+        )}
         {categories.map((c) => (
           <div
             key={c.id}

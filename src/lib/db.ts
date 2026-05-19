@@ -173,3 +173,35 @@ export function ensureDb(): void {
   _bootstrapped = true;
   db(); // forces open + migrate
 }
+
+export interface SchemaHealth {
+  schemaVersion: number;
+  hasMissionCategoriesTable: boolean;
+  categoryCount: number;
+}
+
+/** Report schema version and mission_categories table state (after ensureDb). */
+export function getSchemaHealth(): SchemaHealth {
+  ensureDb();
+  const database = getDb();
+  const schemaVersion = getSchemaVersion(database);
+  const tableRow = database
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mission_categories'",
+    )
+    .get() as { name: string } | undefined;
+  const hasMissionCategoriesTable = Boolean(tableRow);
+  let categoryCount = 0;
+  if (hasMissionCategoriesTable) {
+    const row = database
+      .prepare("SELECT COUNT(*) AS c FROM mission_categories")
+      .get() as { c: number };
+    categoryCount = row.c ?? 0;
+  }
+  if (schemaVersion >= 2 && !hasMissionCategoriesTable) {
+    console.error(
+      "[db] schema_version >= 2 but mission_categories table is missing — database may be corrupt",
+    );
+  }
+  return { schemaVersion, hasMissionCategoriesTable, categoryCount };
+}

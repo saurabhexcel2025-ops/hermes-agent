@@ -62,6 +62,12 @@ jest.mock("better-sqlite3", () => ({
 jest.mock("@/lib/db", () => ({
   db: jest.fn(() => mockDbMethods),
   getDb: jest.fn(() => mockDbMethods),
+  ensureDb: jest.fn(),
+  getSchemaHealth: jest.fn(() => ({
+    schemaVersion: 2,
+    hasMissionCategoriesTable: true,
+    categoryCount: 2,
+  })),
   inTransaction: jest.fn((fn: () => unknown) => fn()),
   uuid: jest.fn(() => "test-uuid-" + Math.random().toString(36).slice(2)),
   now: jest.fn(() => "2026-01-01T00:00:00.000Z"),

@@ -12,6 +12,8 @@
     "dev:network": "next dev -H 0.0.0.0",
     "prebuild": "node scripts/tooling/prebuild-db.mjs",
 
+    "db:migrate": "node scripts/tooling/migrate-db.mjs",
+
     "build": "next build",
 
     "start": "next start",
