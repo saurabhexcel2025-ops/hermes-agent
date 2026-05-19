@@ -18,8 +18,10 @@ npm run db:seed -- --replace   # via: npx tsx scripts/tooling/seed-catalog.ts --
 
 Or use **Config → Seed** in the UI (`/config/seed`).
 
-## Regenerate from bundled legacy templates
+## Validate or scaffold seed pack
 
 ```bash
 node scripts/tooling/generate-seed-pack.mjs
 ```
+
+Use this to validate `manifest.json` / template pack JSON or scaffold new seed files—not to regenerate from removed legacy `bundled-profiles/` trees.

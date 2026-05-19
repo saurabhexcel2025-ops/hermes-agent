@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { useMissionsApi } from "@/hooks/useMissionsApi";
 import type { LocalDirEntry, Mission } from "@/types/hermes";
@@ -52,7 +51,6 @@ export function useMissionsPage() {
     updateCategory,
     deleteCategory,
   } = useMissionsApi();
-  const router = useRouter();
   const [missions, setMissions] = useState<MissionRow[]>([]);
   const [templates, setTemplates] = useState<MissionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -473,12 +471,14 @@ export function useMissionsPage() {
         });
 
         if (res.ok) {
-          showToast(
-            "Mission re-dispatched! Returning to dashboard...",
-            "success",
-          );
+          const body = (await res.json()) as { data?: { mission?: { id: string } } };
+          showToast("Mission re-dispatched", "success");
           setDispatching(false);
-          setTimeout(() => router.push("/"), 2000);
+          await fetchData();
+          if (body.data?.mission?.id) {
+            setExpandedId(body.data.mission.id);
+            void fetchDetail(body.data.mission.id);
+          }
         } else {
           showToast("Failed to re-dispatch mission", "error");
           setDispatching(false);
@@ -513,13 +513,18 @@ export function useMissionsPage() {
           fetchData();
           setDispatching(false);
         } else if (newDispatch === "now") {
-          showToast("Mission dispatched! Returning to dashboard...", "success");
+          const body = (await res.json()) as { data?: { mission?: { id: string } } };
+          showToast("Mission dispatched", "success");
           setDispatching(false);
-          setTimeout(() => router.push("/"), 2000);
+          await fetchData();
+          if (body.data?.mission?.id) {
+            setExpandedId(body.data.mission.id);
+            void fetchDetail(body.data.mission.id);
+          }
         } else {
-          showToast(`Mission scheduled - ${newSchedule}`, "success");
+          showToast(`Mission scheduled: ${newSchedule}`, "success");
           setDispatching(false);
-          setTimeout(() => router.push("/"), 2000);
+          await fetchData();
         }
       } else {
         showToast("Failed to create mission", "error");
@@ -789,7 +794,12 @@ export function useMissionsPage() {
   };
 
   const handleCancel = async (id: string) => {
-    if (!confirm("Cancel this mission? The cron job will be paused.")) return;
+    if (
+      !confirm(
+        "Cancel this mission? The running agent (and any subagents) will be stopped, and linked cron jobs will be paused.",
+      )
+    )
+      return;
     const res = await fetch("/api/missions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

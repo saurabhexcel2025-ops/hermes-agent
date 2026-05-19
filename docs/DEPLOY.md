@@ -48,7 +48,7 @@ bash scripts/application/ch-deploy.sh rebuild --branch dev   # optional local ch
 
 - **`ch-deploy.sh update`** runs **`git reset --hard origin/<branch>`**. That **discards local commits** on the checked-out branch. Use only on machines where the app directory is a throwaway deploy checkout.
 - **`rebuild`** does **not** pull or reset; it builds the **current working tree** unless you pass **`--branch`** to switch local checkout first.
-- **`ch-deploy.sh restart`** stops whatever is listening on **`PORT`** (from the environment or the last `PORT=` line in `.env.local`, default **42069**) using **`fuser`** / **`lsof`**. A wrong **`PORT`** can kill an unrelated process; set it deliberately. If you migrated from an old install on **3000**, do a **one-time manual** cleanup of stale listeners; the script does not clear arbitrary ports by default.
+- **`ch-deploy.sh restart`** stops whatever is listening on **`PORT`** (from the environment or the last `PORT=` line in `.env.local`, default **42069**) using **`lsof`** (Linux and macOS; `fuser` when available on Linux). A wrong **`PORT`** can kill an unrelated process; set it deliberately. If you migrated from an old install on **3000**, do a **one-time manual** cleanup of stale listeners; the script does not clear arbitrary ports by default.
 
 ## Required environment
 

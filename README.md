@@ -1,76 +1,125 @@
 # Control Hub (Hermes)
 
-A command-centre [Next.js](https://nextjs.org/) dashboard for [Hermes Agent](https://github.com/NousResearch/hermes-agent): missions, cron, sessions, memory, config, skills, tools, and REST APIs under `src/app/api/`.
+Control Hub is the web command centre for [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation). Hermes runs your agents on the machine; Control Hub gives you a dashboard to see what is running, dispatch missions, manage cron, browse sessions, and edit config—without living in the terminal.
 
-**Documentation:** [Doc index](docs/README.md) · [Control Hub overview](docs/CONTROL_HUB.md) · [Contributing](docs/CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Support](docs/SUPPORT.md) · [Security](docs/SECURITY.md) · [Code of Conduct](docs/CODE_OF_CONDUCT.md) · [API](docs/API.md) · [Deploy](docs/DEPLOY.md) · [Migration](docs/MIGRATION.md) · [Hermes config checklist](docs/HERMES_CONFIG_INTEGRATION.md) · [Platform vision](docs/PLATFORM_VISION.md) · [Changelog](CHANGELOG.md)
+**More documentation:** [Doc index](docs/README.md) · [Control Hub overview](docs/CONTROL_HUB.md) · [Missions](docs/MISSIONS.md) · [Deploy](docs/DEPLOY.md) · [Catalog & profiles](docs/CATALOG_AND_PROFILES.md)
 
 ---
 
-## Features
+## What you need
+
+| Requirement | Notes |
+|-------------|--------|
+| **macOS or Linux** | Bootstrap scripts use bash. No Windows installer for Control Hub itself. |
+| **Node.js 20+** | Matches [CI](.github/workflows/ci.yml). On macOS, install [Xcode Command Line Tools](https://developer.apple.com/xcode/resources/) if `npm install` fails building native modules. |
+| **Hermes Agent** | [Install Hermes](https://hermes-agent.nousresearch.com/docs/getting-started/installation) first for full missions, cron, and gateway features. Control Hub can start without Hermes, but agent paths stay limited until `~/.hermes` is configured. |
+| **git** | For clone-based install. |
+
+---
+
+## Quick start (operators)
+
+1. **Install Hermes Agent** on the same machine (see link above). Run `hermes setup` if prompted.
+
+2. **Get Control Hub:**
+   ```bash
+   git clone https://github.com/Daniel-Parke/hermes-control-hub.git
+   cd hermes-control-hub
+   bash scripts/bootstrap/install.sh
+   ```
+   For an existing clone only: `bash scripts/bootstrap/setup.sh` or `bash scripts/bootstrap/install.sh --in-repo`.
+
+3. **Open the dashboard** at `http://127.0.0.1:<PORT>/` (PORT is written to `.env.local` during setup, usually **42069–42100**).
+
+4. **Catalog is seeded during setup** — six professional agent profiles and mission templates land in Control Hub SQLite automatically. When `HERMES_HOME` is ready, profiles are pushed to `~/.hermes/profiles/`. You do **not** need Config → Seed on first install unless you want to restore defaults later.
+
+5. **Optional checks:** Config → Models (API keys), Operations → Agents (running processes), Orchestration → Missions (mission board).
+
+**Non-interactive VPS:** set `CH_INSTALL_NONINTERACTIVE=1` for install; use `INSTALL_HERMES_PROFILE_TEMPLATES=yes` only if you need the extra bash copy of missing profile files (catalog seed is the main path). Skip catalog seed with `CH_SETUP_SKIP_CATALOG_SEED=1`.
+
+---
+
+## Using the dashboard
+
+| Sidebar area | What to do there |
+|--------------|------------------|
+| **Dashboard** | Overview: health, active missions, sync status—not the primary place to launch missions. |
+| **Orchestration → Missions** | Compose, dispatch, schedule, and **cancel** missions ([details](docs/MISSIONS.md)). Cancel stops the running `hermes chat` process and any delegated subagents. |
+| **Orchestration → Cron** | Agent cron jobs Hermes runs on a schedule. |
+| **Orchestration → Chat** | Gateway-backed chat (separate from mission dispatch). |
+| **Main → Sessions / Memory** | Browse transcripts and memory stores. |
+| **Operations → Agents / Skills / Tools / Personalities** | Profile-aware agent configuration. |
+| **Config → Models / HERMES.md / YAML** | Models registry, environment, Hermes `config.yaml` sections. |
+| **Config → Seed** | Restore or replace the professional catalog (normally not needed after setup). |
+| **Sidebar (bottom)** | **Check** compares to remote; **Update** pulls and rebuilds; **Rebuild** builds the current tree and restarts. |
+
+---
+
+## Where your data lives
+
+| Location | Holds |
+|----------|--------|
+| **`~/.hermes`** (`HERMES_HOME`) | Hermes install: `config.yaml`, `profiles/`, agent cron `jobs.json`, logs. |
+| **`~/control-hub/data`** (`CH_DATA_DIR`, default) | Control Hub SQLite, missions, templates, stories—not committed to git. |
+
+Set `CH_DATA_DIR` and `HERMES_HOME` in `.env.local` if you use non-default paths.
+
+---
+
+## Updating Control Hub
+
+Use the sidebar **Check → Update → Rebuild** buttons, or on the server:
+
+```bash
+bash scripts/application/ch-deploy.sh update   # pull, build, migrate, seed catalog, restart
+bash scripts/application/ch-deploy.sh rebuild  # build current tree + restart (no git pull)
+```
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for Docker, TLS, and environment variables.
+
+---
+
+## Troubleshooting
+
+| Problem | What to try |
+|---------|-------------|
+| **Port already in use** | Read `PORT` in `.env.local`; run `bash scripts/bootstrap/stop.sh` or change PORT and re-run setup. |
+| **Empty mission categories** | On the host: `npm run db:migrate` with the same `CH_DATA_DIR` as the server, then restart. |
+| **Hermes not found / missions fail** | Install Hermes; set `HERMES_HOME` in `.env.local`; confirm `hermes` is on `PATH`. |
+| **Catalog seed warning during setup** | Run `npx tsx scripts/tooling/seed-catalog.ts --merge` or use Config → Seed. |
+| **Cancel did not stop agent** | See [Missions → Cancellation](docs/MISSIONS.md); check server logs. Kill targets Linux/macOS only. |
+
+---
+
+## Features (summary)
 
 | Feature | Description |
 |---------|-------------|
-| **Dashboard** | Live stats, active missions, system health, mission dispatch |
-| **Missions** | Templates and custom templates ([CONTROL_HUB](docs/CONTROL_HUB.md)) |
-| **Agent profiles** | QA, DevOps, and SWE-style profiles |
-| **Cron manager** | Agent cron (`jobs.json`) plus system cron under `CH_*` paths ([API](docs/API.md)) |
-| **Agent behaviour** | Profile-centric editor, personalities, behaviour files |
-| **Config editor** | YAML sections driven by `src/lib/config-schema.ts` (29 sections) + HERMES.md + `.env` viewer |
-| **Session browser** | Conversation transcripts |
-| **Memory** | Hindsight (semantic) or Holographic (structured) |
-| **Personalities / skills / tools** | Profile-aware management |
+| **Dashboard** | Live stats, health, sync overview |
+| **Missions** | Mission board, templates, cancel stops agent + subagents |
+| **Agent profiles** | Six professional profiles + default Bob persona ([catalog](docs/CATALOG_AND_PROFILES.md)) |
+| **Cron** | Hermes agent cron + optional system cron scripts |
+| **Config editor** | YAML sections, HERMES.md, `.env` viewer |
+| **Sessions / memory** | Transcripts; Hindsight or Holographic memory |
 | **Gateway / logs** | Connection status and log tail |
 | **Story Weaver** | Rec Room interactive fiction |
-| **Orchestration chat** | Gateway-backed chat under `/orchestration/chat` |
 
 ---
 
-## Quick start
-
-**Shell scripts require bash** (Linux, macOS, WSL, or Git Bash on Windows). Hermes Agent also offers a [native Windows installer](https://hermes-agent.nousresearch.com/docs/getting-started/installation); Control Hub bootstrap scripts are bash-only today.
+## For developers
 
 ```bash
-git clone https://github.com/Daniel-Parke/hermes-control-hub.git
-cd hermes-control-hub
-bash scripts/bootstrap/setup.sh    # PORT + .env.local, npm install, build; see script header
-npm run dev              # http://localhost:<PORT> from .env.local (setup picks 42069–42100)
+npm run dev              # hot reload (PORT from .env.local)
+npm run build && npm test
+npm run build && npm run test:e2e
 ```
 
-Use `npm run dev:network` for LAN HMR (`CH_ALLOWED_DEV_ORIGINS` is set during setup).
+- **Contributing & branches:** [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- **Testing & CI:** [docs/TESTING.md](docs/TESTING.md)
+- **REST API:** [docs/API.md](docs/API.md)
+- **Agent rules & repo tree:** [AGENTS.md](AGENTS.md)
 
-For a full greenfield install (clone + optional Hermes + Hindsight prompt), use `bash scripts/bootstrap/install.sh` instead of setup alone.
-
----
-
-## Prerequisites
-
-- **Node.js 20+** (matches [CI](.github/workflows/ci.yml))
-- **Hermes Agent** (optional for a standalone UI): the app resolves the local install from **`HERMES_HOME`** / **`AGENT_HOME`** (default `~/.hermes`).
-- **Optional:** PostgreSQL + pgvector and Python for [Hindsight](docs/DEPLOY.md)—`bash scripts/bootstrap/setup-hindsight.sh`, or follow prompts in **`scripts/bootstrap/install.sh`** (full bootstrap only).
-
----
-
-## Data, installs, and cron
-
-- **`CH_DATA_DIR`** (or `CONTROL_HUB_DATA_DIR`, default `~/control-hub/data`): missions, templates, stories, SQLite (`control-hub.db`), and default locations for system-cron scripts/logs unless overridden. **Not committed**—see [.gitignore](.gitignore).
-- **Hermes agent cron** lives on the **active** Hermes filesystem as `cron/jobs.json` (edited by Control Hub; Hermes runs schedules). See [PLATFORM_VISION](docs/PLATFORM_VISION.md) and [MIGRATION](docs/MIGRATION.md).
-- **System cron** is separate: scripts and logs under **`CH_SCRIPTS_DIR`** / **`CH_HARDWARE_LOG_DIR`** (see [API](docs/API.md) `/api/cron/hardware`).
-- Audit-style events may append to `~/.hermes/logs/ch-audit.log` when Hermes is present—see [.env.example](.env.example).
-
----
-
-## Development
-
-```bash
-npm run dev              # hot reload
-npm run build            # production build
-npm run prebuild         # SQLite migrations (run before first E2E on a fresh CH_DATA_DIR)
-npm test                 # Jest — tests/unit/
-npm run build && npm run test:e2e                    # Playwright — tests/e2e/
-npm run build && cross-env PLAYWRIGHT_SMOKE=1 npm run test:e2e   # smoke (CI-style)
-```
-
-Mission and template Zod schemas live in **`src/lib/schema/`**; regenerate JSON with `npm run generate:schema-json`. Full CI and **`app-routes`** / sidebar rules: [docs/TESTING.md](docs/TESTING.md).
+Mission schemas: `src/lib/schema/` · regenerate JSON with `npm run generate:schema-json`.
 
 ---
 
@@ -78,40 +127,12 @@ Mission and template Zod schemas live in **`src/lib/schema/`**; regenerate JSON 
 
 | Script | Role |
 |--------|------|
-| `scripts/bootstrap/install.sh` | Clone + `scripts/bootstrap/setup.sh`, or `--in-repo`. Optional Hermes templates: `INSTALL_HERMES_PROFILE_TEMPLATES=yes` or interactive prompt when `HERMES_HOME/config.yaml` exists |
-| `scripts/bootstrap/setup.sh` | `.env.local`, PORT, optional Hermes/Hindsight, `npm install`, build |
-| `scripts/application/ch-deploy.sh` | **`update`** \| **`restart`** \| **`rebuild`** — single CLI / dashboard deploy entry (`POST /api/update`; pull, conditional npm, build, `db:migrate` + `db:seed`, discover-agents, restart). Options: `--branch` |
-| `scripts/bootstrap/stop.sh` | Stop `next start` listeners on PORT |
-| `scripts/tooling/prebuild-db.mjs` | Invoked via `npm run prebuild` |
-| `scripts/tooling/discover-agents.mjs` | `npm run discover-hermes` |
-| `scripts/tooling/generate-json-schema.ts` | `npm run generate:schema-json` |
-| `scripts/bootstrap/backup-hermes-config.sh` | Backup `CH_DATA_DIR` (or legacy paths) |
-| `scripts/bootstrap/setup-hindsight.sh` | Hindsight-only install |
-| `scripts/git-hooks/pre-push` | Optional: `git config core.hooksPath scripts/git-hooks` |
+| `scripts/bootstrap/install.sh` | Clone + setup, or `--in-repo`; optional Hermes install |
+| `scripts/bootstrap/setup.sh` | `.env.local`, PORT, deps, build, **catalog seed** |
+| `scripts/application/ch-deploy.sh` | `update` \| `restart` \| `rebuild` |
+| `scripts/bootstrap/stop.sh` | Stop listeners on PORT |
 
-Preset system cron shells: **`scripts/hardware/`**. Professional profiles/templates: **`data/seed/`** (SQLite + Hermes push). Shared bash modules: **`scripts/lib/`**. Full layout: [docs/DEPLOY.md](docs/DEPLOY.md).
-
----
-
-## Configuration
-
-Control Hub reads and writes Hermes **`config.yaml`** (and related files) through the API for the local Hermes install. See [HERMES_CONFIG_INTEGRATION.md](docs/HERMES_CONFIG_INTEGRATION.md).
-
----
-
-## Deployment and API
-
-- **Deploy / TLS / Docker:** [docs/DEPLOY.md](docs/DEPLOY.md)
-- **REST shapes:** [docs/API.md](docs/API.md) (`{ data?, error? }` envelope)
-
----
-
-## Professional catalog (profiles + templates)
-
-Shipped under **`data/seed/profiles/`** and **`data/seed/template-packs/`**. Control Hub SQLite is the source of truth; **`npm run db:seed`** (also run from `setup.sh` and `ch-deploy update`) upserts categories, templates, and profiles, then pushes profile trees to **`HERMES_HOME/profiles/<slug>/`**.
-
-- **Restore defaults:** Config → Seed (`/config/seed`) or `POST /api/seed`.
-- **Install-only bash copy:** optional `INSTALL_HERMES_PROFILE_TEMPLATES=yes` on non-interactive `scripts/bootstrap/install.sh` via [`scripts/lib/ch-hermes-profile-templates.sh`](scripts/lib/ch-hermes-profile-templates.sh).
+Professional seeds: **`data/seed/`** · Full layout: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ---
 
@@ -119,16 +140,11 @@ Shipped under **`data/seed/profiles/`** and **`data/seed/template-packs/`**. Con
 
 | Area | Purpose |
 |------|---------|
-| `src/app/` | App Router pages and `api/` REST routes |
-| `src/lib/` | `paths.ts`, `hermes-agent-runtime.ts`, `hermes-home.ts`, `config-schema.ts`, `schema/`, providers, utilities |
-| `src/components/` | UI including `layout/sidebar-config.ts` |
-| `tests/unit/` | Jest |
-| `tests/e2e/` | Playwright (keep `app-routes.ts` aligned with the sidebar) |
-| `docs/` | Technical and community documentation |
-| `data/seed/` | Professional profiles + template packs (see [docs/CATALOG_AND_PROFILES.md](docs/CATALOG_AND_PROFILES.md)) |
-| `scripts/` | `bootstrap/`, `application/ch-deploy.sh`, `tooling/`, `lib/`, `hardware/`, `git-hooks/` |
-
-For a fuller tree and agent rules, see [AGENTS.md](AGENTS.md).
+| `src/app/` | Pages and `api/` routes |
+| `src/lib/` | DB, Hermes paths, repositories, sync |
+| `tests/unit/` · `tests/e2e/` | Jest · Playwright |
+| `docs/` | Technical documentation |
+| `scripts/` | Bootstrap, deploy, tooling |
 
 ---
 

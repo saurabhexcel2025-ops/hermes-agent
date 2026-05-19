@@ -2,10 +2,10 @@
 // backends/hermes.ts — Hermes mission dispatch backend
 // ═══════════════════════════════════════════════════════════════
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { spawn } from "child_process";
+import { execSync, spawn } from "child_process";
 import { randomUUID } from "crypto";
 
 import { PATHS } from "../paths";
@@ -15,7 +15,7 @@ import type {
   DispatchMissionInput,
   MissionStatus,
 } from "../agent-backend/types";
-import type { AgentBackend } from "../agent-backend";
+import type { AgentBackend, MissionCancelResult } from "../agent-backend";
 import { logApiError } from "../api-logger";
 import { getDefaultModel } from "../models-repository";
 import { getCredentialWithKey } from "../credentials-repository";
@@ -134,6 +134,8 @@ async function ensureProfileAuth(
   }
 }
 
+const KILL_GRACE_MS = 3000;
+
 interface SpawnHermesChatInput {
   argv: string[];
   prompt: string;
@@ -144,19 +146,83 @@ interface SpawnHermesChatInput {
   hermesHome: string;
 }
 
-export function spawnHermesChatWithStatusCallback(input: SpawnHermesChatInput): void {
+function missionPidPath(missionId: string): string {
+  return join(PATHS.missions, `${missionId}.pid.json`);
+}
+
+function missionScriptPath(missionId: string): string {
+  return join(tmpdir(), `hermes_mission_${missionId}.sh`);
+}
+
+function writeMissionPidFile(missionId: string, pid: number): void {
+  writeFileSync(
+    missionPidPath(missionId),
+    JSON.stringify({ pid, startedAt: new Date().toISOString() }, null, 2),
+  );
+}
+
+function readMissionPid(missionId: string): number | null {
+  const path = missionPidPath(missionId);
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf-8")) as { pid?: number };
+    return typeof data.pid === "number" && data.pid > 0 ? data.pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function signalProcessGroup(pid: number, signal: NodeJS.Signals): boolean {
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    try {
+      process.kill(pid, signal);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function pkillByMissionId(missionId: string, signal: "TERM" | "KILL"): void {
+  if (process.platform === "win32") return;
+  const pattern = `CH_MISSION_ID=${missionId}`;
+  try {
+    execSync(`pkill -${signal} -f ${shellQuote(pattern)} 2>/dev/null || true`, {
+      stdio: "ignore",
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+function writeCancelledStatus(missionId: string): void {
+  const statusPath = join(PATHS.missions, `${missionId}.status.json`);
+  const payload = {
+    status: "failed",
+    exit_code: null,
+    completed_at: new Date().toISOString(),
+    error: "Cancelled by user",
+  };
+  writeFileSync(statusPath, JSON.stringify(payload) + "\n");
+}
+
+export function spawnHermesChatWithStatusCallback(input: SpawnHermesChatInput): number {
   const promptArg = `-q "$CH_MISSION_PROMPT"`;
   const argvStr = input.argv.map(shellQuote).join(" ");
   const scriptLines = [
     "#!/bin/bash",
+    "set -e",
     `hermes ${argvStr} ${promptArg} > ${shellQuote(input.sessionFile)} 2>&1`,
     "ec=$?",
     `cat ${shellQuote(input.sessionFile)} >> ${shellQuote(input.outputFile)}`,
-    `if [ "$ec" -eq 0 ]; then printf '{"status":"successful","exit_code":%s,"completed_at":"%s"}\n' "$ec" "$(date -u +%FT%TZ)" > ${shellQuote(input.statusFile)}; else printf '{"status":"failed","exit_code":%s,"completed_at":"%s","error":"hermes chat exited %s"}\n' "$ec" "$(date -u +%FT%TZ)" "$ec" > ${shellQuote(input.statusFile)}; fi`,
+    `if [ "$ec" -eq 0 ]; then printf '{"status":"successful","exit_code":%s,"completed_at":"%s"}\\n' "$ec" "$(date -u +%FT%TZ)" > ${shellQuote(input.statusFile)}; else printf '{"status":"failed","exit_code":%s,"completed_at":"%s","error":"hermes chat exited %s"}\\n' "$ec" "$(date -u +%FT%TZ)" "$ec" > ${shellQuote(input.statusFile)}; fi`,
   ];
 
-  const scriptPath = join(tmpdir(), `hermes_mission_${input.missionId}.sh`);
-  writeFileSync(scriptPath, scriptLines.join("\n"));
+  const scriptPath = missionScriptPath(input.missionId);
+  writeFileSync(scriptPath, scriptLines.join("\n") + "\n");
 
   const child = spawn("bash", [scriptPath], {
     cwd: process.cwd(),
@@ -169,7 +235,75 @@ export function spawnHermesChatWithStatusCallback(input: SpawnHermesChatInput): 
       CH_MISSION_ID: input.missionId,
     },
   });
+
+  const pid = child.pid;
+  if (pid == null || pid <= 0) {
+    throw new Error("Failed to spawn mission process");
+  }
+
+  writeMissionPidFile(input.missionId, pid);
   child.unref();
+  return pid;
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function cancelMissionProcess(
+  missionId: string,
+): Promise<MissionCancelResult> {
+  const pid = readMissionPid(missionId);
+  let processKilled = false;
+
+  if (pid != null) {
+    processKilled = signalProcessGroup(pid, "SIGTERM");
+  }
+  pkillByMissionId(missionId, "TERM");
+
+  await new Promise((resolve) => setTimeout(resolve, KILL_GRACE_MS));
+
+  if (pid != null && isPidAlive(pid)) {
+    signalProcessGroup(pid, "SIGKILL");
+    pkillByMissionId(missionId, "KILL");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    processKilled = !isPidAlive(pid);
+  } else if (pid != null) {
+    processKilled = true;
+  } else {
+    pkillByMissionId(missionId, "KILL");
+    processKilled = true;
+  }
+
+  writeCancelledStatus(missionId);
+
+  const scriptPath = missionScriptPath(missionId);
+  if (existsSync(scriptPath)) {
+    try {
+      unlinkSync(scriptPath);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const pidPath = missionPidPath(missionId);
+  if (existsSync(pidPath)) {
+    try {
+      unlinkSync(pidPath);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return {
+    processKilled,
+    error: processKilled ? null : "Could not confirm mission process stopped",
+  };
 }
 
 export class HermesAgentBackend implements AgentBackend {
@@ -228,6 +362,19 @@ export class HermesAgentBackend implements AgentBackend {
     });
 
     return mission;
+  }
+
+  async cancelMission(missionId: string): Promise<MissionCancelResult> {
+    try {
+      return await cancelMissionProcess(missionId);
+    } catch (err) {
+      logApiError("HermesAgentBackend.cancelMission", missionId, err);
+      writeCancelledStatus(missionId);
+      return {
+        processKilled: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
   async getMissionStatus(missionId: string): Promise<MissionStatus> {

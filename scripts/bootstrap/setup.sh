@@ -9,13 +9,14 @@
 #   bash scripts/bootstrap/setup.sh
 #
 # Prerequisites:
-#   - Node.js 18+
+#   - Node.js 20+ (matches CI)
 #   - Hermes optional: without ~/.hermes/config.yaml you get a standalone Control Hub
 #     (missions/cron tied to Hermes paths will be limited until Hermes is installed).
 #
 # Environment:
 #   CI=1 or CH_INSTALL_NONINTERACTIVE=1 — non-interactive; set PORT or auto-pick 42069–42100
 #   CH_SETUP_RUN_TESTS=1 — run `npm test` during setup (CI runs tests automatically)
+#   CH_SETUP_SKIP_CATALOG_SEED=1 — skip professional catalog seed (advanced; default seeds on setup)
 #   CH_INSTALL_ADVANCED=1 — prompt for CH_DATA_DIR, HERMES_HOME, branch, API key (interactive only)
 # ═══════════════════════════════════════════════════════════════
 
@@ -37,12 +38,12 @@ echo ""
 
 # ── Node.js ────────────────────────────────────────────────────
 if ! command -v node &>/dev/null; then
-    echo "✗ Node.js not found. Please install Node.js 18+ first."
+    echo "✗ Node.js not found. Please install Node.js 20+ first."
     exit 1
 fi
 NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-    echo "✗ Node.js 18+ required (found v$NODE_VERSION)"
+if [ "$NODE_VERSION" -lt 20 ]; then
+    echo "✗ Node.js 20+ required (found v$NODE_VERSION)"
     exit 1
 fi
 echo "✓ Node.js $(node -v)"
@@ -191,11 +192,28 @@ echo ""
 echo "Applying database migrations…"
 CH_DATA_DIR="$CH_DATA_ROOT" npm run db:migrate
 echo "✓ Migrations applied"
-echo "Seeding professional catalog (merge)…"
-if npx tsx "$REPO_ROOT/scripts/tooling/seed-catalog.ts" --merge; then
-  echo "✓ Catalog seeded"
-else
-  echo "⚠  Catalog seed failed — run: npx tsx scripts/tooling/seed-catalog.ts --merge"
+RUN_CATALOG_SEED=true
+if [ "${CH_SETUP_SKIP_CATALOG_SEED:-}" = "1" ]; then
+  RUN_CATALOG_SEED=false
+  echo "ℹ  Skipping catalog seed (CH_SETUP_SKIP_CATALOG_SEED=1)"
+elif [ -t 0 ] && [ "${CI:-}" != "true" ] && [ "${CH_INSTALL_NONINTERACTIVE:-}" != "1" ]; then
+  echo ""
+  echo "Professional catalog: six agent profiles + mission templates (SQLite + Hermes push when configured)."
+  read -r -p "Install/refresh professional catalog now? [Y/n]: " REPLY_CATALOG
+  echo ""
+  if [[ "$REPLY_CATALOG" =~ ^[Nn]$ ]]; then
+    RUN_CATALOG_SEED=false
+    echo "ℹ  Catalog seed skipped — run: npx tsx scripts/tooling/seed-catalog.ts --merge"
+  fi
+fi
+
+if [ "$RUN_CATALOG_SEED" = true ]; then
+  echo "Seeding professional catalog (merge)…"
+  if npx tsx "$REPO_ROOT/scripts/tooling/seed-catalog.ts" --merge; then
+    echo "✓ Catalog seeded (profiles + templates in Control Hub; pushed to HERMES_HOME when ready)"
+  else
+    echo "⚠  Catalog seed failed — run: npx tsx scripts/tooling/seed-catalog.ts --merge"
+  fi
 fi
 
 # ── Summary ───────────────────────────────────────────────────

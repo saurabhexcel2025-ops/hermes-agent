@@ -26,7 +26,7 @@ jest.mock("child_process", () => ({
       }
     }
     spawnCalls.push({ cmd, args, scriptContent });
-    return { unref: jest.fn(), on: jest.fn() };
+    return { pid: 424242, unref: jest.fn(), on: jest.fn() };
   }),
 }));
 

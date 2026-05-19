@@ -8,8 +8,14 @@ import type {
   MissionStatus,
 } from "./types";
 
+export interface MissionCancelResult {
+  processKilled: boolean;
+  error: string | null;
+}
+
 export interface AgentBackend {
   dispatchMission(input: DispatchMissionInput): Promise<Mission>;
+  cancelMission(missionId: string): Promise<MissionCancelResult>;
   getMissionStatus(missionId: string): Promise<MissionStatus>;
   getMissionSessionId(missionId: string): Promise<string | null>;
   syncMission(

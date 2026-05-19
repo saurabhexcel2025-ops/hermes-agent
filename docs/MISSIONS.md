@@ -40,6 +40,20 @@ Runtime database path: `CH_DATA_DIR/control-hub.db` (default `~/control-hub/data
 - Updates to prompt/schedule sync through `src/lib/mission-cron-sync.ts`.
 - Cancel pauses cron; delete removes the linked cron job.
 
+## Cancellation
+
+When you cancel a **running** mission from the mission board:
+
+1. **SQLite** — status becomes `failed` with result `Cancelled by user`.
+2. **Process** — `HermesAgentBackend.cancelMission()` reads `CH_DATA_DIR/missions/<id>.pid.json`, sends `SIGTERM` to the bash wrapper process group, then `SIGKILL` after a short grace period. Fallback: `pkill -f CH_MISSION_ID=<uuid>`.
+3. **Status file** — `missions/<id>.status.json` is written so `MissionSync` matches the UI.
+4. **Session** — linked session row is ended with `failed` when `sessionId` is set.
+5. **Cron** — linked recurring job is paused (same as before).
+
+Missions use non-interactive `hermes chat -q` (not an interactive TTY), so slash commands like `/stop` do not apply. Stopping the parent OS process matches [Hermes delegation](https://hermes-agent.nousresearch.com/docs/user-guide/features/delegation): interrupting the parent run stops delegated subagents.
+
+**Platforms:** process kill is implemented for **Linux and macOS** only (same as bootstrap scripts). If kill fails, the DB and cron pause still apply; check server logs and `~/.hermes/logs` for details.
+
 ## UI
 
 - **Compose:** right-side Sheet (`MissionCreateForm`) with category combobox and prompt preview.

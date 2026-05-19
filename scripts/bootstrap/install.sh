@@ -29,7 +29,7 @@
 # Override: INSTALL_DIR=/path/to/hub bash scripts/bootstrap/install.sh
 # Git branch for initial clone only: BRANCH=dev (default). Ongoing deploy pulls use
 # CH_UPDATE_GIT_BRANCH in .env.local (see scripts/application/ch-deploy.sh), not BRANCH.
-# Prerequisites: Node.js 18+, git. Hermes recommended (see prompts).
+# Prerequisites: Node.js 20+, git. Hermes recommended (see prompts). macOS and Linux only.
 # ═══════════════════════════════════════════════════════════════
 
 set -e
@@ -77,7 +77,7 @@ echo ""
 
 if [ "$IN_REPO" = true ]; then
     if ! command -v node &>/dev/null; then
-        fail "Node.js not found. Install Node.js 18+ first: https://nodejs.org"
+        fail "Node.js not found. Install Node.js 20+ first: https://nodejs.org"
     fi
     info "Running in-repo setup from $SCRIPT_REPO_ROOT"
     cd "$SCRIPT_REPO_ROOT"
@@ -113,9 +113,9 @@ if [ "$IN_REPO" = true ]; then
                     ;;
                 *)
                     echo ""
-                    info "Optional: install Control Hub bundled Hermes profile templates under $HERMES_HOME/profiles/"
-                    echo "  Existing SOUL.md and AGENTS.md files are never overwritten."
-                    read -r -p "Install bundled profile templates now? [y/N]: " REPLY_PROFILES
+                    info "Optional: copy missing profile files from data/seed/profiles/ (catalog seed during setup is the main path)."
+                    echo "  Use this if Hermes was empty before seed-catalog push. Existing SOUL.md and AGENTS.md are never overwritten."
+                    read -r -p "Copy missing bundled profile files to Hermes now? [y/N]: " REPLY_PROFILES
                     echo ""
                     if [[ "$REPLY_PROFILES" =~ ^[Yy]$ ]]; then
                         run_profile_templates=true
@@ -133,11 +133,11 @@ if [ "$IN_REPO" = true ]; then
 fi
 
 if ! command -v node &>/dev/null; then
-    fail "Node.js not found. Install Node.js 18+ first: https://nodejs.org"
+    fail "Node.js not found. Install Node.js 20+ first: https://nodejs.org"
 fi
 NODE_MAJOR=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_MAJOR" -lt 18 ]; then
-    fail "Node.js 18+ required (found $(node -v))"
+if [ "$NODE_MAJOR" -lt 20 ]; then
+    fail "Node.js 20+ required (found $(node -v))"
 fi
 ok "Node.js $(node -v)"
 

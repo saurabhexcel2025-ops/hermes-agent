@@ -22,7 +22,7 @@ jest.mock("child_process", () => ({
       try { scriptContent = readFileSync(args[0], "utf-8"); } catch { /* ignore */ }
     }
     spawnCalls.push({ cmd, args, opts, scriptContent });
-    return { unref: jest.fn(), on: jest.fn() };
+    return { pid: 424242, unref: jest.fn(), on: jest.fn() };
   }),
 }));
 
@@ -159,6 +159,12 @@ describe("HermesAgentBackend.dispatchMission spawn", () => {
     expect(env.CH_MISSION_ID).toBe(mission.id);
     expect(call.opts.detached).toBe(true);
     expect(call.opts.stdio).toBe("ignore");
+
+    const { PATHS } = require("@/lib/paths") as { PATHS: { missions: string } };
+    const pidPath = join(PATHS.missions, `${mission.id}.pid.json`);
+    expect(existsSync(pidPath)).toBe(true);
+    const pidData = JSON.parse(readFileSync(pidPath, "utf-8")) as { pid: number };
+    expect(pidData.pid).toBe(424242);
   });
 
   it("dispatches without --model/--provider when not supplied", async () => {

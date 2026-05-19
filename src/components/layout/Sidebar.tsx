@@ -550,10 +550,6 @@ function VersionFooter({ collapsed }: { collapsed: boolean }) {
             {message}
           </div>
         )}
-        <p className="px-1 text-[9px] font-mono text-white/25 text-center leading-tight">
-          Check = compare to remote · Update = pull · Rebuild = build + restart
-        </p>
-
         {/* Check — full width on its own row */}
         {renderCheckButton()}
 

@@ -474,6 +474,23 @@ export async function POST(request: NextRequest) {
       if (!cancelId)
         return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
+      const existingMission = getMission(cancelId);
+      if (!existingMission)
+        return NextResponse.json({ error: "Mission not found" }, { status: 404 });
+
+      let cancelResult = { processKilled: true, error: null as string | null };
+      if (existingMission.status === "dispatched" || existingMission.status === "queued") {
+        try {
+          cancelResult = await agentBackend.cancelMission(cancelId);
+        } catch (err) {
+          logApiError("POST /api/missions", "cancelMission process kill", err);
+          cancelResult = {
+            processKilled: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+
       const mission = updateMission(cancelId, {
         status: "failed",
         result: "Cancelled by user",
@@ -481,10 +498,27 @@ export async function POST(request: NextRequest) {
       if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
+      if (mission.sessionId) {
+        try {
+          updateSession(mission.sessionId, {
+            status: "failed",
+            endedAt: new Date().toISOString(),
+            error: "Cancelled by user",
+          });
+        } catch (err) {
+          logApiError("POST /api/missions", "cancelMission session update", err);
+        }
+      }
+
       pauseMissionCron(cancelId);
 
       appendAuditLine({ action: "mission.cancel", resource: cancelId, ok: true });
-      return NextResponse.json({ data: { mission: enrichMissionCron(mission) } });
+      return NextResponse.json({
+        data: {
+          mission: enrichMissionCron(mission),
+          cancel: cancelResult,
+        },
+      });
     }
 
     // ── Delete Mission ─────────────────────────────────────────
