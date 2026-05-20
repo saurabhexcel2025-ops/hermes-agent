@@ -152,7 +152,8 @@ export function pushAllProfiles(options?: { onlyMissing?: boolean; onlyOutOfSync
   for (const profile of listProfiles()) {
     if (options?.onlyMissing) {
       const root = profileRootForSlug(profile.slug);
-      if (existsSync(root + "/SOUL.md") && profile.syncedAt && !profile.syncError) {
+      // Match install.sh template copy: never overwrite existing SOUL/AGENTS on disk.
+      if (existsSync(root + "/SOUL.md") || existsSync(root + "/AGENTS.md")) {
         continue;
       }
     }

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /** @jest-environment node */
 
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -80,5 +80,28 @@ describe("hermes-profile-sync", () => {
     expect(pull.success).toBe(true);
     const { getProfile } = require("@/lib/profiles-repository") as typeof import("@/lib/profiles-repository");
     expect(getProfile("qa")?.soulMd).toBe("# On disk");
+  });
+
+  it("pushAllProfiles onlyMissing skips profiles with existing SOUL on disk", () => {
+    const { upsertProfile } = require("@/lib/profiles-repository") as typeof import("@/lib/profiles-repository");
+    const { pushAllProfiles } = require("@/lib/hermes-profile-sync") as typeof import("@/lib/hermes-profile-sync");
+
+    const soulPath = join(hermesRoot, "profiles", "qa", "SOUL.md");
+    const agentsPath = join(hermesRoot, "profiles", "qa", "AGENTS.md");
+    mkdirSync(join(hermesRoot, "profiles", "qa"), { recursive: true });
+    writeFileSync(soulPath, "# User edit on disk");
+    writeFileSync(agentsPath, "# User agents on disk");
+
+    upsertProfile({
+      slug: "qa",
+      displayName: "QA",
+      soulMd: "# From DB seed",
+      agentsMd: "# Agents from DB",
+      configYaml: "agent:\n  personality: technical\n",
+    });
+
+    const results = pushAllProfiles({ onlyMissing: true });
+    expect(results).toHaveLength(0);
+    expect(readFileSync(soulPath, "utf-8")).toBe("# User edit on disk");
   });
 });
