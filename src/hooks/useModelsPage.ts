@@ -12,7 +12,7 @@ import type { FallbackChainEntry, FallbackConfig } from "@/types/hermes";
 import type { SyncActionResult } from "@/lib/sync-manager";
 import { emptyModelDefaults } from "@/lib/utils";
 
-import type { ApiCredential, ApiModel, ApiModelDefaults, SyncDrift } from "../types";
+import type { ApiCredential, ApiModel, ApiModelDefaults, SyncDrift } from "@/components/models/types";
 
 export function useModelsPage() {
   const [models, setModels] = useState<ApiModel[]>([]);

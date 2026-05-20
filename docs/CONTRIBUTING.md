@@ -31,6 +31,24 @@ That is it. No secret handshake.
 
 If your change touches behaviour or config, **update docs in the same PR**. Stale docs are bugs.
 
+## Where UI lives
+
+- **`src/app/`** — App Router pages, layouts, and thin page shells only.
+- **`src/components/`** — Reusable UI (layout, missions, models, cron, story-weaver, `ui/` primitives).
+- **`src/hooks/`** — Page data hooks and shared client hooks (e.g. `useModelsPage`, `useMissionsPage`, `useCronJobs`).
+- **Route groups and dynamic segments** — Parentheses and brackets in `src/app/` mean different things in the Next.js App Router:
+
+| Folder pattern | Appears in URL? | Example |
+|----------------|-----------------|---------|
+| `(main)` | **No** — organizational only | `src/app/(main)/sessions/page.tsx` → **`/sessions`** |
+| `orchestration` | **Yes** | `src/app/orchestration/missions/page.tsx` → **`/orchestration/missions`** |
+| `[id]`, `[key]`, `[name]` | **Yes** (dynamic segment) | `src/app/api/models/[id]/route.ts` → `/api/models/:id` |
+| `[...path]` | **Yes** (catch-all) | `src/app/api/skills/[...path]/route.ts` → `/api/skills/a/b/c` |
+
+The **`(main)`** group keeps Dashboard at `/` ([`src/app/page.tsx`](../src/app/page.tsx)) while grouping Sessions, Memory, and Logs in one folder without a `/main/` prefix. This is standard Next.js behaviour — see [Route Groups](https://nextjs.org/docs/app/building-your-application/routing/route-groups).
+
+When you add or change sidebar links in [`src/components/layout/sidebar-config.ts`](../src/components/layout/sidebar-config.ts), update [`tests/e2e/app-routes.ts`](../tests/e2e/app-routes.ts) so Playwright navigation-matrix tests stay aligned.
+
 ## Local dev and tests
 
 - First-time setup: `bash scripts/bootstrap/setup.sh` (writes `.env.local`, picks a free **PORT** in **42069–42100**, sets LAN dev origins).

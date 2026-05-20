@@ -56,11 +56,4 @@ describe("profile sync API routes", () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
-
-  it("GET drift returns entries", async () => {
-    const { GET } = await import("@/app/api/agent/profiles/sync/drift/route");
-    const res = await GET();
-    const body = (await res.json()) as { data: { drift: unknown[] } };
-    expect(body.data.drift).toHaveLength(1);
-  });
 });

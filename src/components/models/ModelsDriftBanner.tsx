@@ -2,7 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 
-import type { SyncDrift } from "../types";
+import type { SyncDrift } from "./types";
 
 interface ModelsDriftBannerProps {
   drift: SyncDrift;

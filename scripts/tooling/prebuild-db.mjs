@@ -1,4 +1,4 @@
-// scripts/prebuild-db.mjs
+// scripts/tooling/prebuild-db.mjs
 // Forces SQLite migrations and seeds before `next build`.
 // Run automatically via `prebuild` npm script.
 

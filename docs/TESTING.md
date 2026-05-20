@@ -111,4 +111,4 @@ Run before merging Hermes multi-profile changes (complements unit tests above):
 | Mission + cron | Dispatch mission; Hermes updates `CH_DATA_DIR/missions/*.json` | Status visible in UI |
 | Gateway override | `HERMES_GATEWAY_URL` set | Health/chat use custom URL |
 
-After `setup.sh`, inspect `CH_DATA_DIR/hermes-detection.json` for `valid`, `hermesAgentPath`, and `defaultRoot`.
+After `setup.sh`, inspect `CH_DATA_DIR/hermes-detection.json` for `valid`, `hermesAgentPath`, and `defaultRoot` (debug artifact only—the app does not read it at runtime; see [ENV_REFERENCE.md](ENV_REFERENCE.md)).

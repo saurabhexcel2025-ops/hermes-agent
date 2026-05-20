@@ -18,7 +18,7 @@ import {
   buildCategoryMap,
 } from "@/lib/mission-categories";
 import { timeAgo, titleCase } from "@/lib/utils";
-import type { MissionsPageViewModel, MissionRow } from "../hooks/useMissionsPage";
+import type { MissionsPageViewModel, MissionRow } from "@/hooks/useMissionsPage";
 import {
   CATEGORY_ACTIVE_CLASSES,
   STATUS_CONFIG,

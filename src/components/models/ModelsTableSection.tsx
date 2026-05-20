@@ -10,7 +10,7 @@ import type { ModelEditorRecord } from "@/components/models/ModelEditor";
 import { TASK_TYPES, type TaskType } from "@/lib/hermes-providers";
 import type { SyncActionResult } from "@/lib/sync-manager";
 
-import type { ApiModel } from "../types";
+import type { ApiModel } from "./types";
 
 function defaultBadgesFor(
   model: ApiModel,

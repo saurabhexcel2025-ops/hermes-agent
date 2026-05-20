@@ -106,12 +106,17 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for Docker, TLS, and environment variables.
 | **Cron** | Hermes agent cron + optional system cron scripts |
 | **Config editor** | YAML sections, HERMES.md, `.env` viewer |
 | **Sessions / memory** | Transcripts; Hindsight or Holographic memory |
-| **Gateway / logs** | Connection status and log tail |
+| **Gateway status** | On dashboard and Orchestration → Chat |
+| **Logs** | Main → Logs (Hermes log tail) |
 | **Story Weaver** | Rec Room interactive fiction |
 
 ---
 
 ## For developers
+
+App URLs like `/sessions` and `/memory` live under `src/app/(main)/` — parentheses are a **route group** (organizational only; no `/main` in the path). See [CONTRIBUTING.md](docs/CONTRIBUTING.md#where-ui-lives).
+
+**Run path:** develop and deploy with **npm** and [`scripts/application/ch-deploy.sh`](scripts/application/ch-deploy.sh). [Docker](docs/DEPLOY.md#docker) is optional on your machine; CI builds the production image to regression-test container deploy.
 
 ```bash
 npm run dev              # hot reload (PORT from .env.local)

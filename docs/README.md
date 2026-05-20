@@ -6,8 +6,11 @@ Technical reference for Control Hub. Tone elsewhere in this folder is deliberate
 |----------|-------------|
 | [CONTROL_HUB.md](CONTROL_HUB.md) | What this repo is and where to read next |
 | [USER_WALKTHROUGH_GUIDE.md](USER_WALKTHROUGH_GUIDE.md) | Operator guide with UI screenshots (dashboard, missions, chat, cron, profiles, …) |
+| [MISSIONS.md](MISSIONS.md) | Mission board, dispatch, cancellation, templates |
+| [design-tokens.md](design-tokens.md) | UI colour tokens and theme conventions |
 | [API.md](API.md) | REST endpoints |
 | [CATALOG_AND_PROFILES.md](CATALOG_AND_PROFILES.md) | Seed pack, SQLite catalog, Hermes profile sync |
+| [ENV_REFERENCE.md](ENV_REFERENCE.md) | Environment variables, dual DB paths, install flags |
 | [DEPLOY.md](DEPLOY.md) | Deploy, **`ch-deploy`**, TLS, Docker, ports, scripts layout |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [TESTING.md](TESTING.md) | Jest, Playwright, CI, and navigation-matrix upkeep |

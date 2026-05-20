@@ -40,7 +40,8 @@
     "test:docker-deploy-smoke": "bash tests/scripts/docker-deploy-api-smoke.sh",
     "discover-hermes": "node scripts/tooling/discover-agents.mjs",
 
-    "generate:schema-json": "npx tsx scripts/tooling/generate-json-schema.ts"
+    "generate:schema-json": "npx tsx scripts/tooling/generate-json-schema.ts",
+    "seed-pack": "node scripts/tooling/generate-seed-pack.mjs"
 
   },
 

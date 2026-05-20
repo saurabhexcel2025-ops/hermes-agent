@@ -29,13 +29,12 @@ test.describe("Missions composer", () => {
     ).toBeVisible();
 
     await expect(page.getByText(/Mission Name/i)).toBeVisible();
-    await expect(page.getByText(/Instruction Prompt/i)).toBeVisible();
+    await expect(page.getByText(/^Instruction$/i)).toBeVisible();
   });
 
   test("manage categories modal has create form", async ({ page }) => {
     await page.goto("/orchestration/missions");
-    await page.getByRole("button", { name: /New Mission/i }).click();
-    await page.getByRole("button", { name: /manage categories/i }).click();
+    await page.getByRole("button", { name: /Manage categories/i }).click();
     await expect(
       page.getByRole("heading", { name: /Manage categories/i }),
     ).toBeVisible();

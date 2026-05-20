@@ -26,9 +26,9 @@ Breaking or structural data changes, documented so upgrades are not guesswork. I
 
 **Backups:** Include `CH_DATA_DIR` and your Hermes install root (`HERMES_HOME`). See [CONTROL_HUB.md](CONTROL_HUB.md) and [DEPLOY.md](DEPLOY.md).
 
-## 2026-05 — SQLite baseline schema (v1)
+## 2026-05 — SQLite baseline schema (v2)
 
-**Change:** The historical migration chain (`001`–`032`) is replaced by a single **[`001_baseline.sql`](../src/lib/db/migrations/001_baseline.sql)**. Runtime schema version is **`meta.schema_version = 1`**.
+**Change:** The historical migration chain (`001`–`032`) is replaced by a single **[`001_baseline.sql`](../src/lib/db/migrations/001_baseline.sql)**. Runtime schema version is **`meta.schema_version = 2`** (`BASELINE_SCHEMA_VERSION` in `src/lib/db/upgrade.ts`).
 
 **Automatic upgrade:** On first open after updating, Control Hub:
 
@@ -57,22 +57,17 @@ Breaking or structural data changes, documented so upgrades are not guesswork. I
 
 **Fresh installs / `main` branch users:** No prior SQLite DB exists; baseline is applied on first `npm run prebuild` or first API access.
 
-**Prebuild DB:** `npm run prebuild` writes `{repo}/data/control-hub.db` using the same baseline. Runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). If `{repo}/data/control-hub.db` has `schema_version !== 1`, prebuild deletes and recreates it (CI/dev convenience only).
+**Prebuild DB:** `npm run prebuild` writes `{repo}/data/control-hub.db` using the same baseline. Runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). If `{repo}/data/control-hub.db` has `schema_version !== 2`, prebuild deletes and recreates it (CI/dev convenience only).
 
 **Removed tables:** Teams, custom kanban, and persistent goals tables are not recreated (features removed from the UI).
 
-## Hermes pathing contract
+## Paths after upgrade
 
-| Root | Resolver | Holds |
-|------|----------|--------|
-| **Hermes** | `HERMES_HOME` / `AGENT_HOME` → legacy `agents-registry.json` (read-only) → `~/.hermes` | `config.yaml`, `.env`, `auth.json`, cron, sessions, skills, profiles |
-| **Control Hub** | `CH_DATA_DIR` (default `~/control-hub/data`) | SQLite, missions JSON, templates, hardware scripts |
-
-**Profiles:** A named profile is a full Hermes home at `{defaultRoot}/profiles/<name>`. You may also set `HERMES_HOME` directly to that profile directory (profile-as-home). Control Hub uses `getHermesDefaultRoot()` and `resolveProfileHermesHome()` so it does not double-nest `profiles/`.
+Current **`HERMES_HOME`**, **`CH_DATA_DIR`**, profile layout, and dual SQLite locations are in **[ENV_REFERENCE.md](ENV_REFERENCE.md)**.
 
 **Missions:** Keep mission JSON under `CH_DATA_DIR/missions/` so Hermes `mark_job_run` can update status without writing under `HERMES_HOME`.
 
-**Detection:** `scripts/tooling/discover-agents.mjs` writes `CH_DATA_DIR/hermes-detection.json` after setup.
+**Detection:** `scripts/tooling/discover-agents.mjs` writes `CH_DATA_DIR/hermes-detection.json` after setup (debug only; the app does not read it).
 
 ## First release from `main` (checklist)
 

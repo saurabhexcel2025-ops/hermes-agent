@@ -7,7 +7,7 @@ import BulkAuxiliaryUpdater from "@/components/models/BulkAuxiliaryUpdater";
 import type { DefaultsModelOption } from "@/components/models/DefaultsGrid";
 import type { TaskType } from "@/lib/hermes-providers";
 
-import type { ApiModel } from "../types";
+import type { ApiModel } from "./types";
 
 interface ModelsAgentDefaultSectionProps {
   models: ApiModel[];

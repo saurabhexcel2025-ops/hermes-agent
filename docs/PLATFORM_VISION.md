@@ -17,11 +17,9 @@ flowchart TB
   H --> AH
 ```
 
-- **`CH_DATA_DIR`** (default `~/control-hub/data`, overridable via `CH_DATA_DIR` / `CONTROL_HUB_DATA_DIR`): Control Hub state—missions, templates, stories, Rec Room data, SQLite (`control-hub.db`), hardware cron scripts/logs defaults (`CH_SCRIPTS_DIR`, `CH_HARDWARE_LOG_DIR` under this tree unless overridden).
+- **Control Hub state** lives under **`CH_DATA_DIR`** (SQLite, missions, templates, stories, hardware cron defaults). **Hermes install** files (profiles, skills, `config.yaml`, agent **`cron/jobs.json`**) come from the active **`HERMES_HOME`**. Full variable list: **[ENV_REFERENCE.md](ENV_REFERENCE.md)**.
 
-- **Active Hermes install:** Paths for profiles, skills, sessions, logs, `config.yaml`, agent **`cron/jobs.json`**, and related files come from **`getActiveHermesPaths()`** / **`getActiveHermesHome()`** in `src/lib/hermes-agent-runtime.ts`, driven by **`HERMES_HOME`** / **`AGENT_HOME`** env vars (default `~/.hermes`).
-
-- **Hardware cron** (OS-level scripts managed by Control Hub) is separate from Hermes agent cron: different directories and **`/api/cron/hardware`** vs Hermes **`jobs.json`** via **`/api/cron`**.
+- **Hardware cron** (OS-level scripts managed by Control Hub) is separate from Hermes agent cron: **`/api/cron/hardware`** vs Hermes **`jobs.json`** via **`/api/cron`**.
 
 ## Scheduling
 

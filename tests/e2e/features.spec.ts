@@ -48,8 +48,33 @@ test.describe("Sessions page", () => {
   test("loads sessions list", async ({ page }) => {
     await page.goto("/sessions");
     await expect(
-      page.getByRole("heading", { name: /Sessions/i })
+      page.getByRole("heading", { name: /Session History/i })
     ).toBeVisible();
+  });
+
+  test("optional session detail from list link", async ({ page, request }) => {
+    const res = await request.get("/api/sessions?limit=5");
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    const sessions: { id: string }[] = body.data?.sessions ?? body.sessions ?? [];
+    if (sessions.length === 0) {
+      test.skip(true, "No sessions available for detail view");
+      return;
+    }
+    const id = sessions[0].id;
+    await page.goto(`/sessions/${encodeURIComponent(id)}`);
+    await expect(page.getByTestId("ch-app-shell")).toBeVisible();
+    await expect(page.locator("main")).toBeVisible({ timeout: 30_000 });
+  });
+});
+
+test.describe("Chat page", () => {
+  test("loads chat shell", async ({ page }) => {
+    await page.goto("/orchestration/chat");
+    await expect(
+      page.getByRole("heading", { name: "Chat", exact: true })
+    ).toBeVisible();
+    await expect(page.getByTestId("ch-app-shell")).toBeVisible();
   });
 });
 
@@ -70,10 +95,34 @@ test.describe("Config page", () => {
 
 test.describe("Skills page", () => {
   test("loads skills browser", async ({ page }) => {
-    await page.goto("/skills");
+    await page.goto("/operations/skills");
     await expect(
-      page.getByRole("heading", { name: /Skills/i })
+      page.getByRole("heading", { name: /Skills Manager/i })
     ).toBeVisible();
+  });
+
+  test("optional skill detail from API path", async ({ page, request }) => {
+    const res = await request.get("/api/skills?profile=default");
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    const skills: { name: string; category: string }[] =
+      body.data?.skills ?? body.skills ?? [];
+    if (skills.length === 0) {
+      test.skip(true, "No skills on disk for detail view");
+      return;
+    }
+    const skill = skills[0];
+    const segments =
+      skill.category && skill.category !== "uncategorized"
+        ? [skill.category, skill.name]
+        : [skill.name];
+    const path = segments.map((s) => encodeURIComponent(s)).join("/");
+    const detailRes = await page.goto(`/operations/skills/${path}`, {
+      waitUntil: "domcontentloaded",
+    });
+    expect(detailRes?.status() ?? 0).toBeLessThan(500);
+    await expect(page.getByTestId("ch-app-shell")).toBeVisible();
+    await expect(page.locator("h1").first()).toBeVisible({ timeout: 30_000 });
   });
 });
 

@@ -43,7 +43,9 @@ Seed state is written to `CH_DATA_DIR/seed-state.json`.
 | **Config → Models** | Same pattern for LLM model registry (separate tables) |
 | **Dashboard** | **Sync now** → `POST /api/sync` (background `SyncScheduler`) |
 
-API routes: `/api/agent/profiles/sync/push`, `pull`, `drift`. Models use `/api/models/sync/*` only (per-model `[id]/push|pull` routes were removed).
+**Profiles:** `POST /api/agent/profiles/sync/push` and `POST /api/agent/profiles/sync/pull`. Drift is reported inline on each row from `GET /api/agent/profiles` (`syncStatus`: `synced` \| `drift` \| `error`) — there is no separate `/api/agent/profiles/sync/drift` route.
+
+**Models:** `GET /api/models/sync/drift`, `POST /api/models/sync/pull`, `POST /api/models/sync/push` (per-model `[id]/push|pull` routes were removed).
 
 ## Install-only Hermes copy
 

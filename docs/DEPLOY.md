@@ -54,16 +54,31 @@ bash scripts/application/ch-deploy.sh rebuild --branch dev   # optional local ch
 
 ## Required environment
 
+Full table: **[ENV_REFERENCE.md](ENV_REFERENCE.md)**.
+
 | Variable | Purpose |
 |----------|---------|
 | `HERMES_HOME` / `AGENT_HOME` | Hermes install root. Defaults to `~/.hermes`. |
-| `CH_DATA_DIR` | Control Hub data root (default `~/control-hub/data`).
+| `CH_DATA_DIR` | Control Hub data root (default `~/control-hub/data`). |
 | `CH_SCRIPTS_DIR` / `CH_HARDWARE_LOG_DIR` | Hardware cron script prefix and logs (default `CH_DATA_DIR/scripts` and `CH_DATA_DIR/logs`). |
 | `CH_READ_ONLY` | Set to `1` for read-only UI/API. |
+
+### Backup scripts (do not confuse)
+
+| Script | What it backs up | When to use |
+|--------|------------------|-------------|
+| [`scripts/bootstrap/backup-hermes-config.sh`](../scripts/bootstrap/backup-hermes-config.sh) | Entire `CH_DATA_DIR` tree (SQLite, missions, templates, stories) | Manual operator backup before risky changes |
+| [`scripts/hardware/ch-backup.sh`](../scripts/hardware/ch-backup.sh) | Hindsight memory JSON via `hindsight_bridge.py` under `$HERMES_HOME` | System cron preset; wired in UI under Orchestration → Cron |
+
+`ch-backup.sh` is copied into `CH_DATA_DIR/scripts` during setup when missing. `backup-hermes-config.sh` is not scheduled by Control Hub.
 
 Run Control Hub where you trust the network, or place it behind your own reverse proxy and access controls. **`CH_REQUEST_SIGNING_SECRET`** can optionally protect specific flows (see `src/lib/api-auth.ts`).
 
 ## Docker
+
+**Primary workflow:** `npm run build`, `npm run start:network` (or `ch-deploy.sh`), and sidebar deploy on a host with Node 20+. You do not need Docker for day-to-day use.
+
+**Docker is optional** for operators who want a container (`docker-compose.yml` below) and **required in CI** only: every PR builds [`Dockerfile`](../Dockerfile) and runs [`tests/scripts/docker-deploy-api-smoke.sh`](../tests/scripts/docker-deploy-api-smoke.sh) so the production image and `POST /api/update` restart path stay valid.
 
 ```bash
 docker compose build

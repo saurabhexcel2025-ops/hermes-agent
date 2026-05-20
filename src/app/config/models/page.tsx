@@ -18,12 +18,12 @@ import Button from "@/components/ui/Button";
 import { LoadingSpinner, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import ModelEditor from "@/components/models/ModelEditor";
 
-import ModelsAgentDefaultSection from "./components/ModelsAgentDefaultSection";
-import ModelsDriftBanner from "./components/ModelsDriftBanner";
-import ModelsFallbackSection from "./components/ModelsFallbackSection";
-import ModelsTableSection from "./components/ModelsTableSection";
-import ModelsTaskDefaultsSection from "./components/ModelsTaskDefaultsSection";
-import { useModelsPage } from "./hooks/useModelsPage";
+import ModelsAgentDefaultSection from "@/components/models/ModelsAgentDefaultSection";
+import ModelsDriftBanner from "@/components/models/ModelsDriftBanner";
+import ModelsFallbackSection from "@/components/models/ModelsFallbackSection";
+import ModelsTableSection from "@/components/models/ModelsTableSection";
+import ModelsTaskDefaultsSection from "@/components/models/ModelsTaskDefaultsSection";
+import { useModelsPage } from "@/hooks/useModelsPage";
 
 export default function ModelsPage() {
   const {

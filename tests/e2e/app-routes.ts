@@ -31,6 +31,7 @@ export const APP_NAV_ROUTES: readonly string[] = [
   "/config/session_reset",
   "/config/skills",
   "/config/smart_model_routing",
+  "/config/streaming",
   "/config/stt",
   "/config/terminal",
   "/config/tts",

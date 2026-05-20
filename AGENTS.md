@@ -46,7 +46,7 @@ control-hub/
 
 │   │   ├── api/                    # REST API routes
 
-│   │   │   ├── agent/files/        # Behaviour file CRUD
+│   │   │   ├── agent/files/[key]/    # Behaviour file read/update
 
 │   │   │   ├── agent/profiles/     # Agent profile CRUD
 
@@ -72,7 +72,7 @@ control-hub/
 
 │   │   ├── page.tsx                # Dashboard
 
-│   │   ├── (main)/                 # sessions, memory, gateway, logs
+│   │   ├── (main)/                 # sessions, memory, logs (route group — no /main URL prefix)
 
 │   │   ├── orchestration/          # cron, missions, chat
 
@@ -132,8 +132,6 @@ control-hub/
 
 ├── scripts/git-hooks/              # Optional pre-push (see docs/CONTRIBUTING.md)
 
-├── public/                         # Static assets
-
 ├── docs/                           # Technical documentation index → docs/README.md
 
 ├── next.config.ts                  # Next.js config
@@ -143,6 +141,8 @@ control-hub/
 └── package.json
 
 ```
+
+Next.js static files (favicon, `robots.txt`, etc.) go in a `public/` directory at the repo root when you add them—the folder is not committed empty; the production `Dockerfile` runs `mkdir -p public` before build.
 
 §
 
@@ -184,7 +184,7 @@ control-hub/
 
 - `src/lib/paths.ts` — `PATHS` (Control Hub–owned dirs), `CH_DATA_DIR`, `getChScriptsDir()`, `getChHardwareLogDir()`, `getDiscordHomeChannel()`
 - `src/lib/hermes-agent-runtime.ts` — `getActiveHermesPaths()`, `getActiveHermesHome()`, `getAgentLlmEndpoints()`
-- `src/lib/hermes-home.ts` — `getHermesHome()` (env-first; read-only `agents-registry.json` fallback)
+- `src/lib/hermes-home.ts` — `getHermesHome()` (env-first; default `~/.hermes`)
 - `src/lib/models-repository.ts` — `getDefaultModel()`, `getModel()`, `getModelWithKey()`, `setDefaultModel()`, `listModels()` (SQLite registry)
 - `src/lib/db.ts` — SQLite connection, migrations, `getGatewayPlatforms()`
 
@@ -345,7 +345,7 @@ Control Hub is a command centre, not a file manager. The operator opens the dash
 
 §
 
-**Sidebar sections:** Main (Dashboard, Sessions, Memory, Gateway, Logs) | Orchestration (Cron, Missions, Chat) | Operations (Agents, Skills, Tools, Personalities) | Rec Room (Story Weaver) | Config (Models, Seed, HERMES.md, Environment + YAML sections)
+**Sidebar sections:** Main (Dashboard, Sessions, Memory, Logs) | Orchestration (Cron, Missions, Chat) | Operations (Agents, Skills, Tools, Personalities) | Rec Room (Story Weaver) | Config (Models, Seed, HERMES.md, Environment + YAML sections). Gateway health appears on the dashboard and in Orchestration → Chat (no separate Gateway page).
 
 **Profiles:** SQLite `agent_profiles` is source of truth; push/pull/drift on Operations → Agents mirrors Config → Models sync. See [docs/CATALOG_AND_PROFILES.md](docs/CATALOG_AND_PROFILES.md).
 

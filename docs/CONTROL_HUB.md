@@ -6,8 +6,11 @@ Control Hub is the **Next.js app** in this repo: a command-centre UI for [Hermes
 
 | Topic | Doc |
 |--------|-----|
+| Environment variables | [ENV_REFERENCE.md](ENV_REFERENCE.md) |
 | Run in production, TLS, Docker | [DEPLOY.md](DEPLOY.md) |
 | Professional catalog (profiles + templates) | [CATALOG_AND_PROFILES.md](CATALOG_AND_PROFILES.md) · Config → Seed (`/config/seed`) |
+| Missions (dispatch, cancel, templates) | [MISSIONS.md](MISSIONS.md) |
+| UI design tokens | [design-tokens.md](design-tokens.md) |
 | REST API shapes | [API.md](API.md) |
 | Data directory and upgrades | [MIGRATION.md](MIGRATION.md) |
 | Hermes `config.yaml` checklist | [HERMES_CONFIG_INTEGRATION.md](HERMES_CONFIG_INTEGRATION.md) |

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { timeAgo, titleCase } from "@/lib/utils";
-import type { MissionDetail, MissionRow } from "../hooks/useMissionsPage";
+import type { MissionDetail, MissionRow } from "@/hooks/useMissionsPage";
 
 export interface MissionEditorPanelProps {
   detail: MissionDetail | null;

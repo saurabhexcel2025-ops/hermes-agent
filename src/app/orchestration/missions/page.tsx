@@ -13,8 +13,8 @@ import {
   TemplateEditorModal,
   TemplateManagerModal,
 } from "@/components/missions/TemplateModals";
-import { useMissionsPage } from "./hooks/useMissionsPage";
-import MissionsList from "./components/MissionsList";
+import { useMissionsPage } from "@/hooks/useMissionsPage";
+import MissionsList from "@/components/missions/MissionsList";
 
 export default function MissionsPage() {
   const vm = useMissionsPage();

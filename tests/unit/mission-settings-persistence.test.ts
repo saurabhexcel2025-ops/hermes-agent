@@ -76,7 +76,7 @@ describe("Baseline — mission settings columns", () => {
   });
 
   it("Missions page handleEdit restores model/provider/settings", () => {
-    const p = join(repoRoot, "src", "app", "orchestration", "missions", "hooks", "useMissionsPage.ts");
+    const p = join(repoRoot, "src", "hooks", "useMissionsPage.ts");
     const content = readFileSync(p, "utf-8");
     expect(content).toContain("setNewModel(m.modelId");
     expect(content).toContain("setNewProvider(m.provider");
