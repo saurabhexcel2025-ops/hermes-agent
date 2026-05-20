@@ -39,7 +39,14 @@ jest.mock("@/lib/api-logger", () => ({ logApiError: jest.fn() }));
 jest.mock("@/lib/api-auth", () => ({ requireAuth: jest.fn(() => null) }));
 jest.mock("@/lib/audit-log", () => ({ appendAuditLine: jest.fn() }));
 
-const mockCancelMission = jest.fn();
+let cancelResolve: (() => void) | null = null;
+const mockCancelMission = jest.fn(
+  () =>
+    new Promise<{ processKilled: boolean; error: string | null }>((resolve) => {
+      cancelResolve = () => resolve({ processKilled: true, error: null });
+    }),
+);
+
 jest.mock("@/lib/backends", () => ({
   agentBackend: {
     cancelMission: (...args: unknown[]) => mockCancelMission(...args),
@@ -89,11 +96,11 @@ jest.mock("@/lib/profiles-repository", () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockCancelMission.mockResolvedValue({ processKilled: true, error: null });
+  cancelResolve = null;
 });
 
 describe("POST /api/missions cancel", () => {
-  it("calls agentBackend.cancelMission for dispatched missions", async () => {
+  it("returns before background cancelMission completes", async () => {
     mockGetMission.mockReturnValue({
       id: "m-1",
       status: "dispatched",
@@ -120,7 +127,10 @@ describe("POST /api/missions cancel", () => {
 
     const res = await POST(req);
     const body = (await res.json()) as {
-      data?: { cancel?: { processKilled: boolean }; mission?: { id: string } };
+      data?: {
+        cancel?: { accepted: boolean; processKillPending: boolean };
+        mission?: { id: string };
+      };
     };
 
     expect(mockCancelMission).toHaveBeenCalledWith("m-1");
@@ -128,11 +138,16 @@ describe("POST /api/missions cancel", () => {
       "sess-1",
       expect.objectContaining({ status: "failed", error: "Cancelled by user" }),
     );
-    expect(body.data?.cancel?.processKilled).toBe(true);
+    expect(body.data?.cancel?.accepted).toBe(true);
+    expect(body.data?.cancel?.processKillPending).toBe(true);
     expect(body.data?.mission?.id).toBe("m-1");
+    expect(cancelResolve).not.toBeNull();
+
+    cancelResolve?.();
+    await mockCancelMission.mock.results[0]?.value;
   });
 
-  it("skips process kill for completed missions", async () => {
+  it("skips background process kill for completed missions", async () => {
     mockGetMission.mockReturnValue({
       id: "m-2",
       status: "successful",
@@ -155,8 +170,12 @@ describe("POST /api/missions cancel", () => {
       body: JSON.stringify({ action: "cancel", missionId: "m-2" }),
     });
 
-    await POST(req);
+    const res = await POST(req);
+    const body = (await res.json()) as {
+      data?: { cancel?: { processKillPending: boolean } };
+    };
 
     expect(mockCancelMission).not.toHaveBeenCalled();
+    expect(body.data?.cancel?.processKillPending).toBe(false);
   });
 });

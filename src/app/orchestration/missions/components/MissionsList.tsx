@@ -62,6 +62,7 @@ export default function MissionsList({ vm }: MissionsListProps) {
     handleDelete,
     handleCancel,
     handleDuplicateMission,
+    cancellingMissionId,
   } = vm;
 
   const categoryMap = buildCategoryMap(categories);
@@ -438,6 +439,7 @@ export default function MissionsList({ vm }: MissionsListProps) {
                                   onPromptCollapsedChange={setPromptCollapsed}
                                   onEdit={handleEdit}
                                   onCancel={handleCancel}
+                                  isCancelling={cancellingMissionId === mission.id}
                                   onDelete={handleDelete}
                                   onDuplicate={handleDuplicateMission}
                                 />

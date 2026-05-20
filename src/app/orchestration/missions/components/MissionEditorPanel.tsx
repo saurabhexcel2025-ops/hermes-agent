@@ -24,6 +24,7 @@ export interface MissionEditorPanelProps {
   onPromptCollapsedChange: (collapsed: boolean) => void;
   onEdit: (m: MissionRow) => void;
   onCancel: (id: string) => void;
+  isCancelling?: boolean;
   onDelete: (id: string) => void;
   onDuplicate?: (m: MissionRow) => void;
 }
@@ -37,6 +38,7 @@ export default function MissionEditorPanel({
   onPromptCollapsedChange,
   onEdit,
   onCancel,
+  isCancelling = false,
   onDelete,
   onDuplicate,
 }: MissionEditorPanelProps) {
@@ -307,13 +309,12 @@ export default function MissionEditorPanel({
               <Button
                 variant="danger"
                 size="sm"
-                onClick={() =>
-                  onCancel(mission.id)
-                }
+                loading={isCancelling}
+                disabled={isCancelling}
+                onClick={() => onCancel(mission.id)}
               >
-                <StopCircle className="w-3 h-3" />
-                {" "}
-                Cancel
+                {!isCancelling ? <StopCircle className="w-3 h-3" /> : null}
+                {isCancelling ? "Cancelling…" : "Cancel"}
               </Button>
             )}
             <Button

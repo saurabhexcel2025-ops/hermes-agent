@@ -114,6 +114,9 @@ export function useMissionsPage() {
   const [newSkills, setNewSkills] = useState<string[]>([]);
   const [referenceInput, setReferenceInput] = useState("");
   const [dispatching, setDispatching] = useState(false);
+  const [cancellingMissionId, setCancellingMissionId] = useState<string | null>(
+    null,
+  );
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [missionCategoryFilter, setMissionCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<ManagedCategory[]>([]);
@@ -800,18 +803,49 @@ export function useMissionsPage() {
       )
     )
       return;
-    const res = await fetch("/api/missions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cancel", missionId: id }),
-    });
-    if (res.ok) {
-      showToast("Mission cancelled", "success");
-      fetchData();
-      if (expandedId === id) fetchDetail(id);
-    } else {
-      const body = await res.json().catch(() => null);
-      showToast(body?.error || "Failed to cancel mission", "error");
+
+    const previousMission = missions.find((m) => m.id === id);
+    setCancellingMissionId(id);
+    showToast("Cancelling mission…", "info");
+    setMissions((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? { ...m, status: "failed" as const, result: "Cancelled by user" }
+          : m,
+      ),
+    );
+
+    try {
+      const res = await fetch("/api/missions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", missionId: id }),
+      });
+      if (res.ok) {
+        showToast("Mission cancelled", "success");
+        await fetchData();
+        if (expandedId === id) void fetchDetail(id);
+      } else {
+        const body = await res.json().catch(() => null);
+        if (previousMission) {
+          setMissions((prev) =>
+            prev.map((m) => (m.id === id ? previousMission : m)),
+          );
+        }
+        showToast(
+          (body as { error?: string } | null)?.error || "Failed to cancel mission",
+          "error",
+        );
+      }
+    } catch {
+      if (previousMission) {
+        setMissions((prev) =>
+          prev.map((m) => (m.id === id ? previousMission : m)),
+        );
+      }
+      showToast("Network error — could not cancel mission", "error");
+    } finally {
+      setCancellingMissionId(null);
     }
   };
 
@@ -932,6 +966,7 @@ export function useMissionsPage() {
     handleCreate,
     handleSaveAsTemplate,
     dispatching,
+    cancellingMissionId,
     handleTemplateSelect,
     createFormRef,
     setShowTemplateManager,

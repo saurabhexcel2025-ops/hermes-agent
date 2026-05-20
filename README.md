@@ -2,6 +2,8 @@
 
 Control Hub is the web command centre for [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation). Hermes runs your agents on the machine; Control Hub gives you a dashboard to see what is running, dispatch missions, manage cron, browse sessions, and edit config—without living in the terminal.
 
+![Control Hub dashboard](docs/images/dashboard.png)
+
 **More documentation:** [Doc index](docs/README.md) · [Control Hub overview](docs/CONTROL_HUB.md) · [Missions](docs/MISSIONS.md) · [Deploy](docs/DEPLOY.md) · [Catalog & profiles](docs/CATALOG_AND_PROFILES.md)
 
 ---
@@ -40,6 +42,8 @@ Control Hub is the web command centre for [Hermes Agent](https://hermes-agent.no
 ---
 
 ## Using the dashboard
+
+**Screenshots and page-by-page guide:** [User walkthrough](docs/USER_WALKTHROUGH_GUIDE.md) (dashboard, missions, chat, cron, profiles, skills, tools, models).
 
 | Sidebar area | What to do there |
 |--------------|------------------|

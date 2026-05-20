@@ -478,19 +478,6 @@ export async function POST(request: NextRequest) {
       if (!existingMission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      let cancelResult = { processKilled: true, error: null as string | null };
-      if (existingMission.status === "dispatched" || existingMission.status === "queued") {
-        try {
-          cancelResult = await agentBackend.cancelMission(cancelId);
-        } catch (err) {
-          logApiError("POST /api/missions", "cancelMission process kill", err);
-          cancelResult = {
-            processKilled: false,
-            error: err instanceof Error ? err.message : String(err),
-          };
-        }
-      }
-
       const mission = updateMission(cancelId, {
         status: "failed",
         result: "Cancelled by user",
@@ -512,11 +499,22 @@ export async function POST(request: NextRequest) {
 
       pauseMissionCron(cancelId);
 
+      const shouldKillProcess =
+        existingMission.status === "dispatched" || existingMission.status === "queued";
+      if (shouldKillProcess) {
+        void agentBackend.cancelMission(cancelId).catch((err: unknown) => {
+          logApiError("POST /api/missions", "cancelMission process kill (background)", err);
+        });
+      }
+
       appendAuditLine({ action: "mission.cancel", resource: cancelId, ok: true });
       return NextResponse.json({
         data: {
           mission: enrichMissionCron(mission),
-          cancel: cancelResult,
+          cancel: {
+            accepted: true,
+            processKillPending: shouldKillProcess,
+          },
         },
       });
     }
