@@ -4,39 +4,103 @@ import { existsSync, writeFileSync, readFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 
 import { logApiError } from "@/lib/api-logger";
-import {
-  getCorrelationId,
-  requireChApiKey,
-  requireDeployApiEnabled,
-  requireSignedRequest,
-} from "@/lib/api-auth";
+import { getCorrelationId, requireAuth, requireDeployApiEnabled, requireSignedRequest } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
+import {
+  isDeployInProgress,
+  readDeployStatus,
+  tailLogHint,
+  writeDeployStatusRunning,
+} from "@/lib/deploy-status";
+import { sanitizeGitBranch } from "@/lib/git-branch";
 
 // ═══════════════════════════════════════════════════════════════
 // Update API — Version Check + Update + Restart
 // ═══════════════════════════════════════════════════════════════
 // GET  /api/update                       → check for updates
-// POST /api/update { action: "update" }  → pull + build + restart (gated)
+// POST /api/update { action: "update" }  → spawn scripts/application/ch-deploy.sh update (gated)
+// POST /api/update { action: "rebuild" } → build current tree + restart (optional branch checkout)
+// GET  /api/update?deploy=1            → deploy status from ch-deploy.status
 // POST /api/update { action: "restart" } → restart only (gated)
 //
 // CH_ENABLE_DEPLOY_API=true required for POST.
-// CH_API_KEY optional; when set, require X-CH-API-Key or Bearer.
-// CH_UPDATE_GIT_BRANCH (default main) — remote tracking branch for deploy.
+// Optional CH_REQUEST_SIGNING_SECRET + signature headers for POST hardening.
+// CH_UPDATE_GIT_BRANCH (default dev) — remote tracking branch for deploy.
 
 const APP_DIR = process.cwd();
-const LOCK_FILE = tmpdir() + "/ch-deploy.lock";
-const RELEASE_SCRIPT = APP_DIR + "/scripts/release.sh";
-const RESTART_SCRIPT = APP_DIR + "/scripts/restart.sh";
+const CH_DEPLOY_SCRIPT = APP_DIR + "/scripts/application/ch-deploy.sh";
 const CACHE_FILE = tmpdir() + "/ch-version-cache.json";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const UPDATE_BRANCH = sanitizeGitBranch(
-  process.env.CH_UPDATE_GIT_BRANCH || "main"
+  process.env.CH_UPDATE_GIT_BRANCH || "dev"
 );
 
-function sanitizeGitBranch(raw: string): string {
-  const s = raw.replace(/[^a-zA-Z0-9._/-]/g, "").slice(0, 200);
-  return s || "main";
+// ── Branch listing ──────────────────────────────────────────────
+
+const MAX_REMOTE_BRANCHES = 50;
+
+function listRemoteBranches(): string[] {
+  try {
+    // Ensure we have the latest remote refs
+    execSync("git fetch origin --quiet 2>/dev/null", {
+      cwd: APP_DIR,
+      timeout: 15000,
+    });
+
+    // Get remote branches
+    const rawRemote = execSync("git branch -r --format='%(refname:short)'", {
+      cwd: APP_DIR,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+
+    // Get local branches — only include branches that exist locally (active/checked-out)
+    const rawLocal = execSync("git branch --format='%(refname:short)'", {
+      cwd: APP_DIR,
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+    const localSet = new Set<string>();
+    for (const line of rawLocal.split("\n")) {
+      const b = line.trim();
+      if (b) localSet.add(b);
+    }
+
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const line of rawRemote.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === "origin/HEAD" || !trimmed.startsWith("origin/")) continue;
+      const short = trimmed.replace(/^origin\//, "");
+      const clean = sanitizeGitBranch(short);
+      if (!clean || clean === "HEAD") continue;
+      if (seen.has(clean)) continue;
+      // Only include branches that exist locally (active) or are the configured deploy branch
+      const isDeployBranch = clean === UPDATE_BRANCH;
+      const existsLocally = localSet.has(clean);
+      if (!existsLocally && !isDeployBranch) continue;
+      seen.add(clean);
+      out.push(clean);
+    }
+    // Always include UPDATE_BRANCH even if never checked out locally
+    if (!seen.has(UPDATE_BRANCH)) {
+      try {
+        execSync(`git ls-remote --heads origin ${UPDATE_BRANCH} 2>/dev/null`, {
+          cwd: APP_DIR,
+          encoding: "utf-8",
+          timeout: 10000,
+        });
+        out.push(UPDATE_BRANCH);
+      } catch {
+        // branch doesn't exist on remote — skip
+      }
+    }
+    out.sort((a, b) => a.localeCompare(b));
+    return out.slice(0, MAX_REMOTE_BRANCHES);
+  } catch {
+    return [];
+  }
 }
 
 interface VersionCache {
@@ -46,7 +110,10 @@ interface VersionCache {
   commitMessage: string;
   commitDate: string;
   behind: number;
-  branch: string;
+  /** Remote branch compared against `origin/<name>` (cache key). */
+  comparedBranch: string;
+  /** Local checkout name (`git rev-parse --abbrev-ref HEAD`). */
+  checkoutBranch: string;
   lastChecked: string;
 }
 
@@ -58,13 +125,31 @@ function runGit(args: string[]): string {
   }).trim();
 }
 
+/** Resolves `origin/<branch>` after fetch; returns an error message or null if OK. */
+function verifyDeployBranchOnOrigin(branch: string): string | null {
+  const name = sanitizeGitBranch(branch);
+  try {
+    runGit(["fetch", "origin", name, "--quiet"]);
+    const full = runGit(["rev-parse", "origin/" + name]);
+    if (!/^[0-9a-f]{40}$/i.test(full)) {
+      return "Branch not found on origin: " + name;
+    }
+    return null;
+  } catch {
+    return "Branch not found on origin: " + name;
+  }
+}
+
 function getCachedVersion(): VersionCache | null {
   try {
     if (!existsSync(CACHE_FILE)) return null;
-    const raw = JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
-    if (Date.now() - new Date(raw.lastChecked).getTime() > CACHE_TTL_MS)
+    const raw = JSON.parse(readFileSync(CACHE_FILE, "utf-8")) as Partial<VersionCache>;
+    if (Date.now() - new Date(raw.lastChecked ?? 0).getTime() > CACHE_TTL_MS)
       return null;
-    return raw;
+    if (typeof raw.comparedBranch !== "string" || typeof raw.checkoutBranch !== "string") {
+      return null;
+    }
+    return raw as VersionCache;
   } catch {
     return null;
   }
@@ -78,16 +163,17 @@ function saveVersionCache(cache: VersionCache): void {
   }
 }
 
-function checkVersion(): VersionCache {
+function checkVersion(branch?: string): VersionCache {
+  const targetBranch = branch ?? UPDATE_BRANCH;
   const cached = getCachedVersion();
-  if (cached) return cached;
+  if (cached && cached.comparedBranch === targetBranch) return cached;
 
   try {
-    runGit(["fetch", "origin", UPDATE_BRANCH, "--quiet"]);
+    runGit(["fetch", "origin", targetBranch, "--quiet"]);
     const localHash = runGit(["rev-parse", "HEAD"]);
-    const remoteRef = "origin/" + UPDATE_BRANCH;
+    const remoteRef = "origin/" + targetBranch;
     const remoteHash = runGit(["rev-parse", remoteRef]);
-    const branch = runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
+    const currentBranch = runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
 
     let commitMessage = "";
     let commitDate = "";
@@ -113,7 +199,8 @@ function checkVersion(): VersionCache {
       commitMessage,
       commitDate,
       behind,
-      branch,
+      comparedBranch: targetBranch,
+      checkoutBranch: currentBranch,
       lastChecked: new Date().toISOString(),
     };
     saveVersionCache(cache);
@@ -126,16 +213,45 @@ function checkVersion(): VersionCache {
       commitMessage: "",
       commitDate: "",
       behind: 0,
-      branch: "unknown",
+      comparedBranch: targetBranch,
+      checkoutBranch: "unknown",
       lastChecked: new Date().toISOString(),
     };
   }
 }
 
 // GET /api/update
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    return NextResponse.json({ data: checkVersion() });
+    const { searchParams } = new URL(request.url);
+
+    if (searchParams.get("deploy") === "1") {
+      const deploy = readDeployStatus();
+      const logTail =
+        deploy.state === "failed" && deploy.logHint
+          ? tailLogHint(deploy.logHint)
+          : [];
+      return NextResponse.json({
+        data: { deploy: { ...deploy, logTail } },
+      });
+    }
+
+    // Branch listing endpoint
+    if (searchParams.get("branches") === "1") {
+      const branches = listRemoteBranches();
+      return NextResponse.json({
+        data: { branches, default: UPDATE_BRANCH },
+      });
+    }
+
+    const branchParam = searchParams.get("branch");
+    const branch = branchParam
+      ? sanitizeGitBranch(branchParam)
+      : UPDATE_BRANCH;
+    const ver = checkVersion(branch);
+    return NextResponse.json({
+      data: { ...ver, branch: ver.checkoutBranch },
+    });
   } catch (error) {
     logApiError("GET /api/update", "checking version", error);
     return NextResponse.json({ error: "Failed to check version" }, { status: 500 });
@@ -148,7 +264,7 @@ export async function POST(request: NextRequest) {
   const gated = requireDeployApiEnabled();
   if (gated) return gated;
 
-  const auth = requireChApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
   const signed = requireSignedRequest(request);
   if (signed) return signed;
@@ -157,15 +273,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const action = body.action || "update";
 
-    if (existsSync(LOCK_FILE)) {
+    if (isDeployInProgress()) {
       return NextResponse.json(
-        { error: "Update already in progress" },
-        { status: 409 }
+        { error: "Deploy already in progress" },
+        { status: 409 },
       );
     }
 
     if (action === "restart") {
-      spawnScript(RESTART_SCRIPT);
+      const missing = deployScriptMissingResponse();
+      if (missing) return missing;
+      writeDeployStatusRunning("restart", "restart", "Restart queued…");
+      const spawned = spawnChDeploy("ch-restart", ["restart"]);
+      if (!spawned.ok) {
+        return NextResponse.json(
+          { error: spawned.error ?? "Failed to start restart" },
+          { status: 500 }
+        );
+      }
       appendAuditLine({
         action: "deploy.restart",
         resource: "update",
@@ -175,97 +300,94 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ data: { action: "restart", status: "started" } });
     }
 
-    if (action === "update") {
-      try {
-        runGit(["fetch", "origin", UPDATE_BRANCH, "--quiet"]);
-        runGit(["checkout", UPDATE_BRANCH, "--quiet"]);
-        runGit(["reset", "--hard", "origin/" + UPDATE_BRANCH, "--quiet"]);
-      } catch (error) {
-        logApiError("POST /api/update", "git operations", error);
-        appendAuditLine({
-          action: "deploy.update",
-          resource: "git",
-          ok: false,
-          detail: "git failed",
-          correlationId,
-        });
-        return NextResponse.json({ error: "Git update failed" }, { status: 500 });
+    if (action === "rebuild") {
+      const missing = deployScriptMissingResponse();
+      if (missing) return missing;
+
+      const rebuildArgs = ["rebuild"];
+      let rebuildBranch: string | undefined;
+      if (body.branch && typeof body.branch === "string" && body.branch.trim()) {
+        rebuildBranch = sanitizeGitBranch(String(body.branch));
+        rebuildArgs.push("--branch", rebuildBranch);
       }
 
-      try {
-        const diff = execSync(
-          'git diff --name-only HEAD@{1} HEAD 2>/dev/null || echo ""',
-          { cwd: APP_DIR, encoding: "utf-8", timeout: 30000 }
-        );
-        if (diff.includes("package")) {
-          execSync("npm install --prefer-offline", {
-            cwd: APP_DIR,
-            timeout: 120000,
-            stdio: "pipe",
-          });
-        }
-      } catch (error) {
-        logApiError("POST /api/update", "npm install", error);
+      writeDeployStatusRunning("rebuild", "build", "Rebuild queued…");
+      const spawnedRebuild = spawnChDeploy("ch-rebuild", rebuildArgs);
+      if (!spawnedRebuild.ok) {
+        logApiError("POST /api/update", "spawn rebuild", new Error(spawnedRebuild.error ?? ""));
         appendAuditLine({
-          action: "deploy.update",
-          resource: "npm",
-          ok: false,
-          correlationId,
-        });
-        return NextResponse.json({ error: "npm install failed" }, { status: 500 });
-      }
-
-      try {
-        execSync("npm run build", {
-          cwd: APP_DIR,
-          timeout: 180000,
-          stdio: "pipe",
-        });
-      } catch (error) {
-        logApiError("POST /api/update", "build", error);
-        appendAuditLine({
-          action: "deploy.update",
+          action: "deploy.rebuild",
           resource: "build",
           ok: false,
           correlationId,
         });
         return NextResponse.json(
-          {
-            error: "Build failed — update aborted (server still running)",
-          },
+          { error: spawnedRebuild.error ?? "Failed to start build" },
           { status: 500 }
         );
       }
 
-      spawnScript(RELEASE_SCRIPT);
+      appendAuditLine({
+        action: "deploy.rebuild",
+        resource: "build",
+        ok: true,
+        correlationId,
+      });
+      return NextResponse.json({
+        data: {
+          action: "rebuild",
+          status: "started",
+          ...(rebuildBranch ? { branch: rebuildBranch } : {}),
+        },
+      });
+    }
+
+    if (action === "update") {
+      const updateBranch = body.branch
+        ? sanitizeGitBranch(String(body.branch))
+        : UPDATE_BRANCH;
+      const updateBranchErr = verifyDeployBranchOnOrigin(updateBranch);
+      if (updateBranchErr) {
+        return NextResponse.json({ error: updateBranchErr }, { status: 400 });
+      }
+      const missing = deployScriptMissingResponse();
+      if (missing) return missing;
+      writeDeployStatusRunning("update", "git", "Update queued…");
+      const spawnedUpdate = spawnChDeploy("ch-update", ["update", "--branch", updateBranch]);
+      if (!spawnedUpdate.ok) {
+        logApiError("POST /api/update", "spawn update", new Error(spawnedUpdate.error ?? ""));
+        appendAuditLine({
+          action: "deploy.update",
+          resource: "ch-deploy",
+          ok: false,
+          correlationId,
+        });
+        return NextResponse.json(
+          { error: spawnedUpdate.error ?? "Failed to start update" },
+          { status: 500 }
+        );
+      }
       try {
         unlinkSync(CACHE_FILE);
       } catch (error) {
         logApiError("POST /api/update", "cache cleanup", error);
       }
 
-      let short = "";
-      try {
-        short = runGit(["rev-parse", "--short", "HEAD"]);
-      } catch {
-        // Keep response successful even if git hash retrieval fails.
-      }
-
       appendAuditLine({
         action: "deploy.update",
         resource: "full",
         ok: true,
-        detail: short,
+        detail: updateBranch,
         correlationId,
       });
 
       return NextResponse.json({
-        data: { action: "update", status: "started", newHash: short },
+        data: { action: "update", status: "started", branch: updateBranch },
       });
     }
 
     return NextResponse.json(
-      { error: "Unknown action. Use 'update' or 'restart'" },
+      { error: "Unknown action. Use 'update', 'rebuild', or 'restart'" },
       { status: 400 }
     );
   } catch (error) {
@@ -274,33 +396,83 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function spawnScript(scriptPath: string): void {
-  const command = `sleep 3; bash "${scriptPath}"`;
+function quoteShellSingle(arg: string): string {
+  return "'" + arg.replace(/'/g, "'\"'\"'") + "'";
+}
+
+function spawnChDeploy(
+  unitName: string,
+  deployArgs: string[],
+): { ok: boolean; error?: string } {
+  try {
+    execFileSync("bash", ["-n", CH_DEPLOY_SCRIPT], { stdio: "ignore", timeout: 8000 });
+  } catch {
+    return {
+      ok: false,
+      error: "Deploy script missing or not readable by bash",
+    };
+  }
+
+  const command =
+    `sleep 1; bash ${quoteShellSingle(CH_DEPLOY_SCRIPT)} ${deployArgs.map(quoteShellSingle).join(" ")}`.trimEnd();
 
   try {
-    spawn(
+    // Clear any stale failed systemd transient unit before spawning
+    try {
+      execFileSync("systemctl", ["--user", "reset-failed", `${unitName}.service`], {
+        stdio: "ignore",
+        timeout: 5000,
+      });
+    } catch {
+      // reset-failed fails if unit doesn't exist — that's fine
+    }
+
+    const sys = spawn(
       "systemd-run",
       [
         "--user",
-        "--unit=ch-action",
+        `--unit=${unitName}`,
         "--property=Type=oneshot",
         "bash",
         "-c",
         command,
       ],
-      { detached: true, stdio: "ignore" }
-    ).unref();
-    return;
+      { detached: true, stdio: "ignore" },
+    );
+    if (typeof sys.pid === "number" && sys.pid > 0) {
+      sys.unref();
+      return { ok: true };
+    }
   } catch {
-    // fall through
+    // fall through to nohup
   }
 
   try {
-    spawn("nohup", ["bash", "-c", command], {
+    const bg = spawn("nohup", ["bash", "-c", command], {
       detached: true,
       stdio: "ignore",
-    }).unref();
+    });
+    if (typeof bg.pid === "number" && bg.pid > 0) {
+      bg.unref();
+      return { ok: true };
+    }
   } catch {
-    // ignore
+    return { ok: false, error: "Could not spawn nohup bash" };
   }
+
+  return {
+    ok: false,
+    error:
+      "Could not start deploy (needs systemd-run or nohup, and bash in PATH; on Windows use WSL/Git Bash)",
+  };
+}
+
+function deployScriptMissingResponse(): NextResponse | null {
+  if (!existsSync(CH_DEPLOY_SCRIPT)) {
+    return NextResponse.json(
+      { error: "Deploy script missing (scripts/application/ch-deploy.sh)" },
+      { status: 500 }
+    );
+  }
+  return null;
 }

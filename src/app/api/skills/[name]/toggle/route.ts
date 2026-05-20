@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { resolveSafeProfileName } from "@/lib/path-security";
+import {
+  buildEnabledYamlLines,
+  findSkillsEnabledBlockLineRange,
+  findSkillsHeaderLineIndex,
+  getResolvedEnabledSkillNames,
+  configPathForProfile,
+  skillsRootForProfile,
+} from "@/lib/skills-enabled-config";
 
 // PUT — Toggle a skill on/off for a profile
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
-  // Authentication checks
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { name } = await params;
@@ -27,96 +32,51 @@ export async function PUT(
       return NextResponse.json({ error: "enabled (boolean) is required" }, { status: 400 });
     }
 
-    // Validate profile name
     const profileResult = resolveSafeProfileName(profileParam);
     if (!profileResult.ok) {
       return NextResponse.json({ error: profileResult.error }, { status: 400 });
     }
     const profile = profileResult.profile;
 
-    let configPath: string;
-    if (profile === "default") {
-      configPath = HERMES_HOME + "/config.yaml";
-    } else {
-      configPath = HERMES_HOME + "/profiles/" + profile + "/config.yaml";
-    }
+    const home = getActiveHermesHome();
+    const configPath = configPathForProfile(home, profile);
 
     if (!existsSync(configPath)) {
       return NextResponse.json({ error: "Profile config not found" }, { status: 404 });
     }
 
-    // Update skills.disabled in YAML
     const content = readFileSync(configPath, "utf-8");
-    const lines = content.split("\n");
-    let inSkills = false;
-    let inDisabled = false;
-    let disabledStart = -1;
-    let disabledEnd = -1;
+    const skillsRoot = skillsRootForProfile(home, profile);
+    const currentEnabled = getResolvedEnabledSkillNames(content, skillsRoot);
 
-    for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
+    const newEnabled = enabled
+      ? currentEnabled.includes(name)
+        ? currentEnabled
+        : [...currentEnabled, name].sort()
+      : currentEnabled.filter((s) => s !== name);
 
-      if (trimmed.startsWith("skills:")) {
-        inSkills = true;
-        continue;
-      }
-      if (inSkills && !lines[i].startsWith(" ") && trimmed) {
-        inSkills = false;
-      }
-      if (inSkills && trimmed.startsWith("disabled:")) {
-        inDisabled = true;
-        disabledStart = i;
-        continue;
-      }
-      if (inDisabled) {
-        if (!lines[i].startsWith("  ") || (!trimmed.startsWith("-") && trimmed)) {
-          disabledEnd = i;
-          inDisabled = false;
-        }
-      }
-    }
-    if (inDisabled && disabledEnd === -1) disabledEnd = lines.length;
+    const lines = content.split(/\r?\n/);
+    const trailingNl = /\r?\n$/.test(content);
+    const yamlLines = buildEnabledYamlLines(newEnabled);
 
-    // Parse current disabled list
-    const currentDisabled: string[] = [];
-    if (disabledStart >= 0 && disabledEnd > disabledStart) {
-      for (let i = disabledStart + 1; i < disabledEnd; i++) {
-        const match = lines[i].trim().match(/^-\s*(.+)$/);
-        if (match) currentDisabled.push(match[1].trim());
-      }
-    }
-
-    // Update the list
-    const newDisabled = enabled
-      ? currentDisabled.filter((s) => s !== name)
-      : currentDisabled.includes(name)
-        ? currentDisabled
-        : [...currentDisabled, name].sort();
-
-    // Write back
-    const newDisabledYaml = newDisabled.length > 0
-      ? "  disabled:\n" + newDisabled.map((s) => "    - " + s).join("\n") + "\n"
-      : "  disabled: []\n";
-
-    if (disabledStart >= 0 && disabledEnd > disabledStart) {
-      lines.splice(disabledStart, disabledEnd - disabledStart, ...newDisabledYaml.trimEnd().split("\n"));
+    const range = findSkillsEnabledBlockLineRange(lines);
+    if (range) {
+      lines.splice(range.start, range.endExclusive - range.start, ...yamlLines);
     } else {
-      // Find skills section and add disabled list
-      let insertAt = lines.length;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith("skills:")) {
-          insertAt = i + 1;
-          break;
+      const hi = findSkillsHeaderLineIndex(lines);
+      if (hi >= 0) {
+        lines.splice(hi + 1, 0, ...yamlLines);
+      } else {
+        if (lines.length > 0 && lines[lines.length - 1].trim() !== "") {
+          lines.push("");
         }
-      }
-      if (insertAt === lines.length) {
         lines.push("skills:");
+        lines.push(...yamlLines);
       }
-      lines.splice(insertAt, 0, ...newDisabledYaml.trimEnd().split("\n"));
     }
 
-    const { writeFileSync } = await import("fs");
-    writeFileSync(configPath, lines.join("\n"));
+    const out = lines.join("\n") + (trailingNl ? "\n" : "");
+    writeFileSync(configPath, out, "utf-8");
 
     return NextResponse.json({
       data: { success: true, skill: name, profile, enabled },

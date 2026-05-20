@@ -4,16 +4,19 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Save, Check, RotateCcw, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import { Toggle, Select, NumberInput, TextInput } from "@/components/ui/Input";
 import { LoadingSpinner, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import { getSectionDef, type FieldDef } from "@/lib/config-schema";
-import { iconColorMap } from "@/lib/theme";
+import { getConfigSectionIcon } from "@/lib/config-section-icons";
+
+const FULLSCREEN_CLASS = "min-h-screen bg-dark-950 grid-bg flex items-center justify-center";
 
 export default function ConfigSectionPage() {
   const params = useParams();
@@ -32,26 +35,27 @@ export default function ConfigSectionPage() {
   const [fileContent, setFileContent] = useState("");
   const [originalFileContent, setOriginalFileContent] = useState("");
 
-  const loadConfig = useCallback(async () => {
+  const yamlHasChanges = useMemo(
+    () => JSON.stringify(values) !== JSON.stringify(originalValues),
+    [values, originalValues],
+  );
+
+  const hasChanges = isFileSection
+    ? fileContent !== originalFileContent
+    : yamlHasChanges;
+
+  const loadConfig = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       if (isFileSection && sectionDef?.filePath) {
-        // Load file content via agent files API
-        const res = await fetch(`/api/agent/files/${sectionDef.filePath === ".env" ? "env" : "hermes"}`);
+        const res = await fetch(`/api/agent/files/${sectionDef.filePath === ".env" ? "env" : "hermes"}`, { signal });
         const json = await res.json();
         const content = json.data?.content || "";
         setFileContent(content);
         setOriginalFileContent(content);
-      } else if (sectionId === "model") {
-        const res = await fetch("/api/config/model");
-        if (!res.ok) throw new Error("Failed to load model config");
-        const json = await res.json();
-        const sectionValues = (json.data as Record<string, unknown>) || {};
-        setValues(sectionValues);
-        setOriginalValues({ ...sectionValues });
       } else {
-        const res = await fetch("/api/config");
+        const res = await fetch("/api/config", { signal });
         if (!res.ok) throw new Error("Failed to load config");
         const json = await res.json();
         const config = json.data || json;
@@ -60,6 +64,7 @@ export default function ConfigSectionPage() {
         setOriginalValues({ ...sectionValues });
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
@@ -67,17 +72,18 @@ export default function ConfigSectionPage() {
   }, [sectionId, isFileSection, sectionDef]);
 
   useEffect(() => {
-    loadConfig();
+    const controller = new AbortController();
+    loadConfig(controller.signal);
+    return () => controller.abort();
   }, [loadConfig]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!sectionDef) return;
 
     setSaving(true);
     setSaveStatus("saving");
     try {
       if (isFileSection) {
-        // Save file content
         const fileKey = sectionDef.filePath === ".env" ? "env" : "hermes";
         const res = await fetch(`/api/agent/files/${fileKey}`, {
           method: "PUT",
@@ -86,31 +92,6 @@ export default function ConfigSectionPage() {
         });
         if (!res.ok) throw new Error("Failed to save file");
         setOriginalFileContent(fileContent);
-      } else if (sectionId === "model") {
-        const editableKeys = sectionDef.fields.map((f) => f.key);
-        const body: Record<string, unknown> = {};
-        for (const key of editableKeys) {
-          if (key === "api_key") {
-            const v = values.api_key;
-            const ov = originalValues.api_key;
-            const vs = typeof v === "string" ? v : "";
-            const os = typeof ov === "string" ? ov : "";
-            if (vs.includes("•") && vs === os) continue;
-            if (vs.trim() !== "") body.api_key = vs;
-            continue;
-          }
-          if (key in values) body[key] = values[key];
-        }
-        const res = await fetch("/api/config/model", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error("Failed to save model config");
-        const json = await res.json();
-        const next = (json.data as Record<string, unknown>) || {};
-        setValues(next);
-        setOriginalValues({ ...next });
       } else {
         const editableKeys = sectionDef.fields.map((f) => f.key);
         const editableValues: Record<string, unknown> = {};
@@ -133,27 +114,23 @@ export default function ConfigSectionPage() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [sectionDef, isFileSection, fileContent, sectionId, values]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     if (isFileSection) {
       setFileContent(originalFileContent);
     } else {
       setValues({ ...originalValues });
     }
-  };
+  }, [isFileSection, originalFileContent, originalValues]);
 
-  const hasChanges = isFileSection
-    ? fileContent !== originalFileContent
-    : JSON.stringify(values) !== JSON.stringify(originalValues);
-
-  const updateValue = (key: string, value: unknown) => {
+  const updateValue = useCallback((key: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
   if (!sectionDef) {
     return (
-      <div className="min-h-screen bg-dark-950 grid-bg flex items-center justify-center">
+      <div className={FULLSCREEN_CLASS}>
         <div className="text-center">
           <h2 className="text-xl font-bold text-white mb-2">
             Unknown Config Section
@@ -171,7 +148,7 @@ export default function ConfigSectionPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-950 grid-bg flex items-center justify-center">
+      <div className={FULLSCREEN_CLASS}>
         <LoadingSpinner text={`Loading ${sectionDef.label}...`} />
       </div>
     );
@@ -179,25 +156,6 @@ export default function ConfigSectionPage() {
 
   const renderField = (field: FieldDef) => {
     const value = values[field.key];
-
-    if (field.key === "api_key" && sectionId === "model") {
-      return (
-        <div key={field.key} className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">{field.label}</label>
-          {field.description && (
-            <p className="text-xs text-white/40">{field.description}</p>
-          )}
-          <input
-            type="password"
-            autoComplete="off"
-            value={typeof value === "string" ? value : ""}
-            onChange={(e) => updateValue(field.key, e.target.value)}
-            className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
-            placeholder="••••••••"
-          />
-        </div>
-      );
-    }
 
     switch (field.type) {
       case "boolean":
@@ -266,70 +224,57 @@ export default function ConfigSectionPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-dark-900/50 backdrop-blur-xl sticky top-0 z-30">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/config"
-                className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="text-sm font-mono">CONFIG</span>
-              </Link>
-              <div className="w-px h-6 bg-white/20" />
-              <div>
-                <h1 className={`text-lg font-bold flex items-center gap-2 ${iconColorMap[sectionDef.color]}`}>
-                  {sectionDef.label}
-                </h1>
-                <p className="text-xs text-white/40 font-mono">
-                  {sectionDef.description}
-                </p>
-              </div>
-            </div>
-            {(sectionDef.fields.length > 0 || isFileSection) && (
-              <div className="flex items-center gap-3">
-                {hasChanges && (
-                  <span className="text-xs text-neon-orange font-mono flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    UNSAVED
-                  </span>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleReset}
-                  disabled={!hasChanges}
-                  icon={RotateCcw}
-                >
-                  Reset
-                </Button>
-                <Button
-                  variant="primary"
-                  color={sectionDef.color}
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!hasChanges}
-                  loading={saving}
-                  icon={saveStatus === "saved" ? Check : Save}
-                >
-                  {saveStatus === "saving"
-                    ? "Saving..."
-                    : saveStatus === "saved"
-                    ? "Saved!"
-                    : "Save"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+  const SectionIcon = getConfigSectionIcon(sectionDef.icon);
+  const showActions = sectionDef.fields.length > 0 || isFileSection;
 
-      {/* Content */}
-      <div className="max-w-3xl mx-auto px-6 py-6">
+  return (
+    <AppPageShell>
+      <PageHeader
+        icon={SectionIcon}
+        title={sectionDef.label}
+        subtitle={sectionDef.description}
+        color={sectionDef.color}
+        backHref="/config"
+        backLabel="CONFIG"
+        actions={
+          showActions ? (
+            <>
+              {hasChanges && (
+                <span className="text-xs text-neon-orange font-mono flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  UNSAVED
+                </span>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleReset}
+                disabled={!hasChanges}
+                icon={RotateCcw}
+              >
+                Reset
+              </Button>
+              <Button
+                variant="primary"
+                color={sectionDef.color}
+                size="sm"
+                onClick={handleSave}
+                disabled={!hasChanges}
+                loading={saving}
+                icon={saveStatus === "saved" ? Check : Save}
+              >
+                {saveStatus === "saving"
+                  ? "Saving..."
+                  : saveStatus === "saved"
+                  ? "Saved!"
+                  : "Save"}
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+
+      <div className="max-w-3xl mx-auto px-6 py-6 flex-1 w-full">
         {error && <ErrorBanner message={error} />}
 
         {/* File editor for file-type sections */}
@@ -389,7 +334,7 @@ export default function ConfigSectionPage() {
         {/* Complex / nested fields (read-only preview) */}
         {sectionDef.complexKeys && sectionDef.complexKeys.length > 0 && (
           <div className="rounded-xl border border-white/10 bg-dark-900/50 p-6">
-            {(sectionDef.fields.length > 0 || isFileSection) && (
+            {showActions && (
               <p className="text-xs text-white/30 font-mono uppercase tracking-widest mb-4">
                 Complex Fields
               </p>
@@ -432,6 +377,6 @@ export default function ConfigSectionPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

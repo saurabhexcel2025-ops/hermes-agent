@@ -1,38 +1,50 @@
-import { NextResponse } from "next/server";
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
-import { exec } from "child_process";
-import yaml from "js-yaml";
+// ═══════════════════════════════════════════════════════════════
+// /api/monitor/route.ts — System monitor (DB-centric)
+//
+// Reads from SQLite tables (synced by the background SyncScheduler)
+// instead of direct filesystem operations. Sub-millisecond reads.
+// Also includes cron job details and recent sessions for the
+// dashboard's inline views.
+// ═══════════════════════════════════════════════════════════════
 
-// Use string concatenation to avoid Turbopack NFT tracing issues
-import { PATHS, HERMES_HOME } from "@/lib/hermes";
+import { NextResponse } from "next/server";
+
+import { ensureSyncLayer, getSyncScheduler } from "@/lib/sync";
+import { getSystemStat, getSystemStatNumber } from "@/lib/system-repository";
+import { listCronJobs } from "@/lib/cron-repository";
+import { listSessions } from "@/lib/session-repository";
 import { logApiError } from "@/lib/api-logger";
-import { readJobsFile } from "@/lib/jobs-repository";
-import type { CronJobData } from "@/lib/utils";
+import { getGatewayPlatforms, db } from "@/lib/db";
+
+// ── Types ───────────────────────────────────────────────────
+
+interface CronJobBrief {
+  id: string;
+  name: string;
+  state: string;
+  enabled: boolean;
+  schedule: string;
+  lastRun: string | null;
+  nextRun: string | null;
+  lastStatus: string | null;
+}
+
+interface SessionBrief {
+  id: string;
+  modified: string;
+  size: number;
+}
 
 interface MonitorData {
   cron: {
     total: number;
     active: number;
     paused: number;
-    jobs: Array<{
-      id: string;
-      name: string;
-      state: string;
-      enabled: boolean;
-      schedule: string;
-      lastRun: string | null;
-      nextRun: string | null;
-      lastStatus: string | null;
-    }>;
+    jobs: CronJobBrief[];
   };
   sessions: {
     total: number;
-    recent: Array<{
-      id: string;
-      modified: string;
-      size: number;
-      model: string;
-    }>;
+    recent: SessionBrief[];
   };
   gateway: {
     platforms: Record<string, boolean>;
@@ -47,286 +59,154 @@ interface MonitorData {
     source: string;
     message: string;
     timestamp: string;
+    severity: string;
   }>;
   system: {
     uptime: string;
-    lastCronRun: string | null;
-    lastCronStatus: string | null;
-  };
-  capabilities: {
-    jobsJsonReadable: boolean;
-    jobsJsonError: string | null;
     configPresent: boolean;
-    memoryProviderFromConfig: string | null;
+    soulPresent: boolean;
+  };
+  sync: {
+    lastRun: string | null;
+    allSuccessful: boolean;
+    sourceStatuses: Record<string, string>;
   };
 }
 
+// ── Helpers ─────────────────────────────────────────────────
+
+/** Convert a CronJobRecord to the brief shape the frontend expects. */
+function toCronJobBrief(
+  job: import("@/lib/cron-repository").CronJobRecord
+): CronJobBrief {
+  return {
+    id: job.id,
+    name: job.name,
+    state: job.state,
+    enabled: job.enabled,
+    schedule: job.schedule_display || job.schedule,
+    lastRun: job.last_run_at,
+    nextRun: job.next_run_at,
+    lastStatus: job.last_status,
+  };
+}
+
+/** Convert a SessionRecord to the brief shape the frontend expects. */
+function toSessionBrief(
+  session: import("@/lib/session-repository").SessionRecord
+): SessionBrief {
+  return {
+    id: session.id,
+    modified: session.endedAt || session.startedAt,
+    size: session.size,
+  };
+}
+
+// ── Route ───────────────────────────────────────────────────
+
 export async function GET() {
   try {
+    // Ensure sync layer is active (idempotent)
+    ensureSyncLayer();
+
+    // ── Cron Jobs (from DB) ─────────────────────────────────
+    const allJobs = listCronJobs();
+    const activeJobs = allJobs.filter((j) => j.enabled && j.state !== "completed");
+    const pausedJobs = allJobs.filter((j) => !j.enabled);
+
+    // ── Sessions (from DB — recent 5) ───────────────────────
+    const { sessions: recentSessions } = listSessions({ limit: 5 });
+
+    // ── Gateway Platforms (from DB) ─────────────────────────
+    const platformsRaw = getGatewayPlatforms();
+
+    const platforms: Record<string, boolean> = {};
+    let connectedCount = 0;
+    for (const p of platformsRaw) {
+      const isEnabled = p.enabled === 1 || p.bot_token_present === 1;
+      platforms[p.platform] = isEnabled;
+      if (isEnabled) connectedCount++;
+    }
+
+    // ── Memory (from meta table) ────────────────────────────
+    const memoryFactCount = getSystemStatNumber("memory.fact_count", 0);
+    const memoryDbSize = getSystemStat("memory.db_size") ?? "N/A";
+    const memoryProvider = getSystemStat("memory.provider") ?? "Not Installed";
+
+    // ── Recent Errors (from DB) ─────────────────────────────
+    const recentErrors = db()
+      .prepare(
+        "SELECT source, message, timestamp, severity FROM error_log_entries ORDER BY timestamp DESC LIMIT 10"
+      )
+      .all() as Array<{ source: string; message: string; timestamp: string; severity: string }>;
+
+    // ── System Info (from meta table) ───────────────────────
+    const configPresent = getSystemStat("config.present") === "true";
+    const soulPresent = getSystemStat("config.soul_present") === "true";
+
+    // ── Sync Status ─────────────────────────────────────────
+    const scheduler = getSyncScheduler();
+    let lastSync: string | null = null;
+    let allSuccessful = true;
+    const sourceStatuses: Record<string, string> = {};
+
+    if (scheduler) {
+      const lastCycle = scheduler.getLastCycleResult();
+      if (lastCycle) {
+        lastSync = lastCycle.completedAt;
+        allSuccessful = lastCycle.allSuccessful;
+        for (const r of lastCycle.results) {
+          sourceStatuses[r.sourceName] = r.success ? "ok" : "error";
+        }
+      }
+    }
+
+    // Source names from the scheduler
+    for (const name of scheduler?.getSourceNames() ?? []) {
+      if (!sourceStatuses[name]) sourceStatuses[name] = "pending";
+    }
+
     const data: MonitorData = {
-      cron: { total: 0, active: 0, paused: 0, jobs: [] },
-      sessions: { total: 0, recent: [] },
-      gateway: { platforms: {}, connectedCount: 0 },
-      memory: { factCount: 0, dbSize: "N/A", provider: "Not Installed" },
-      errors: [],
-      system: { uptime: "N/A", lastCronRun: null, lastCronStatus: null },
-      capabilities: {
-        jobsJsonReadable: true,
-        jobsJsonError: null,
-        configPresent: false,
-        memoryProviderFromConfig: null,
+      cron: {
+        total: allJobs.length,
+        active: activeJobs.length,
+        paused: pausedJobs.length,
+        jobs: allJobs.map(toCronJobBrief),
+      },
+      sessions: {
+        total: getSystemStatNumber("sessions.total", 0),
+        recent: recentSessions.map(toSessionBrief),
+      },
+      gateway: {
+        platforms,
+        connectedCount,
+      },
+      memory: {
+        factCount: memoryFactCount,
+        dbSize: memoryDbSize,
+        provider: memoryProvider,
+      },
+      errors: recentErrors,
+      system: {
+        uptime: getSystemStat("system.uptime") ?? "N/A", // Synced by ProcessSync from /proc/uptime
+        configPresent,
+        soulPresent,
+      },
+      sync: {
+        lastRun: lastSync,
+        allSuccessful,
+        sourceStatuses,
       },
     };
 
-    if (existsSync(PATHS.config)) {
-      data.capabilities.configPresent = true;
-      try {
-        const cfg = yaml.load(readFileSync(PATHS.config, "utf-8")) as Record<
-          string,
-          unknown
-        >;
-        const mem = cfg.memory;
-        if (mem && typeof mem === "object" && mem !== null) {
-          const p = (mem as Record<string, unknown>).provider;
-          if (typeof p === "string" && p.trim()) {
-            data.capabilities.memoryProviderFromConfig = p.trim();
-          }
-        }
-      } catch (error) {
-        logApiError("GET /api/monitor", "parsing config for capabilities", error);
+    return NextResponse.json(
+      { data },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=10, stale-while-revalidate=15",
+        },
       }
-    }
-
-    // ── Cron Jobs ──────────────────────────────────────────────
-    const cronPath = PATHS.cronJobs;
-    const jobsParsed = readJobsFile(cronPath);
-    if (!jobsParsed.ok) {
-      data.capabilities.jobsJsonReadable = false;
-      data.capabilities.jobsJsonError = jobsParsed.error;
-    }
-    if (existsSync(cronPath) && jobsParsed.ok) {
-      try {
-        const jobs = jobsParsed.jobs;
-        data.cron.total = jobs.length;
-        data.cron.active = jobs.filter(
-          (j: { enabled?: boolean }) => j.enabled !== false
-        ).length;
-        data.cron.paused = jobs.filter(
-          (j: { enabled?: boolean }) => j.enabled === false
-        ).length;
-        data.cron.jobs = jobs.map(
-          (j: {
-            id: string;
-            name?: string;
-            state?: string;
-            enabled?: boolean;
-            schedule?: { display?: string } | string;
-            schedule_display?: string;
-            last_run_at?: string | null;
-            next_run_at?: string | null;
-            last_status?: string | null;
-          }) => ({
-            id: j.id,
-            name: j.name || j.id,
-            state: j.state || "unknown",
-            enabled: j.enabled !== false,
-            schedule:
-              j.schedule_display ||
-              (typeof j.schedule === "object"
-                ? j.schedule.display || ""
-                : String(j.schedule || "")),
-            lastRun: j.last_run_at || null,
-            nextRun: j.next_run_at || null,
-            lastStatus: j.last_status || null,
-          })
-        );
-        // Find most recent cron run
-        const ran = jobs.filter((j: CronJobData) => j.last_run_at);
-        if (ran.length > 0) {
-          ran.sort((a: CronJobData, b: CronJobData) => {
-            const ta = new Date(String(a.last_run_at)).getTime();
-            const tb = new Date(String(b.last_run_at)).getTime();
-            return tb - ta;
-          });
-          data.system.lastCronRun = ran[0].last_run_at ?? null;
-          data.system.lastCronStatus = ran[0].last_status || null;
-        }
-      } catch (error) {
-        logApiError("GET /api/monitor", "reading cron jobs", error);
-      }
-    }
-
-    // ── Sessions (recent 10) ───────────────────────────────────
-    const sessionsPath = PATHS.sessions;
-    if (existsSync(sessionsPath)) {
-      try {
-        const files = readdirSync(sessionsPath);
-        const sessionFiles = files
-          .filter((f) => f.endsWith(".json") || f.endsWith(".jsonl"))
-          .map((f) => {
-            const fp = sessionsPath + "/" + f;
-            const st = statSync(fp);
-            return { id: f, modified: st.mtime.toISOString(), size: st.size };
-          })
-          .sort(
-            (a, b) =>
-              new Date(b.modified).getTime() - new Date(a.modified).getTime()
-          );
-        data.sessions.total = sessionFiles.length;
-        data.sessions.recent = sessionFiles.slice(0, 10).map((s) => ({
-          id: s.id.replace(/\.(json|jsonl)$/, ""),
-          modified: s.modified,
-          size: s.size,
-          model: "",
-        }));
-      } catch (error) { logApiError("GET /api/monitor", "reading sessions", error); }
-    }
-
-    // ── Gateway Platforms ──────────────────────────────────────
-    const envPath = PATHS.env;
-    if (existsSync(envPath)) {
-      try {
-        const envContent = readFileSync(envPath, "utf-8");
-        const envVars: Record<string, string> = {};
-        for (const line of envContent.split("\n")) {
-          const eqIdx = line.indexOf("=");
-          if (eqIdx > 0 && !line.startsWith("#")) {
-            const key = line.slice(0, eqIdx).trim();
-            const val = line
-              .slice(eqIdx + 1)
-              .trim()
-              .replace(/^["']|["']$/g, "");
-            if (val && val !== "changeme") envVars[key] = val;
-          }
-        }
-        const platforms: Record<string, boolean> = {
-          telegram: !!envVars.TELEGRAM_BOT_TOKEN,
-          discord: !!envVars.DISCORD_BOT_TOKEN,
-          slack: !!envVars.SLACK_BOT_TOKEN,
-          whatsapp: !!envVars.WHATSAPP_API_KEY || !!envVars.WHATSAPP_PHONE_ID,
-        };
-        data.gateway.platforms = platforms;
-        data.gateway.connectedCount = Object.values(platforms).filter(
-          Boolean
-        ).length;
-      } catch (error) { logApiError("GET /api/monitor", "reading gateway platforms", error); }
-    }
-
-    // ── Memory (provider-aware) ──────────────────────────────────
-    try {
-      const { getMemoryProviderType } = await import("@/lib/memory-providers");
-      const providerType = getMemoryProviderType();
-      data.memory.provider = providerType === "none" ? "Not Installed" : providerType;
-
-      // For holographic, read SQLite directly for stats
-      if (providerType === "holographic") {
-        const dbPath = PATHS.memoryDb;
-        if (existsSync(dbPath)) {
-          const stats = statSync(dbPath);
-          const sizeKB = Math.round(stats.size / 1024);
-          data.memory.dbSize =
-            sizeKB > 1024
-              ? (sizeKB / 1024).toFixed(1) + " MB"
-              : sizeKB + " KB";
-
-          const Database = (await import("better-sqlite3")).default;
-          const db = new Database(dbPath, { readonly: true });
-          try {
-            const row = db
-              .prepare("SELECT COUNT(*) as count FROM facts")
-              .get() as { count: number };
-            data.memory.factCount = row.count;
-          } finally {
-            db.close();
-          }
-        }
-      }
-      // Hindsight — query bridge for fact count
-      else if (providerType === "hindsight") {
-        data.memory.provider = "Hindsight (embedded)";
-        data.memory.dbSize = "In-agent";
-        // Fetch fact count via bridge (lightweight: limit=1, reads total field)
-        try {
-          const bridgeResult = await new Promise<{ count?: number; error?: string }>((resolve) => {
-            const cmd = HERMES_HOME + "/hermes-agent/venv/bin/python3 " + HERMES_HOME + "/scripts/hindsight_bridge.py count";
-            exec(cmd, { timeout: 8000, env: { ...process.env, PYTHONPATH: HERMES_HOME + "/hermes-agent" } }, (err, stdout) => {
-              if (err || !stdout) {
-                resolve({ count: 0, error: err?.message || "No output" });
-                return;
-              }
-              try {
-                resolve(JSON.parse(stdout));
-              } catch {
-                resolve({ count: 0, error: "Invalid JSON" });
-              }
-            });
-          });
-          data.memory.factCount = typeof bridgeResult.count === "number" ? bridgeResult.count : 0;
-        } catch {
-          data.memory.factCount = 0;
-        }
-      }
-    } catch (error) { logApiError("GET /api/monitor", "reading memory stats", error); }
-
-    // ── Recent Errors (from gateway.log) ───────────────────────
-    const logPath = PATHS.logs + "/gateway.log";
-    if (existsSync(logPath)) {
-      try {
-        const content = readFileSync(logPath, "utf-8");
-        const lines = content.split("\n");
-        const errorLines = lines.filter(
-          (l) =>
-            l.includes(" ERROR ") ||
-            l.includes(" CRITICAL ") ||
-            l.includes("failed") ||
-            l.includes("Error:")
-        );
-        data.errors = errorLines.slice(-10).map((line) => {
-          const tsMatch = line.match(
-            /(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})/
-          );
-          return {
-            source: "gateway",
-            message: line.trim(),
-            timestamp: tsMatch ? tsMatch[1] : "",
-          };
-        });
-      } catch (error) { logApiError("GET /api/monitor", "reading gateway.log", error); }
-    }
-
-    // Also check errors.log
-    const errLogPath = PATHS.logs + "/errors.log";
-    if (existsSync(errLogPath)) {
-      try {
-        const content = readFileSync(errLogPath, "utf-8");
-        const lines = content
-          .split("\n")
-          .filter((l) => l.trim())
-          .slice(-5);
-        for (const line of lines) {
-          const tsMatch = line.match(
-            /(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})/
-          );
-          data.errors.push({
-            source: "agent",
-            message: line.trim(),
-            timestamp: tsMatch ? tsMatch[1] : "",
-          });
-        }
-      } catch (error) { logApiError("GET /api/monitor", "reading errors.log", error); }
-    }
-
-    // Sort errors newest first
-    data.errors.sort((a, b) => {
-      if (a.timestamp && b.timestamp) return b.timestamp.localeCompare(a.timestamp);
-      if (a.timestamp) return -1;
-      if (b.timestamp) return 1;
-      return 0;
-    });
-    // Keep only most recent 10
-    data.errors = data.errors.slice(0, 10);
-
-    return NextResponse.json({ data });
+    );
   } catch (error) {
     logApiError("GET /api/monitor", "aggregating monitor data", error);
     return NextResponse.json(

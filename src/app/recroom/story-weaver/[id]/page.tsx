@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, BookOpen, Sparkles, Loader2, X, RefreshCw, PenLine, PlayCircle, AlertTriangle } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import ChapterList from "@/components/story-weaver/ChapterList";
 import GenerateOverlay from "@/components/story-weaver/GenerateOverlay";
 import ReaderSettings, { loadSettings, DEFAULT_SETTINGS, FONTS, THEMES, type ReadingSettings } from "@/components/story-weaver/ReaderSettings";
@@ -70,15 +71,36 @@ export default function StoryReaderPage() {
 
   const [settings, setSettings] = useState<ReadingSettings>(DEFAULT_SETTINGS);
   useEffect(() => { setSettings(loadSettings()); }, []);
-
   const loadStory = useCallback(async () => {
     try {
       const res = await fetch("/api/stories", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "load", storyId }),
       });
       const d = await res.json();
-      if (d.data) setStory(d.data as StoryState);
+      if (!d.data) return;
+      const loaded = d.data as StoryState;
+      setStory(loaded);
+
+      // Backfill chapter titles for stories generated before safeArc was fixed.
+      // Chapters with placeholder "Chapter N" titles need re-extracting from content.
+      const hasPlaceholders = loaded.chapters?.some(
+        (c: Chapter) => c.status === "complete" && c.title === `Chapter ${c.number}`
+      );
+      if (hasPlaceholders) {
+        try {
+          const syncRes = await fetch("/api/stories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "sync-titles", storyId }),
+          });
+          const syncData = await syncRes.json();
+          if (syncData.data?.story) {
+            setStory(syncData.data.story as StoryState);
+          }
+        } catch { /* non-fatal */ }
+      }
     } catch {} finally { setLoading(false); }
   }, [storyId]);
 
@@ -217,7 +239,7 @@ export default function StoryReaderPage() {
     const nextComplete = chapters.find((c: Chapter) => c.number > currentChapter && c.status === "complete");
     if (nextComplete) {
       setCurrentChapter(nextComplete.number);
-      setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView(), 50);
+      setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
       setStory((prev: StoryState | null) => {
         if (!prev) return prev;
         return {
@@ -232,7 +254,7 @@ export default function StoryReaderPage() {
 
   const handleChapterSelect = async (num: number) => {
     setCurrentChapter(num);
-    setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView(), 50);
+    setTimeout(() => document.getElementById("chapter-top")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 
     const updatedChapters = (story?.chapters || []).map((c: Chapter) =>
       c.number === num && c.status === "complete" ? { ...c, readStatus: "read" as const } : c
@@ -296,7 +318,16 @@ export default function StoryReaderPage() {
   const allComplete = chapters.length > 0 && chapters.every((c: Chapter) => c.status === "complete");
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines flex flex-col">
+    <AppPageShell variant="scanlines" className="flex flex-col">
+      {/* Error banner — rendered above the overlay so it is always visible */}
+      {error && (
+        <div className="fixed top-0 left-0 right-0 z-[70] bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          <span className="text-xs text-red-300 flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400/50 hover:text-red-400"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Progress overlay for continue and edit */}
       <GenerateOverlay
         title={story?.title || "Story"}
@@ -308,7 +339,7 @@ export default function StoryReaderPage() {
       {/* Edit Chapter Modal */}
       {editModalOpen && (
         <div className="fixed inset-0 z-[60] bg-dark-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-dark-900 border border-purple-500/20 rounded-xl w-full max-w-lg p-6 space-y-4">
+          <div className="bg-dark-900 border border-neon-purple/20 rounded-xl w-full max-w-lg p-6 space-y-4">
             <h3 className="text-sm font-semibold text-white">Edit Chapter {editChapterNum}</h3>
             <p className="text-xs text-white/40">Describe what you want changed. The chapter will be rewritten, and all subsequent chapters will regenerate with the updated context.</p>
             <textarea
@@ -316,7 +347,7 @@ export default function StoryReaderPage() {
               onChange={(e) => setEditPrompt(e.target.value)}
               rows={4}
               placeholder="e.g., Make the dialogue more tense, add a plot twist about the captain..."
-              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-purple-500/30 font-mono resize-none"
+              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/30 font-mono resize-none"
             />
             <div>
               <label className="text-[10px] font-mono text-white/30 uppercase tracking-wider block mb-1.5">Chapter Length</label>
@@ -328,7 +359,7 @@ export default function StoryReaderPage() {
                 ].map((opt) => (
                   <button key={opt.id} onClick={() => setEditWordCount(opt.id)}
                     className={`px-2 py-1 rounded text-[10px] font-mono border transition-all ${
-                      editWordCount === opt.id ? "border-purple-500/40 bg-purple-500/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
+                      editWordCount === opt.id ? "border-neon-purple/40 bg-neon-purple/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
                     }`}>{opt.label}</button>
                 ))}
               </div>
@@ -339,7 +370,7 @@ export default function StoryReaderPage() {
                 {[2, 3, 4, 5].map(n => (
                   <button key={n} onClick={() => setEditCount(n)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
-                      editCount === n ? "border-purple-500/40 bg-purple-500/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
+                      editCount === n ? "border-neon-purple/40 bg-neon-purple/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
                     }`}>{n}</button>
                 ))}
               </div>
@@ -350,7 +381,7 @@ export default function StoryReaderPage() {
                 Cancel
               </button>
               <button onClick={handleEditChapter} disabled={!editPrompt.trim()}
-                className="px-4 py-2 text-xs text-neon-purple rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-30 flex items-center gap-2">
+                className="px-4 py-2 text-xs text-neon-purple rounded-lg border border-neon-purple/30 bg-neon-purple/10 hover:bg-neon-purple/20 disabled:opacity-30 flex items-center gap-2">
                 <PenLine className="w-3 h-3" /> Edit Chapter
               </button>
             </div>
@@ -411,18 +442,9 @@ export default function StoryReaderPage() {
         </div>
       )}
 
-      {/* Error banner */}
-      {error && (
-        <div className="sticky top-0 z-50 bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <span className="text-xs text-red-300 flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400/50 hover:text-red-400"><X className="w-4 h-4" /></button>
-        </div>
-      )}
-
       {/* Story generation error banner */}
       {story.status === "failed" && story.generationError && (
-        <div className="sticky top-0 z-50 bg-red-500/10 border-b border-red-500/20 px-4 py-3 flex items-center gap-3">
+        <div className="fixed top-0 left-0 right-0 z-[65] bg-red-500/10 border-b border-red-500/20 px-4 py-3 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <div className="flex-1">
             <p className="text-xs text-red-300 font-semibold">Story generation failed</p>
@@ -437,7 +459,7 @@ export default function StoryReaderPage() {
 
       {/* Reader Header */}
       <div className="sticky top-0 lg:top-0 z-30 border-b border-white/10 bg-dark-950/95 backdrop-blur-xl flex-shrink-0">
-        <div className="flex items-center justify-between px-3 md:px-6 h-12">
+        <div className="flex items-center justify-between px-3 md:px-6 min-h-[var(--ch-shell-header-min-height)]">
           <button onClick={() => router.push("/recroom/story-weaver")}
             className="p-2.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft className="w-5 h-5" />
@@ -492,7 +514,7 @@ export default function StoryReaderPage() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 flex" style={{ height: "calc(100vh - 120px)" }}>
+      <div className="flex-1 flex" style={{ height: "calc(100vh - 72px)" }}>
         {/* Chapter Sidebar */}
         {sidebarOpen && (
           <div className="w-56 flex-shrink-0 border-r border-white/5 sticky top-16 overflow-y-auto hidden md:block" style={{ background: theme.panel, maxHeight: "calc(100vh - 64px)" }}>
@@ -507,7 +529,7 @@ export default function StoryReaderPage() {
           <div ref={contentRef} className="flex-1 w-full overflow-y-auto" style={{ background: theme.bg, filter: `brightness(${settings.brightness})` }}>
             {chapterContent ? (
               <div className="max-w-3xl mx-auto px-6 md:px-16 py-8 md:py-10">
-                <div id="chapter-top" className="flex items-center justify-between mb-8 pb-4 border-b" style={{
+                <div id="chapter-top" className="flex items-center justify-between mb-8 pb-4 border-b scroll-mt-16" style={{
                   borderColor: settings.pageTheme === "light" ? "#d4ccc0" : "#2a2520",
                 }}>
                   <h2 style={{
@@ -521,7 +543,7 @@ export default function StoryReaderPage() {
                   {/* Edit button on completed chapters */}
                   {currentMeta?.status === "complete" && (
                     <button onClick={() => openEditModal(currentChapter)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-mono text-white/40 hover:text-neon-purple hover:border-purple-500/30 transition-colors flex-shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-[10px] font-mono text-white/40 hover:text-neon-purple hover:border-neon-purple/30 transition-colors flex-shrink-0"
                       title="Edit this chapter">
                       <PenLine className="w-3 h-3" />
                       Edit
@@ -558,7 +580,7 @@ export default function StoryReaderPage() {
                     <RefreshCw className="w-3 h-3" /> Retry Chapter
                   </button>
                   <button onClick={() => openEditModal(currentChapter)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-500/30 text-xs text-neon-purple bg-purple-500/10 hover:bg-purple-500/20">
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-neon-purple/30 text-xs text-neon-purple bg-neon-purple/10 hover:bg-neon-purple/20">
                     <PenLine className="w-3 h-3" /> Rewrite with Prompt
                   </button>
                 </div>
@@ -616,6 +638,6 @@ export default function StoryReaderPage() {
           </div>
         </div>
       )}
-    </div>
+    </AppPageShell>
   );
 }

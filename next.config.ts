@@ -1,57 +1,33 @@
 import type { NextConfig } from "next";
 
-import path from "path";
-
-import { fileURLToPath } from "url";
-
-
-
-const appDir = path.dirname(fileURLToPath(import.meta.url));
-
-const monorepoRoot = path.join(appDir, "..", "..");
-
-
-
-// Comma-separated origins, e.g. CH_ALLOWED_DEV_ORIGINS=http://192.168.1.42:3000,http://phone.local:3000
+// Comma-separated full origins (scheme + host + port). scripts/bootstrap/setup.sh generates
+// CH_ALLOWED_DEV_ORIGINS for your chosen PORT (localhost, 127.0.0.1, LAN IPv4s).
 
 const extraOrigins = (process.env.CH_ALLOWED_DEV_ORIGINS || "")
-
   .split(",")
-
   .map((s) => s.trim())
-
-  .filter(Boolean);
-
-
+  .filter(Boolean)
+  // Strip scheme prefix — Next.js allowedDevOrigins expects bare host:port, not full URLs
+  .map((s) => s.replace(/^https?:\/\//, ""))
+  // Also add bare host without port (HMR WebSocket connections arrive without port)
+  .flatMap((s) => {
+    const results = [s];
+    const [host] = s.split(":");
+    // If the entry had a port and the bare host isn't already in the list
+    if (s !== host && host) {
+      results.push(host);
+    }
+    return results;
+  });
 
 const nextConfig: NextConfig = {
-
-  turbopack: {
-
-    root: monorepoRoot,
-
-  },
-
-  transpilePackages: [
-
-    "@agent-control-hub/schema",
-
-    "@agent-control-hub/config",
-
-  ],
-
   experimental: {
-
     optimizePackageImports: ["lucide-react"],
-
   },
 
   // Allow devices on local network to access dev server (explicit list; no CIDR).
 
   allowedDevOrigins: ["*.local", ...extraOrigins],
-
 };
-
-
 
 export default nextConfig;

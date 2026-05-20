@@ -22,7 +22,7 @@ Extends `~/.hermes/AGENT.md` (base instructions). This file adds project-specifi
 
 cd ~/control-hub
 
-npm run dev     # Start dev server (port 3000)
+npm run dev     # Start dev server (PORT from .env.local; scripts/bootstrap/setup.sh defaults 42069–42100)
 
 npm run build   # Production build
 
@@ -46,9 +46,7 @@ control-hub/
 
 │   │   ├── api/                    # REST API routes
 
-│   │   │   ├── agent/files/        # Behaviour file CRUD
-
-│   │   │   ├── agent/agents-md/    # AGENTS.md scanning + CRUD
+│   │   │   ├── agent/files/[key]/    # Behaviour file read/update
 
 │   │   │   ├── agent/profiles/     # Agent profile CRUD
 
@@ -72,79 +70,69 @@ control-hub/
 
 │   │   │   └── ...                 # Other endpoints
 
-│   │   ├── agent/
-
-│   │   │   ├── agents/            # Agents page (profile CRUD)
-
-│   │   │   └── tools/              # Tools Manager
-
 │   │   ├── page.tsx                # Dashboard
 
-│   │   ├── missions/page.tsx       # Missions page
+│   │   ├── (main)/                 # sessions, memory, logs (route group — no /main URL prefix)
 
-│   │   ├── cron/page.tsx           # Cron manager
+│   │   ├── orchestration/          # cron, missions, chat
 
-│   │   ├── sessions/page.tsx       # Session browser
+│   │   ├── operations/             # agents, skills, tools, personalities
 
-│   │   ├── memory/             # Memory CRUD
+│   │   ├── config/                 # Config editor + models hub
 
-│   │   ├── config/             # Config editor
-
-│   │   ├── recroom/            # Rec Room — creative activities
-
-│   │   │   ├── page.tsx        # Hub — activity selection
-
-│   │   │   ├── creative-canvas/  # p5.js generative art
-
-│   │   │   ├── ascii-studio/     # ASCII art & animation
-
-│   │   │   └── story-weaver/     # Interactive fiction
+│   │   ├── recroom/story-weaver/   # Story Weaver
 
 │   │   └── layout.tsx              # Root layout with sidebar
 
 │   ├── components/
 
-│   │   ├── recroom/            # Rec Room shared components
+│   │   ├── layout/                 # Sidebar, PageHeader, AppPageShell
 
-│   │   │   ├── PromptBuilder.tsx   # Universal prompt input
-
-│   │   │   ├── OutputViewer.tsx    # Output renderer
-
-│   │   │   ├── ActivityCard.tsx    # Activity preview card
-
-│   │   │   ├── ActivityLayout.tsx  # Page wrapper
-
-│   │   │   └── SaveLoadManager.tsx # Save/load/export
-
-│   │   ├── ui/                     # Primitives (Button, Card, Modal, etc.)
-
-│   │   └── layout/                 # Sidebar, PageHeader
+│   │   ├── missions/, cron/, models/, memory/, story-weaver/, ui/
 
 │   ├── lib/
 
-│   │   ├── api.ts                  # Typed fetch wrappers
+│   │   ├── db.ts, db/migrations/   # SQLite + baseline schema
+
+│   │   ├── hermes-home.ts          # HERMES_HOME resolution
+
+│   │   ├── hermes-agent-runtime.ts # Active Hermes paths + gateway URLs
+
+│   │   ├── *-repository.ts         # missions, cron, models, credentials, …
+
+│   │   ├── sync/                   # Background sync + SyncScheduler
+
+│   │   ├── backends/hermes.ts      # Mission dispatch
+
+│   │   ├── api-fetch.ts            # Shared client fetch helper
+
+│   │   ├── schema/                 # Mission + template Zod schemas
 
 │   │   ├── config-schema.ts        # Config section definitions
 
-│   │   ├── theme.ts                # Shared theme maps
-
-│   │   ├── utils.ts                # timeAgo, timeUntil, formatBytes
-
-│   │   └── recroom/
-
-│   │       └── prompt-templates.ts # LLM system prompts per activity
+│   │   ├── theme.ts, utils.ts, …
 
 │   └── types/
 
 │       └── hermes.ts               # All TypeScript interfaces
 
-├── data/
+├── tests/
 
-│   ├── missions/                   # Mission JSON files
+│   ├── unit/                       # Jest unit + API tests
 
-│   └── templates/                  # Custom template JSON files
+│   ├── e2e/                        # Playwright (incl. app-routes nav matrix)
 
-├── public/                         # Static assets
+│   ├── integration/                # Docker install/update harness (Python)
+
+│   ├── jest.setup.ts
+
+│   └── __mocks__/better-sqlite3.cjs
+
+├── scripts/                        # bootstrap/, application/ch-deploy.sh, tooling/, lib/, hardware/, …
+
+├── scripts/git-hooks/              # Optional pre-push (see docs/CONTRIBUTING.md)
+
+├── docs/                           # Technical documentation index → docs/README.md
 
 ├── next.config.ts                  # Next.js config
 
@@ -153,6 +141,8 @@ control-hub/
 └── package.json
 
 ```
+
+Next.js static files (favicon, `robots.txt`, etc.) go in a `public/` directory at the repo root when you add them—the folder is not committed empty; the production `Dockerfile` runs `mkdir -p public` before build.
 
 §
 
@@ -170,7 +160,7 @@ control-hub/
 
 - **Destructive actions need confirmation**
 
-- **NEVER write to `~/.hermes/` directly** — always through API endpoints
+- **Do not bypass the API to edit Hermes or Control Hub state on disk** — use routes so path validation and registry-aware resolution apply
 
 - **`.env` keys displayed as `sk-...abcd` only**
 
@@ -192,7 +182,11 @@ control-hub/
 
 - `src/lib/api-logger.ts` — `logApiError()`, `safeJsonParse()`, `safeReadJsonFile()`
 
-- `src/lib/hermes.ts` — `PATHS`, `CH_DATA_DIR`, `HERMES_HOME`, `getDefaultModelConfig()`, `getDiscordHomeChannel()`
+- `src/lib/paths.ts` — `PATHS` (Control Hub–owned dirs), `CH_DATA_DIR`, `getChScriptsDir()`, `getChHardwareLogDir()`, `getDiscordHomeChannel()`
+- `src/lib/hermes-agent-runtime.ts` — `getActiveHermesPaths()`, `getActiveHermesHome()`, `getAgentLlmEndpoints()`
+- `src/lib/hermes-home.ts` — `getHermesHome()` (env-first; default `~/.hermes`)
+- `src/lib/models-repository.ts` — `getDefaultModel()`, `getModel()`, `getModelWithKey()`, `setDefaultModel()`, `listModels()` (SQLite registry)
+- `src/lib/db.ts` — SQLite connection, migrations, `getGatewayPlatforms()`
 
 §
 
@@ -200,7 +194,12 @@ control-hub/
 
 §
 
-**Always work on `dev` branch. Never commit to `main`.**
+**Work on feature branches. Never commit directly to `dev` or `main`.**
+
+§
+
+The agent is authenticated with GitHub via `$GITHUB_TOKEN` (set in `~/.hermes/.env`).
+The `gh` CLI is also configured with the same PAT. **Always use `gh` as the primary method.**
 
 §
 
@@ -216,25 +215,41 @@ git pull origin dev
 
 §
 
-# After making changes
+# After making changes — lint, build, and test first
+
+npm run lint && npm run build && npm test
 
 git add -A
 
 git commit -m "type: description"
 
-git push origin dev
+git push origin feature/your-feature
 
 §
 
-# Create PR for review
+# Create PR for review — PREFERRED: use gh CLI
+
+gh pr create \
+
+  --title "type: description" \
+
+  --body "What changed and why." \
+
+  --base dev \
+
+  --head feature/your-feature
+
+§
+
+# Fallback: curl with $GITHUB_TOKEN (always available)
 
 curl -X POST https://api.github.com/repos/Daniel-Parke/hermes-control-hub/pulls \
 
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Authorization: Bearer \$GITHUB_TOKEN" \
 
   -H "Content-Type: application/json" \
 
-  -d '{"title":"description","body":"what changed","head":"dev","base":"main"}'
+  -d '{"title":"type: description","body":"what changed","head":"feature/your-feature","base":"dev"}'
 
 ```
 
@@ -244,11 +259,13 @@ curl -X POST https://api.github.com/repos/Daniel-Parke/hermes-control-hub/pulls 
 
 - Use conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 
-- Always `npm run build` before pushing
+- Always `npm run build` and `npm test` before pushing
 
 - Never merge your own PRs
 
 - If merge conflict: stop and report to user
+
+- **Never use the browser for GitHub operations** — blocks with CAPTCHAs. Use `gh` CLI, `git`, or `curl` + `$GITHUB_TOKEN`.
 
 §
 
@@ -266,7 +283,7 @@ cd ~/control-hub && npm run build
 
 # Step 2: Kill existing server
 
-fuser -k 3000/tcp 2>/dev/null; sleep 2
+fuser -k "${PORT:-3000}/tcp" 2>/dev/null; sleep 2
 
 §
 
@@ -286,11 +303,11 @@ In code, deploy via:
 
 ```
 
-terminal(command="cd ~/control-hub && node node_modules/next/dist/bin/next start -p 3000 -H 0.0.0.0", background=true)
+terminal(command="cd ~/control-hub && node node_modules/next/dist/bin/next start -p ${PORT:-3000} -H 0.0.0.0", background=true)
 
 sleep 3
 
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-3000}
 
 ```
 
@@ -298,13 +315,17 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
 
 **Scripts:**
 
-- `scripts/restart.sh` — Stop and restart the server (no git/build)
+- `scripts/application/ch-deploy.sh` — **`restart`** (no git/build), **`rebuild`** (build current tree + restart; optional `--branch` for local checkout only — no pull), or **`update`** (pull **CH_UPDATE_GIT_BRANCH**, install deps if needed, build, **`seed-catalog.ts --merge`**, restart); status in **`~/.hermes/logs/ch-deploy.status`**; reads **`CH_*` / `HERMES_HOME`** from `.env.local`
 
-- `scripts/update.sh` — Pull from main, build, restart
+- `scripts/bootstrap/install.sh` — Bootstrap clone + setup, or **`--in-repo`**; optional **`INSTALL_HERMES_PROFILE_TEMPLATES`** for bundled Hermes templates (see script header)
 
-- `scripts/install.sh` — Standalone installer (fresh or reinstall)
+- `scripts/bootstrap/setup.sh` — Post-clone setup (PORT + `.env.local`, npm install, build)
 
-- `scripts/setup.sh` — Post-clone setup (npm install, build)
+- `scripts/bootstrap/stop.sh` — Stop listeners on PORT (used standalone; `ch-deploy restart` stops port inline)
+
+- `scripts/lib/ch-hermes-profile-templates.sh` — Optional install-only copy from **`data/seed/profiles/`** (bootstrap `install.sh`; update uses **`seed-catalog.ts`**)
+
+- **Scripts layout** (bootstrap vs tooling vs `ch-deploy`): **[docs/DEPLOY.md](docs/DEPLOY.md)**
 
 
 
@@ -324,5 +345,27 @@ Control Hub is a command centre, not a file manager. The operator opens the dash
 
 §
 
-**Sidebar sections:** Main (Dashboard, Missions, Cron, Sessions, Memory, Gateway, Logs, Config) | Agents (Agents) | Operations (Skills, Tools, Personalities, HERMES.md, Environment) | Config Sections
+**Sidebar sections:** Main (Dashboard, Sessions, Memory, Logs) | Orchestration (Cron, Missions, Chat) | Operations (Agents, Skills, Tools, Personalities) | Rec Room (Story Weaver) | Config (Models, Seed, HERMES.md, Environment + YAML sections). Gateway health appears on the dashboard and in Orchestration → Chat (no separate Gateway page).
+
+**Profiles:** SQLite `agent_profiles` is source of truth; push/pull/drift on Operations → Agents mirrors Config → Models sync. See [docs/CATALOG_AND_PROFILES.md](docs/CATALOG_AND_PROFILES.md).
+
+§
+
+## Shell & UI consistency
+
+§
+
+- **Page chrome:** Prefer `PageHeader` from `@/components/layout/PageHeader` for sticky top bars (title, optional back link, `actions` slot). Use `shellHeaderBarClasses` from `@/lib/theme` only when extending the shell outside `PageHeader`.
+
+§
+
+- **Page frame:** Prefer `AppPageShell` from `@/components/layout/AppPageShell` instead of repeating `min-h-screen bg-dark-950 grid-bg`. Use `variant="scanlines"` where the Rec Room / immersive aesthetic applies.
+
+§
+
+- **Tokens:** Use theme colours (`neon-*`, `dark-*`, `semantic-*`, `rgb(var(--ch-rgb-neon-*)_/_opacity)` in arbitrary shadows) — **do not** introduce raw hex or ad-hoc `purple-500` / `rgba(...)` in TSX unless documenting an exception in `docs/design-tokens.md`.
+
+§
+
+- **Mobile:** `MobileHeader` intentionally uses `--ch-mobile-header-min-height` (3rem), shorter than desktop `--ch-shell-header-min-height` (5rem).
 

@@ -2,7 +2,9 @@
 "use client";
 import { useState, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, Sparkles, Plus, X, Save, FolderOpen, Users, Trash2 } from "lucide-react";
+import { Sparkles, Plus, X, Save, FolderOpen, Users, Trash2 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import { STORY_TEMPLATES } from "@/types/recroom";
 import type { StoryCharacter, CharacterSheet, StoryTheme } from "@/types/recroom";
 import GenerateOverlay from "@/components/story-weaver/GenerateOverlay";
@@ -79,7 +81,7 @@ function CharacterCard({ char, index, onUpdate, onRemove, onSave, saved, expande
       <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/[0.03] min-h-[48px]"
         onClick={() => onToggle(index)}>
         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono ${
-          expanded ? "bg-purple-500/20 text-purple-400" : "bg-white/5 text-white/30"
+          expanded ? "bg-neon-purple/20 text-neon-purple" : "bg-white/5 text-white/30"
         }`}>
           {expanded ? "−" : "+"}
         </div>
@@ -427,7 +429,7 @@ function CreateStoryPage() {
   }, [genStoryId, router]);
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
+    <AppPageShell variant="scanlines">
       <GenerateOverlay title={title || "Your Story"} visible={generating} done={genDone} onComplete={handleGenComplete} />
 
       {/* Error banner */}
@@ -445,7 +447,7 @@ function CreateStoryPage() {
       {/* Character Picker Modal */}
       {showCharPicker && (
         <div className="fixed inset-0 z-[60] bg-dark-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-dark-900 border border-purple-500/20 rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="bg-dark-900 border border-neon-purple/20 rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Import Character</h3>
               <button onClick={() => setShowCharPicker(false)} className="text-white/30 hover:text-white/60"><X className="w-4 h-4" /></button>
@@ -457,7 +459,7 @@ function CreateStoryPage() {
                 {savedCharacters.map(cs => (
                   <button key={cs.id} onClick={() => importCharacter(cs)}
                     disabled={characters.some(c => c.name === cs.name)}
-                    className="w-full text-left p-3 rounded-lg border border-white/5 hover:border-purple-500/20 bg-white/[0.02] hover:bg-purple-500/5 transition-all disabled:opacity-30">
+                    className="w-full text-left p-3 rounded-lg border border-white/5 hover:border-neon-purple/20 bg-white/[0.02] hover:bg-neon-purple/5 transition-all disabled:opacity-30">
                     <div className="text-xs font-semibold text-white/80">{cs.name}</div>
                     <div className="text-[10px] text-white/30 font-mono">{cs.role} — {cs.description?.slice(0, 80)}</div>
                     {cs.personality?.length > 0 && (
@@ -493,26 +495,29 @@ function CreateStoryPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push("/recroom/story-weaver")} className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5"><ChevronLeft className="w-4 h-4" /></button>
-          <Sparkles className="w-5 h-5 text-neon-purple" />
-          <h1 className="text-lg font-bold text-white">Create Story</h1>
-          <div className="flex-1" />
-          {hasDraft && (
-            <button onClick={loadDraft}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-500/20 text-[10px] font-mono text-orange-400 hover:bg-orange-500/10">
+      <PageHeader
+        icon={Sparkles}
+        title="Create Story"
+        color="purple"
+        backHref="/recroom/story-weaver"
+        backLabel="STORY WEAVER"
+        actions={
+          hasDraft ? (
+            <button
+              type="button"
+              onClick={loadDraft}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-500/20 text-[10px] font-mono text-orange-400 hover:bg-orange-500/10"
+            >
               <FolderOpen className="w-3 h-3" /> Load Draft
             </button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 flex-1 w-full">
 
         {/* ═══ SECTION A: Templates + Clear ═══ */}
-        <div className="rounded-xl border border-purple-500/15 bg-dark-900/50 p-5">
+        <div className="rounded-xl border border-neon-purple/15 bg-dark-900/50 p-5">
           <div className="flex items-center justify-between mb-3">
             <label className="text-xs font-mono text-white/40 uppercase tracking-widest">Quick Start — Templates</label>
             <button onClick={clearAllInputs}
@@ -524,7 +529,7 @@ function CreateStoryPage() {
             {STORY_TEMPLATES.map((t) => (
               <button key={t.id} onClick={() => applyTemplate(t.id)}
                 className={`text-left p-3 rounded-lg border transition-all ${
-                  selectedTheme === t.id ? "border-purple-500/40 bg-purple-500/10" : "border-white/5 bg-white/[0.02] hover:border-white/15"
+                  selectedTheme === t.id ? "border-neon-purple/40 bg-neon-purple/10" : "border-white/5 bg-white/[0.02] hover:border-white/15"
                 }`}>
                 <div className="text-xs font-semibold text-white/80 mb-0.5">{t.name}</div>
                 <div className="text-[9px] font-mono text-white/30">{t.genre.join(", ")}</div>
@@ -534,10 +539,10 @@ function CreateStoryPage() {
         </div>
 
         {/* ═══ SECTION B: Title ═══ */}
-        <div className="rounded-xl border border-purple-500/20 bg-dark-900/50 p-5">
+        <div className="rounded-xl border border-neon-purple/20 bg-dark-900/50 p-5">
           <label className="text-xs font-mono text-white/40 uppercase tracking-widest block mb-2">Story Title</label>
           <input value={title} onChange={(e) => { setTitle(e.target.value); setTitleManuallyEdited(true); }} placeholder="Give your story a name..."
-            className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-4 py-3 text-lg text-white placeholder-white/20 outline-none focus:border-purple-500/30 font-serif font-semibold" />
+            className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-4 py-3 text-lg text-white placeholder-white/20 outline-none focus:border-neon-purple/30 font-serif font-semibold" />
         </div>
 
         {/* ═══ SECTION C: Theme (Premise + Tags + Saved Themes) ═══ */}
@@ -656,7 +661,7 @@ function CreateStoryPage() {
               ].map((opt) => (
                 <button key={opt.id} onClick={() => setWordCountRange(opt.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
-                    wordCountRange === opt.id ? "border-purple-500/40 bg-purple-500/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
+                    wordCountRange === opt.id ? "border-neon-purple/40 bg-neon-purple/15 text-neon-purple" : "border-white/8 text-white/30 hover:text-white/50"
                   }`}>{opt.label}</button>
               ))}
             </div>
@@ -665,10 +670,10 @@ function CreateStoryPage() {
 
         {/* Create Button */}
         <button onClick={handleCreate} disabled={!premise.trim() || generating}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl border border-purple-500/30 bg-purple-500/10 text-base font-mono text-neon-purple hover:bg-purple-500/20 transition-all disabled:opacity-30 shadow-[0_0_20px_rgba(168,85,247,0.1)]">
+          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl border border-neon-purple/30 bg-neon-purple/10 text-base font-mono text-neon-purple hover:bg-neon-purple/20 transition-all disabled:opacity-30 shadow-[0_0_20px_rgb(var(--ch-rgb-neon-purple)_/_0.1)]">
           <Sparkles className="w-5 h-5" /> Begin Writing
         </button>
       </div>
-    </div>
+    </AppPageShell>
   );
 }

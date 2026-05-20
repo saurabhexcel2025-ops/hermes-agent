@@ -3,7 +3,9 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronLeft, Sparkles, Clock, CheckCircle2, Loader2, BookMarked, Trash2 } from "lucide-react";
+import { BookOpen, Sparkles, Clock, CheckCircle2, Loader2, BookMarked, Trash2 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import { timeAgo } from "@/lib/utils";
 
 interface StorySummary {
@@ -59,25 +61,17 @@ export default function LibraryPage() {
   const completedCount = stories.filter(isComplete).length;
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-5 backdrop-blur-xl border-t-2 border-purple-500/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => router.push("/recroom/story-weaver")}
-              className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <BookMarked className="w-6 h-6 text-neon-purple" />
-            <div>
-              <h1 className="text-xl font-bold text-white">Library</h1>
-              <p className="text-xs text-white/40 font-mono">Your personal bookshelf</p>
-            </div>
-          </div>
-        </div>
-      </div>
+    <AppPageShell variant="scanlines">
+      <PageHeader
+        icon={BookMarked}
+        title="Library"
+        subtitle="Your personal bookshelf"
+        color="purple"
+        backHref="/recroom/story-weaver"
+        backLabel="STORY WEAVER"
+      />
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6 flex-1 w-full">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           {[
@@ -103,7 +97,7 @@ export default function LibraryPage() {
             <button key={f.id} onClick={() => setFilter(f.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
                 filter === f.id
-                  ? "border-purple-500/40 bg-purple-500/15 text-neon-purple"
+                  ? "border-neon-purple/40 bg-neon-purple/15 text-neon-purple"
                   : "border-white/8 text-white/30 hover:text-white/50"
               }`}>
               {f.label}
@@ -129,7 +123,7 @@ export default function LibraryPage() {
             </p>
             {filter === "all" && (
               <button onClick={() => router.push("/recroom/story-weaver/create")}
-                className="px-6 py-3 rounded-xl border border-purple-500/30 text-sm font-mono text-neon-purple hover:bg-purple-500/10">
+                className="px-6 py-3 rounded-xl border border-neon-purple/30 text-sm font-mono text-neon-purple hover:bg-neon-purple/10">
                 Create a Story
               </button>
             )}
@@ -147,12 +141,12 @@ export default function LibraryPage() {
                 <div
                   key={story.id}
                   onClick={() => router.push("/recroom/story-weaver/" + story.id)}
-                  className="rounded-xl border border-white/8 bg-dark-900/40 p-5 hover:border-purple-500/25 hover:bg-dark-900/60 transition-all cursor-pointer group"
+                  className="rounded-xl border border-white/8 bg-dark-900/40 p-5 hover:border-neon-purple/25 hover:bg-dark-900/60 transition-all cursor-pointer group"
                 >
                   <div className="flex items-start gap-4">
                     {/* Book spine indicator */}
                     <div className={`w-1.5 h-full min-h-[60px] rounded-full flex-shrink-0 ${
-                      complete ? "bg-gradient-to-b from-green-500 to-emerald-600" : "bg-gradient-to-b from-purple-500 to-purple-700"
+                      complete ? "bg-gradient-to-b from-semantic-success to-emerald-600" : "bg-gradient-to-b from-neon-purple to-neon-purple/50"
                     }`} />
 
                     <div className="flex-1 min-w-0">
@@ -181,7 +175,7 @@ export default function LibraryPage() {
                           <div className={`text-[9px] font-mono px-2.5 py-1 rounded-full ${
                           complete
                             ? "bg-green-500/10 text-neon-green"
-                            : "bg-purple-500/10 text-neon-purple"
+                            : "bg-neon-purple/10 text-neon-purple"
                         }`}>
                           {complete ? "Complete" : `${completeChapters}/${chapters.length}`}
                         </div>
@@ -199,7 +193,7 @@ export default function LibraryPage() {
                         <div className="mt-3">
                           <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
                             <div
-                              className="h-full rounded-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all"
+                              className="h-full rounded-full bg-gradient-to-r from-neon-purple to-neon-pink transition-all"
                               style={{ width: `${(completeChapters / chapters.length) * 100}%` }}
                             />
                           </div>
@@ -223,6 +217,6 @@ export default function LibraryPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

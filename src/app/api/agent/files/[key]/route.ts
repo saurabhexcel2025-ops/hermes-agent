@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
-import { BEHAVIOR_FILES } from "@/lib/behavior-files";
+import { resolveProfileHermesHome, buildProfileHermesPathBundle } from "@/lib/hermes-profile-paths";
+import { getBehaviorFiles } from "@/lib/behavior-files";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
+import { ensureDb } from "@/lib/db";
+import { getProfile, updateProfileContent } from "@/lib/profiles-repository";
+import { pushProfileToHermes } from "@/lib/hermes-profile-sync";
 
 /** Resolve file path for a given key and optional profile */
 function resolveFilePath(
@@ -16,7 +19,7 @@ function resolveFilePath(
   | { path: string; name: string; description: string }
   | { error: string }
   | null {
-  const fileConfig = BEHAVIOR_FILES[key];
+  const fileConfig = getBehaviorFiles()[key];
   if (!fileConfig) return null;
 
   const prof = resolveSafeProfileName(profileParam);
@@ -26,17 +29,21 @@ function resolveFilePath(
   const profile = prof.profile;
 
   if (profile === "default") {
-    return { path: fileConfig.path, name: fileConfig.name, description: fileConfig.description };
+    const entry = getBehaviorFiles()[key];
+    if (!entry) return null;
+    return { path: entry.path, name: entry.name, description: entry.description };
   }
 
-  // Profile-specific paths (segment is allowlisted; no traversal)
-  const profileDir = HERMES_HOME + "/profiles/" + profile;
+  const bundle = buildProfileHermesPathBundle(profile);
   const pathMap: Record<string, string> = {
-    soul: profileDir + "/SOUL.md",
-    agents: profileDir + "/AGENTS.md",
-    user: profileDir + "/memories/USER.md",
-    memory: profileDir + "/memories/MEMORY.md",
-    env: HERMES_HOME + "/.env",  // .env is global, not per-profile
+    soul: bundle.soul,
+    agent: bundle.agents,
+    user: bundle.userMemory,
+    memory: bundle.agentMemory,
+    env: bundle.env,
+    hermes: bundle.hermes,
+    config: bundle.config,
+    auth: bundle.auth,
   };
 
   const resolvedPath = pathMap[key];
@@ -64,6 +71,28 @@ export async function GET(
   }
 
   try {
+    const prof = resolveSafeProfileName(profile);
+    const profileSlug = prof.ok ? prof.profile : "default";
+
+    if (profileSlug !== "default" && (key === "soul" || key === "agent")) {
+      ensureDb();
+      const row = getProfile(profileSlug);
+      if (row) {
+        const content = key === "soul" ? row.soulMd : row.agentsMd;
+        return NextResponse.json({
+          data: {
+            key,
+            content,
+            name: resolved.name,
+            description: resolved.description,
+            exists: content.length > 0,
+            size: content.length,
+            lastModified: row.updatedAt,
+          },
+        });
+      }
+    }
+
     if (!existsSync(resolved.path)) {
       return NextResponse.json({
         data: {
@@ -100,9 +129,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   const { key } = await params;
@@ -132,16 +159,39 @@ export async function PUT(
 
     // Optional backup
     if (backup && existsSync(resolved.path)) {
-      const backupDir = HERMES_HOME + "/backups";
+      const prof = resolveSafeProfileName(profile);
+      const profileHome = prof.ok ? resolveProfileHermesHome(prof.profile) : resolveProfileHermesHome("default");
+      const backupDir = profileHome + "/backups";
       if (!existsSync(backupDir)) mkdirSync(backupDir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const backupName = `${key}-${ts}.md`;
       try {
         writeFileSync(backupDir + "/" + backupName, readFileSync(resolved.path, "utf-8"));
-      } catch {}
+      } catch (err) {
+        logApiError("PUT /api/agent/files/[key]", `backup ${resolved.path}`, err);
+      }
     }
 
-    writeFileSync(resolved.path, content, "utf-8");
+    const prof = resolveSafeProfileName(profile);
+    const profileSlug = prof.ok ? prof.profile : "default";
+
+    if (profileSlug !== "default" && (key === "soul" || key === "agent") && getProfile(profileSlug)) {
+      ensureDb();
+      if (key === "soul") {
+        updateProfileContent(profileSlug, { soulMd: content });
+      } else {
+        updateProfileContent(profileSlug, { agentsMd: content });
+      }
+      const push = pushProfileToHermes(profileSlug);
+      if (!push.success) {
+        return NextResponse.json(
+          { error: push.error ?? "Failed to sync profile to Hermes" },
+          { status: 500 },
+        );
+      }
+    } else {
+      writeFileSync(resolved.path, content, "utf-8");
+    }
 
     appendAuditLine({
       action: "agent.file.put",

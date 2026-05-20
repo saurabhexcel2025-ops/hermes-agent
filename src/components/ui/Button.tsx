@@ -13,7 +13,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   icon?: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const colorMap: Record<AccentColor, { bg: string; border: string; text: string; hover: string }> = {
@@ -46,6 +46,24 @@ const colorMap: Record<AccentColor, { bg: string; border: string; text: string; 
     border: "border-neon-orange/30",
     text: "text-neon-orange",
     hover: "hover:bg-neon-orange/30",
+  },
+  red: {
+    bg: "bg-red-500/20",
+    border: "border-red-500/30",
+    text: "text-red-400",
+    hover: "hover:bg-red-500/30",
+  },
+  blue: {
+    bg: "bg-blue-500/20",
+    border: "border-blue-500/30",
+    text: "text-blue-400",
+    hover: "hover:bg-blue-500/30",
+  },
+  yellow: {
+    bg: "bg-yellow-500/20",
+    border: "border-yellow-500/30",
+    text: "text-yellow-400",
+    hover: "hover:bg-yellow-500/30",
   },
 };
 
@@ -80,14 +98,15 @@ export default function Button({
 
   return (
     <button
+      type="button"
       className={`inline-flex items-center justify-center rounded-lg font-mono transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${variantStyles} ${s} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
       {loading ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
+        <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
       ) : Icon ? (
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4 flex-shrink-0" />
       ) : null}
       {children}
     </button>

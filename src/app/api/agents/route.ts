@@ -1,11 +1,16 @@
-import { NextResponse } from "next/server";
-import { readFileSync, readdirSync, existsSync, statSync } from "fs";
-import { execSync } from "child_process";
+// ═══════════════════════════════════════════════════════════════
+// /api/agents/route.ts — Hermes process list (DB-centric)
+//
+// Reads from the agent_processes table (synced by ProcessSync)
+// instead of running execSync on every request.
+// ═══════════════════════════════════════════════════════════════
 
-import { PATHS } from "@/lib/hermes";
+import { NextResponse } from "next/server";
+
+import { ensureSyncLayer } from "@/lib/sync";
 import { logApiError } from "@/lib/api-logger";
 
-interface AgentRun {
+interface HermesProcess {
   id: string;
   type: "cron" | "gateway" | "manual" | "subagent";
   name: string;
@@ -19,191 +24,55 @@ interface AgentRun {
 
 export async function GET() {
   try {
-    const agents: AgentRun[] = [];
+    // Ensure sync layer is active so process data is fresh
+    ensureSyncLayer();
 
-    // ── Gateway main agent ───────────────────────────────────
-    try {
-      const psOutput = execSync(
-        'ps aux | grep "gateway run" | grep -v grep | grep -v bash',
-        { encoding: "utf-8", timeout: 5000 }
-      ).trim();
-      if (psOutput) {
-        const lines = psOutput.split("\n");
-        // De-duplicate: only keep one gateway entry (the main python process)
-        const seen = new Set<number>();
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          const pid = parseInt(parts[1], 10);
-          const cmd = parts.slice(10).join(" ");
-          // Skip bash wrapper processes, keep the actual python process
-          if (cmd.includes("bash") || cmd.includes("printf")) continue;
-          if (seen.has(pid)) continue;
-          seen.add(pid);
+    const { db } = await import("@/lib/db");
 
-          const startTime = parts[8];
+    // Read from the agent_processes table
+    const rows = db()
+      .prepare(
+        "SELECT id, type, name, status, pid, model, turns, last_activity, last_seen_at FROM agent_processes ORDER BY type, name"
+      )
+      .all() as Array<{
+      id: string;
+      type: string;
+      name: string;
+      status: string;
+      pid: number | null;
+      model: string;
+      turns: number;
+      last_activity: string | null;
+      last_seen_at: string;
+    }>;
 
-          // Determine connected platforms from .env
-          const platforms: string[] = [];
-          try {
-            const envPath = PATHS.env;
-            if (existsSync(envPath)) {
-              const envContent = readFileSync(envPath, "utf-8");
-              if (envContent.includes("DISCORD_BOT_TOKEN=") && !envContent.match(/^#\s*DISCORD_BOT_TOKEN/m)) platforms.push("Discord");
-              if (envContent.includes("TELEGRAM_BOT_TOKEN=") && !envContent.match(/^#\s*TELEGRAM_BOT_TOKEN/m)) platforms.push("Telegram");
-              if (envContent.includes("SLACK_BOT_TOKEN=") && !envContent.match(/^#\s*SLACK_BOT_TOKEN/m)) platforms.push("Slack");
-            }
-          } catch (err) { logApiError("GET /api/agents", "reading .env for platforms", err); }
-          const platformLabel = platforms.length > 0 ? platforms.join(" + ") : "Gateway";
+    const processes: HermesProcess[] = rows.map((r) => ({
+      id: r.id,
+      type: r.type as HermesProcess["type"],
+      name: r.name,
+      status: r.status as HermesProcess["status"],
+      startedAt: r.last_activity, // best approximation
+      lastActivity: r.last_activity,
+      model: r.model,
+      pid: r.pid,
+      turns: r.turns,
+    }));
 
-          agents.push({
-            id: `gateway-${pid}`,
-            type: "gateway",
-            name: `Hermes Gateway (${platformLabel})`,
-            status: "running",
-            startedAt: startTime,
-            lastActivity: new Date().toISOString(),
-            model: "gateway",
-            pid,
-            turns: 0,
-          });
-          break; // Only show one gateway
-        }
-      }
-    } catch (err) {
-      logApiError("GET /api/agents", "checking gateway process", err);
-    }
-
-    // ── Cron job runs (from session files) ───────────────────
-    const sessionsPath = PATHS.sessions;
-    if (existsSync(sessionsPath)) {
-      try {
-        const files = readdirSync(sessionsPath);
-        const cronSessionFiles = files
-          .filter((f) => f.startsWith("session_cron_") && f.endsWith(".json"))
-          .sort()
-          .reverse();
-
-        // Get last session per cron job
-        const seenJobs = new Set<string>();
-        for (const file of cronSessionFiles) {
-          // Extract job ID: session_cron_84f9f4d893f4_20260409_123246.json
-          const match = file.match(/session_cron_([a-f0-9]+)_/);
-          if (!match) continue;
-          const jobId = match[1];
-          if (seenJobs.has(jobId)) continue;
-          seenJobs.add(jobId);
-
-          const fp = sessionsPath + "/" + file;
-          const st = statSync(fp);
-          const modified = st.mtime.toISOString();
-
-          // Get job name from cron config
-          let jobName = `Cron ${jobId.slice(0, 8)}`;
-          let jobModel = "unknown";
-          const cronPath = PATHS.cronJobs;
-          if (existsSync(cronPath)) {
-            try {
-              const cronData = JSON.parse(readFileSync(cronPath, "utf-8"));
-              const job = (cronData.jobs || []).find(
-                (j: { id: string }) => j.id === jobId
-              );
-              if (job) {
-                jobName = job.name || jobName;
-                jobModel = job.model || "unknown";
-              }
-            } catch (err) {
-              logApiError("GET /api/agents", "reading cron config for job " + jobId, err);
-            }
-          }
-
-          // Count turns from session data
-          let turns = 0;
-          try {
-            const sessionData = JSON.parse(readFileSync(fp, "utf-8"));
-            if (Array.isArray(sessionData.messages)) {
-              turns = sessionData.messages.filter(
-                (m: { role: string }) => m.role === "assistant"
-              ).length;
-            }
-          } catch (err) {
-            logApiError("GET /api/agents", "counting turns for session " + file, err);
-          }
-
-          // Is this session recent (within 15 min)?
-          const ageMs = Date.now() - st.mtimeMs;
-          const isRunning = ageMs < 15 * 60 * 1000;
-
-          // Skip stale cron sessions (older than 24 hours)
-          if (ageMs > 24 * 60 * 60 * 1000) continue;
-
-          agents.push({
-            id: `cron-${jobId}`,
-            type: "cron",
-            name: jobName,
-            status: isRunning ? "running" : "idle",
-            startedAt: file.match(/_(\d{8}_\d{6})\.json/)?.[1] || null,
-            lastActivity: modified,
-            model: jobModel,
-            pid: null,
-            turns,
-          });
-        }
-      } catch (err) {
-        logApiError("GET /api/agents", "reading cron session files", err);
-      }
-    }
-
-    // ── Subagents (delegate tool sessions) ───────────────────
-    try {
-      const subagentOutput = execSync(
-        'ps aux | grep -E "run_agent|AIAgent|hermes.*chat" | grep -v grep | grep -v "gateway run"',
-        { encoding: "utf-8", timeout: 5000 }
-      ).trim();
-      if (subagentOutput) {
-        const lines = subagentOutput.split("\n");
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          const pid = parseInt(parts[1], 10);
-          const _cmd = parts.slice(10).join(" ");
-          agents.push({
-            id: `subagent-${pid}`,
-            type: "subagent",
-            name: `Subagent (PID ${pid})`,
-            status: "running",
-            startedAt: parts[8],
-            lastActivity: new Date().toISOString(),
-            model: "unknown",
-            pid,
-            turns: 0,
-          });
-        }
-      }
-    } catch {
-      // grep returns exit code 1 when no matches found — expected, not an error
-    }
-
-    // Sort: running first, then by type
-    agents.sort((a, b) => {
-      if (a.status === "running" && b.status !== "running") return -1;
-      if (a.status !== "running" && b.status === "running") return 1;
-      return a.type.localeCompare(b.type);
-    });
-
-    const runningCount = agents.filter((a) => a.status === "running").length;
-    const idleCount = agents.filter((a) => a.status === "idle").length;
+    const runningCount = processes.filter((p) => p.status === "running").length;
+    const idleCount = processes.filter((p) => p.status === "idle").length;
 
     return NextResponse.json({
       data: {
-        agents,
-        total: agents.length,
+        processes,
+        total: processes.length,
         running: runningCount,
         idle: idleCount,
       },
     });
   } catch (err) {
-    logApiError("GET /api/agents", "querying agents", err);
+    logApiError("GET /api/agents", "querying Hermes processes", err);
     return NextResponse.json(
-      { error: "Failed to query agents: " + String(err) },
+      { error: "Failed to query Hermes processes: " + String(err) },
       { status: 500 }
     );
   }

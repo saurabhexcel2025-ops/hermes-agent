@@ -92,7 +92,7 @@ export default function ReaderSettings({ settings, onChange }: {
               <span className="text-xs text-white/20">A</span>
               <input type="range" min={12} max={28} value={settings.fontSize}
                 onChange={(e) => update({ fontSize: parseInt(e.target.value) })}
-                className="flex-1 accent-purple-500 h-1" />
+                className="flex-1 accent-neon-purple h-1" />
               <span className="text-lg text-white/40">A</span>
             </div>
           </div>
@@ -105,7 +105,7 @@ export default function ReaderSettings({ settings, onChange }: {
             </div>
             <input type="range" min={12} max={25} value={Math.round(settings.lineHeight * 10)}
               onChange={(e) => update({ lineHeight: parseInt(e.target.value) / 10 })}
-              className="w-full accent-purple-500 h-1" />
+              className="w-full accent-neon-purple h-1" />
           </div>
 
           {/* Font Family */}
@@ -115,7 +115,7 @@ export default function ReaderSettings({ settings, onChange }: {
               {FONTS.map((f) => (
                 <button key={f.name} onClick={() => update({ fontFamily: f.name })}
                   className={`text-left px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                    settings.fontFamily === f.name ? "bg-purple-500/15 text-neon-purple border border-purple-500/30" : "text-white/40 hover:text-white/60 hover:bg-white/5 border border-transparent"
+                    settings.fontFamily === f.name ? "bg-neon-purple/15 text-neon-purple border border-neon-purple/30" : "text-white/40 hover:text-white/60 hover:bg-white/5 border border-transparent"
                   }`}
                   style={{ fontFamily: f.family }}>
                   {f.label}
@@ -131,7 +131,7 @@ export default function ReaderSettings({ settings, onChange }: {
               {Object.entries(THEMES).map(([key, t]) => (
                 <button key={key} onClick={() => update({ pageTheme: key as ReadingSettings["pageTheme"] })}
                   className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${
-                    settings.pageTheme === key ? "border-purple-500/40" : "border-white/5 hover:border-white/15"
+                    settings.pageTheme === key ? "border-neon-purple/40" : "border-white/5 hover:border-white/15"
                   }`}>
                   <div className="w-8 h-8 rounded-md border border-white/10" style={{ background: t.bg }} />
                   <span className="text-[9px] font-mono text-white/30 capitalize">{key}</span>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync, statSync } from "fs";
 
-import { PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import {
   getMaxSessionFileBytes,
@@ -16,7 +16,7 @@ export async function GET(
   if (limited) return limited;
 
   const { id } = await params;
-  const sessionsPath = PATHS.sessions;
+  const sessionsPath = getActiveHermesPaths().sessions;
 
   // Security: prevent path traversal by resolving and checking prefix
   const sanitizedId = id.replace(/[^a-zA-Z0-9_.-]/g, "");

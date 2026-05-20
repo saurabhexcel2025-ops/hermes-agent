@@ -16,6 +16,7 @@ import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import { LoadingSpinner, EmptyState, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
+import { timeAgo } from "@/lib/utils";
 
 interface Memory {
   id?: string;
@@ -24,6 +25,47 @@ interface Memory {
   score?: number;
   created_at?: string;
   metadata?: Record<string, unknown>;
+}
+
+/** Parse the raw Python repr string from the Hindsight API into clean fields */
+function parseMemoryContent(raw: string): { text: string; type: string; tags: string[] } {
+  // The content is a Python dict string from PostgreSQL, e.g.:
+  // {'id': '...', 'text': 'Memory content here.', 'context': '', 'fact_type': 'observation', 'tags': [], ...}
+  // Keys use colon + space separator: 'text': '...'
+  const textMatch = raw.match(/'text':\s*'((?:[^'\\]|\\.)*)'/);
+  const typeMatch =
+    raw.match(/'fact_type':\s*'([^']*)'/) || raw.match(/(?:^|[^'])type='([^']*)'/);
+  // Tags: `tags=[...]` (legacy repr) or `'tags': [...]` (PostgreSQL dict)
+  const tagsMatch =
+    raw.match(/tags=\[(.*?)\]/) || raw.match(/'tags':\s*\[(.*?)\]/);
+  const text = textMatch ? textMatch[1] : raw;
+  const type = typeMatch ? typeMatch[1] : "unknown";
+  const tags = tagsMatch
+    ? tagsMatch[1]
+        .split(",")
+        .map((t) => t.trim().replace(/^'|'$/g, ""))
+        .filter(Boolean)
+    : [];
+  return { text, type, tags };
+}
+
+/** Badge colour for Hindsight `fact_type` / parsed type (aligned with holographic memory styling). */
+function hindsightFactTypeBadgeColor(
+  t: string,
+): "cyan" | "purple" | "orange" | "green" | "gray" {
+  const n = t.toLowerCase();
+  if (n === "observation") return "cyan";
+  if (n === "world") return "purple";
+  if (n === "directive") return "orange";
+  if (n === "experience") return "green";
+  return "gray";
+}
+
+/** Parse the reflect response Python repr — extract text='...' from the repr string */
+function parseReflectResponse(raw: string): string {
+  // Format: "text='...' based_on=None structured_output=None usage=TokenUsage(...) trace=None"
+  const match = raw.match(/^text='((?:[^'\\]|\\.)*)'/);
+  return match ? match[1] : raw;
 }
 
 interface Directive {
@@ -52,7 +94,7 @@ export default function HindsightBrowser() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
-  const [hasRecalled, setHasRecalled] = useState(false);
+  const [, setHasRecalled] = useState(false);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("memories");
   const [reflectResult, setReflectResult] = useState<string | null>(null);
@@ -123,7 +165,9 @@ export default function HindsightBrowser() {
         await fetchHealthOnly();
       }
     } catch {
-      await fetchHealthOnly();
+      // Silently swallow initial load errors — the system may still be starting up.
+      // fetchHealthOnly() runs in the background to determine actual availability.
+      void fetchHealthOnly();
     } finally {
       setLoadingInitial(false);
     }
@@ -131,8 +175,7 @@ export default function HindsightBrowser() {
 
   useEffect(() => {
     void loadRecentMemories();
-    void fetchHealthOnly();
-  }, [loadRecentMemories, fetchHealthOnly]);
+  }, [loadRecentMemories]);
 
   const applyRecallPayload = useCallback(
     async (
@@ -236,6 +279,11 @@ export default function HindsightBrowser() {
       setShowAddModal(false);
       setNewContent("");
       setNewTags("");
+      if (search.trim()) {
+        void runRecall();
+      } else {
+        void loadRecentMemories();
+      }
     } catch {
       showToast("Failed to store memory", "error");
     } finally {
@@ -248,20 +296,33 @@ export default function HindsightBrowser() {
     setLoadingDirectives(true);
     try {
       const res = await fetch("/api/memory/hindsight?action=directives");
-      const body = await res.json();
+      const body = (await res.json()) as {
+        data?: { directives?: Directive[]; error?: string };
+        error?: string;
+      };
+      if (!res.ok) {
+        const msg =
+          (typeof body.error === "string" && body.error) ||
+          (typeof body.data?.error === "string" && body.data.error) ||
+          `Failed to load directives (${res.status})`;
+        showToast(msg, "error");
+        setDirectives([]);
+        return;
+      }
       setDirectives(body.data?.directives || []);
     } catch {
       showToast("Failed to load directives", "error");
+      setDirectives([]);
     } finally {
       setLoadingDirectives(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    if (activeTab === "directives" && directives.length === 0 && !loadingDirectives) {
+    if (activeTab === "directives") {
       void loadDirectives();
     }
-  }, [activeTab, directives.length, loadingDirectives, loadDirectives]);
+  }, [activeTab, loadDirectives]);
 
   const handleCreateDirective = async () => {
     if (!newDirName.trim() || !newDirContent.trim()) return;
@@ -333,20 +394,33 @@ export default function HindsightBrowser() {
     setLoadingModels(true);
     try {
       const res = await fetch("/api/memory/hindsight?action=mental-models");
-      const body = await res.json();
+      const body = (await res.json()) as {
+        data?: { models?: MentalModel[]; error?: string };
+        error?: string;
+      };
+      if (!res.ok) {
+        const msg =
+          (typeof body.error === "string" && body.error) ||
+          (typeof body.data?.error === "string" && body.data.error) ||
+          `Failed to load mental models (${res.status})`;
+        showToast(msg, "error");
+        setMentalModels([]);
+        return;
+      }
       setMentalModels(body.data?.models || []);
     } catch {
       showToast("Failed to load mental models", "error");
+      setMentalModels([]);
     } finally {
       setLoadingModels(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    if (activeTab === "mental-models" && mentalModels.length === 0 && !loadingModels) {
+    if (activeTab === "mental-models") {
       void loadModels();
     }
-  }, [activeTab, mentalModels.length, loadingModels, loadModels]);
+  }, [activeTab, loadModels]);
 
   const handleCreateModel = async () => {
     if (!newModelName.trim() || !newModelQuery.trim()) return;
@@ -482,24 +556,46 @@ export default function HindsightBrowser() {
   };
 
   return (
-    <div>
+    <div className="pt-2">
       {toastElement}
       {/* Health Status */}
-      {health && !health.available && (
-        <div className="mb-4">
-          <ErrorBanner message={`Hindsight ${health.mode}: ${health.message || health.error || "not responding"}`} />
+      {!loadingInitial && health && !health.available && (
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex-1">
+            <ErrorBanner
+              message={
+                health.error?.includes("Redis")
+                  ? "Redis is not running. Start Redis to enable memory features: redis-server"
+                  : health.message
+                    ? `Hindsight ${health.mode}: ${health.message}`
+                    : `Hindsight ${health.mode}: ${health.error || "not responding"}`
+              }
+            />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={RefreshCw}
+            onClick={() => {
+              void loadRecentMemories();
+              void fetchHealthOnly();
+            }}
+          >
+            Retry
+          </Button>
         </div>
       )}
 
       {/* Search Bar */}
       <div className="flex gap-3 mb-6">
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col gap-1">
           <SearchInput
             value={search}
             onChange={setSearch}
             placeholder="Search memories (semantic search)..."
             accentColor="pink"
           />
+          <p className="text-xs text-white/30 pl-1">Press Enter to search</p>
         </div>
         <Button
           variant="secondary"
@@ -533,7 +629,7 @@ export default function HindsightBrowser() {
             <Sparkles className="w-4 h-4 text-purple-400" />
             <span className="text-sm font-semibold text-purple-300">Reflection</span>
           </div>
-          <p className="text-sm text-white/70 leading-relaxed">{reflectResult}</p>
+          <p className="text-sm text-white/70 leading-relaxed">{parseReflectResponse(reflectResult)}</p>
         </div>
       )}
 
@@ -578,28 +674,44 @@ export default function HindsightBrowser() {
           ) : memories.length === 0 ? (
             <EmptyState
               icon={Brain}
-              title={hasRecalled ? "No memories found" : "No memories yet"}
-              description={hasRecalled
-                ? "Try a different search query, or store new memories with Add Memory or the agent."
-                : "Store your first memory with Add Memory or ask the agent to retain one."}
+              title="No memories yet"
+              description="Hermes will start storing them as you converse. You can also add one with Add Memory above."
             />
           ) : (
             <div className="space-y-3">
-              {memories.map((memory, i) => (
+              {memories.map((memory, i) => {
+                const { text, type, tags } = parseMemoryContent(memory.content);
+                return (
                 <div
                   key={memory.id || i}
                   className="rounded-xl border border-white/10 bg-dark-900/50 p-4 hover:border-pink-500/20 transition-colors"
                 >
-                  <p className="text-sm text-white/70 leading-relaxed mb-2">{memory.content}</p>
-                  <div className="flex items-center gap-3 text-xs text-white/30">
-                    {memory.type && <Badge color="gray" size="sm">{memory.type}</Badge>}
+                  <p className="text-sm text-white/70 leading-relaxed mb-2">{text}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-white/30">
+                    {type && type !== "unknown" && (
+                      <Badge color={hindsightFactTypeBadgeColor(type)} size="sm">
+                        {type}
+                      </Badge>
+                    )}
+                    {tags.length > 0 &&
+                      tags.map((tag) => (
+                        <Badge key={tag} color="pink" size="sm">
+                          {tag}
+                        </Badge>
+                      ))}
                     {memory.score !== undefined && (
-                      <span>Relevance: {(memory.score * 100).toFixed(0)}%</span>
+                      <span>
+                        {typeof memory.score === "number" &&
+                        memory.score > 0 &&
+                        memory.score <= 1
+                          ? `Relevance: ${(memory.score * 100).toFixed(0)}%`
+                          : `Proof count: ${memory.score}`}
+                      </span>
                     )}
                     {memory.created_at && (
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(memory.created_at).toLocaleDateString()}
+                        {timeAgo(memory.created_at)}
                       </span>
                     )}
                     {memory.metadata && Object.keys(memory.metadata).length > 0 && (
@@ -610,7 +722,7 @@ export default function HindsightBrowser() {
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </>
@@ -637,7 +749,18 @@ export default function HindsightBrowser() {
             <EmptyState
               icon={FileText}
               title="No directives yet"
-              description="Directives are hard rules injected into agent prompts. Create one to control agent behavior."
+              description="Hindsight returned no directives for this bank. Directives are hard rules injected into agent prompts when you add them."
+              action={
+                <Button
+                  variant="primary"
+                  color="pink"
+                  size="sm"
+                  icon={Plus}
+                  onClick={() => setShowDirectiveModal(true)}
+                >
+                  Create your first directive
+                </Button>
+              }
             />
           ) : (
             <div className="space-y-3">
@@ -720,7 +843,18 @@ export default function HindsightBrowser() {
             <EmptyState
               icon={Settings}
               title="No mental models yet"
-              description="Mental models are cached reflect analyses. Create one with a source query and Hindsight will generate and maintain the content."
+              description="Hindsight returned no mental models for this bank. Models are cached reflect analyses—create one with a source query to generate content."
+              action={
+                <Button
+                  variant="primary"
+                  color="pink"
+                  size="sm"
+                  icon={Plus}
+                  onClick={() => setShowModelModal(true)}
+                >
+                  Create your first mental model
+                </Button>
+              }
             />
           ) : (
             <div className="space-y-3">
@@ -744,7 +878,7 @@ export default function HindsightBrowser() {
                         {m.last_refreshed_at && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            Updated {new Date(m.last_refreshed_at).toLocaleDateString()}
+                            Updated {timeAgo(m.last_refreshed_at)}
                           </span>
                         )}
                         {m.tags.length > 0 && (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 
-import { PATHS } from "@/lib/hermes";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSkillDirUnderRoot } from "@/lib/path-security";
 
@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const resolved = resolveSkillDirUnderRoot(PATHS.skills, path);
+  const resolved = resolveSkillDirUnderRoot(getActiveHermesPaths().skills, path);
   if (!resolved.ok) {
     return NextResponse.json(
       { error: resolved.error },

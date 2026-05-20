@@ -7,6 +7,8 @@ interface TimeoutSelectorProps {
   value: number;
   onChange: (minutes: number) => void;
   compact?: boolean;
+  /** When false, hides the fixed “Inactivity kill switch” subtitle (parent may label once). Default true. */
+  showSubtitle?: boolean;
 }
 
 const PRESETS = [
@@ -19,7 +21,12 @@ const PRESETS = [
   { minutes: 0, label: "∞ (unlimited)" },
 ];
 
-export default function TimeoutSelector({ value, onChange, compact = false }: TimeoutSelectorProps) {
+export default function TimeoutSelector({
+  value,
+  onChange,
+  compact = false,
+  showSubtitle = true,
+}: TimeoutSelectorProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -69,7 +76,9 @@ export default function TimeoutSelector({ value, onChange, compact = false }: Ti
           <Timer className="w-4 h-4 text-white/40" />
           <div className="text-left">
             <div className="font-medium text-sm">{selected.label}</div>
-            <div className="text-[10px] text-white/30">Inactivity kill switch</div>
+            {showSubtitle && (
+              <div className="text-[10px] text-white/30">Inactivity kill switch</div>
+            )}
           </div>
         </div>
         <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${open ? "rotate-180" : ""}`} />

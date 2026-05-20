@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
-import { HERMES_HOME } from "@/lib/hermes";
+import { buildProfileHermesPathBundle } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { resolveSafeProfileName } from "@/lib/path-security";
 
 // PUT — Update personality for a profile
 export async function PUT(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   try {
@@ -22,20 +19,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Personality is required" }, { status: 400 });
     }
 
-    // Validate profile name (reject traversal, slashes, etc.)
-    if (profile) {
-      const safe = resolveSafeProfileName(profile);
-      if (!safe.ok) {
-        return NextResponse.json({ error: "Invalid profile name" }, { status: 400 });
-      }
+    const prof = resolveSafeProfileName(
+      profile && typeof profile === "string" ? profile : "default"
+    );
+    if (!prof.ok) {
+      return NextResponse.json({ error: "Invalid profile name" }, { status: 400 });
     }
-
-    let configPath: string;
-    if (!profile || profile === "default") {
-      configPath = HERMES_HOME + "/config.yaml";
-    } else {
-      configPath = HERMES_HOME + "/profiles/" + profile + "/config.yaml";
-    }
+    const configPath = buildProfileHermesPathBundle(prof.profile).config;
 
     if (!existsSync(configPath)) {
       return NextResponse.json({ error: "Profile config not found" }, { status: 404 });

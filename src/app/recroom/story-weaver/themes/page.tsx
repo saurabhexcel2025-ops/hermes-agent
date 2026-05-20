@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Plus, X, Save, Trash2, Edit2, FileText, Loader2, ArrowRight } from "lucide-react";
+import { Plus, X, Save, Trash2, Edit2, FileText, Loader2, ArrowRight } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import type { StoryTheme } from "@/types/recroom";
 
 const EMPTY_THEME: Omit<StoryTheme, "id" | "createdAt" | "updatedAt"> = {
@@ -107,7 +109,7 @@ export default function PromptsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
+    <AppPageShell variant="scanlines">
       {/* Edit Modal */}
       {editing && (
         <div className="fixed inset-0 z-[60] bg-dark-950/80 backdrop-blur-sm flex items-start justify-center p-4 pt-12 overflow-y-auto">
@@ -194,22 +196,25 @@ export default function PromptsPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-4 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push("/recroom/story-weaver")} className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5"><ChevronLeft className="w-4 h-4" /></button>
-          <FileText className="w-5 h-5 text-green-400" />
-          <h1 className="text-lg font-bold text-white">Story Themes</h1>
-          <div className="flex-1" />
-          <span className="text-xs text-white/30 font-mono">{themes.length} themes</span>
-          <button onClick={startNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-500/30 bg-green-500/10 text-xs font-mono text-green-400 hover:bg-green-500/20">
+      <PageHeader
+        icon={FileText}
+        title="Story Themes"
+        subtitle={`${themes.length} themes`}
+        color="green"
+        backHref="/recroom/story-weaver"
+        backLabel="STORY WEAVER"
+        actions={
+          <button
+            type="button"
+            onClick={startNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-500/30 bg-green-500/10 text-xs font-mono text-green-400 hover:bg-green-500/20"
+          >
             <Plus className="w-3 h-3" /> New Theme
           </button>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-6 py-8 flex-1 w-full">
         {themes.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="w-12 h-12 text-white/10 mx-auto mb-4" />
@@ -263,6 +268,6 @@ export default function PromptsPage() {
           </div>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

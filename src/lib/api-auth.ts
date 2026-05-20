@@ -1,6 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 
-import { getChApiKeyFromEnv } from "@agent-control-hub/config";
 import { NextRequest, NextResponse } from "next/server";
 
 function firstEnvFlag(keys: string[]): string | undefined {
@@ -9,10 +8,6 @@ function firstEnvFlag(keys: string[]): string | undefined {
     if (value !== undefined && String(value).trim() !== "") return String(value).trim();
   }
   return undefined;
-}
-
-export function getChApiKey(): string {
-  return getChApiKeyFromEnv();
 }
 
 export function isDeployApiEnabled(): boolean {
@@ -27,34 +22,6 @@ export function isChReadOnly(): boolean {
   const raw = firstEnvFlag(["CH_READ_ONLY"]);
   const value = raw?.toLowerCase();
   return value === "1" || value === "true";
-}
-
-export function requireChApiKey(request: NextRequest): NextResponse | null {
-  const provided =
-    request.headers.get("x-ch-api-key") ||
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ||
-    "";
-  const scopedRaw = process.env.CH_API_KEYS_SCOPED_JSON;
-  if (scopedRaw) {
-    try {
-      const scoped = JSON.parse(scopedRaw) as Record<string, string[]>;
-      const scopes = scoped[provided];
-      if (!scopes) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      const required = request.method === "GET" ? "read" : "write";
-      if (!scopes.includes(required) && !scopes.includes("admin")) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-      return null;
-    } catch {
-      return NextResponse.json({ error: "Invalid key scope configuration" }, { status: 500 });
-    }
-  }
-  const legacy = getChApiKey();
-  if (!legacy) return null;
-  if (provided !== legacy) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  return null;
 }
 
 export function getCorrelationId(request: NextRequest): string {
@@ -103,7 +70,30 @@ export function requireDeployApiEnabled(): NextResponse | null {
   );
 }
 
-// Backward-compatible aliases.
-export const getMcApiKey = getChApiKey;
-export const isMcReadOnly = isChReadOnly;
-export const requireMcApiKey = requireChApiKey;
+/**
+ * Combined auth guard: checks read-only mode.
+ * Returns a NextResponse (to return) if auth fails, or null if allowed.
+ */
+export function requireAuth(_request: NextRequest): NextResponse | null {
+  return requireNotReadOnly();
+}
+
+/**
+ * Safely parse the JSON body of a request.
+ * Returns the parsed object on success, or a NextResponse (400) on parse failure.
+ *
+ * Usage:
+ *   const body = await parseJsonBody(request);
+ *   if (body instanceof NextResponse) return body;
+ *   // body is now Record<string, unknown>
+ */
+export async function parseJsonBody(
+  request: NextRequest,
+): Promise<Record<string, unknown> | NextResponse> {
+  try {
+    const body = await request.json();
+    return body as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+}

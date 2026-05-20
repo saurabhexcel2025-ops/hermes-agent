@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, Plus, ChevronRight, Sparkles, Library, Users, FileText } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
+import PageHeader from "@/components/layout/PageHeader";
 import StoryCard from "@/components/story-weaver/StoryCard";
 
 interface StorySummary {
@@ -43,19 +45,17 @@ export default function StoryWeaverDashboard() {
   const recent = stories.slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
-      {/* Header */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-5 backdrop-blur-xl border-t-2 border-purple-500/30">
-        <div className="flex items-center gap-3">
-          <BookOpen className="w-6 h-6 text-neon-purple" />
-          <div>
-            <h1 className="text-xl font-bold text-white">Story Weaver</h1>
-            <p className="text-xs text-white/40 font-mono">Collaborative interactive fiction</p>
-          </div>
-        </div>
-      </div>
+    <AppPageShell variant="scanlines">
+      <PageHeader
+        icon={BookOpen}
+        title="Story Weaver"
+        subtitle="Collaborative interactive fiction"
+        color="purple"
+        backHref="/"
+        backLabel="HOME"
+      />
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8 flex-1 w-full">
         {/* Stats */}
         <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
           {[
@@ -75,7 +75,7 @@ export default function StoryWeaverDashboard() {
         {/* Actions */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <button onClick={() => router.push("/recroom/story-weaver/create")}
-            className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl border border-purple-500/30 bg-purple-500/10 text-sm font-mono text-neon-purple hover:bg-purple-500/20 transition-all shadow-[0_0_20px_rgba(168,85,247,0.1)]">
+            className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl border border-neon-purple/30 bg-neon-purple/10 text-sm font-mono text-neon-purple hover:bg-neon-purple/20 transition-all shadow-[0_0_20px_rgb(var(--ch-rgb-neon-purple)_/_0.1)]">
             <Plus className="w-4 h-4" /> Create
           </button>
           <button onClick={() => router.push("/recroom/story-weaver/library")}
@@ -123,6 +123,6 @@ export default function StoryWeaverDashboard() {
           </div>
         )}
       </div>
-    </div>
+    </AppPageShell>
   );
 }

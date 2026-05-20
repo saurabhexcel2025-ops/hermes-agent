@@ -4,10 +4,10 @@
 
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 
-import { PATHS } from "@/lib/hermes";
+import { PATHS } from "@/lib/paths";
 
 function ensureLogsDir(): void {
-  const dir = PATHS.logs;
+  const dir = PATHS.auditLog;
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -30,7 +30,7 @@ export function appendAuditLine(entry: {
         ts: new Date().toISOString(),
         ...entry,
       }) + "\n";
-    appendFileSync(PATHS.logs + "/ch-audit.log", line, "utf-8");
+    appendFileSync(PATHS.auditLog + "/ch-audit.log", line, "utf-8");
   } catch {
     // never throw from audit
   }

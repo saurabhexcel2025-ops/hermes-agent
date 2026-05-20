@@ -3,12 +3,15 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { AccentColor } from "@/types/hermes";
-import { glowClassMap } from "@/lib/theme";
+import GlowSurface from "@/components/ui/GlowSurface";
 
 interface CardProps {
   children: React.ReactNode;
   className?: string;
   glow?: AccentColor;
+  /** Stronger / animated glow (optional). */
+  glowIntensity?: number;
+  glowAnimated?: boolean;
   hover?: boolean;
   padding?: "none" | "sm" | "md" | "lg";
 }
@@ -24,21 +27,27 @@ export default function Card({
   children,
   className = "",
   glow,
+  glowIntensity = 1,
+  glowAnimated = false,
   hover = false,
   padding = "md",
 }: CardProps) {
-  const glowClass = glow ? glowClassMap[glow] : "";
   const hoverClass = hover
     ? "hover:border-white/30 transition-colors cursor-pointer"
     : "";
   const padClass = paddingMap[padding];
 
+  const innerClasses = `rounded-xl border border-white/10 bg-dark-900/50 min-w-0 ${padClass} ${hoverClass} ${className}`;
+
   return (
-    <div
-      className={`rounded-xl border border-white/10 bg-dark-900/50 ${padClass} ${glowClass} ${hoverClass} ${className}`}
+    <GlowSurface
+      accent={glow}
+      intensity={glowIntensity}
+      animated={glowAnimated}
+      className={innerClasses}
     >
       {children}
-    </div>
+    </GlowSurface>
   );
 }
 

@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useMemo, memo as reactMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   // Dashboard icons
   Activity,
@@ -19,7 +20,6 @@ import {
   CheckCircle2,
   Pause,
   Play,
-  Bot,
   Radio,
   Rocket,
   ChevronRight,
@@ -33,11 +33,23 @@ import {
 import { StatusDot } from "@/components/ui/Card";
 import IntervalSelector from "@/components/ui/IntervalSelector";
 import CategoryAccordion from "@/components/ui/CategoryAccordion";
+import {
+  groupTemplatesByCategory,
+  type TemplateLike,
+} from "@/lib/mission-categories";
+import type { MissionCategory } from "@/lib/mission-category-repository";
 import TemplateCard from "@/components/ui/TemplateCard";
+import { useToast } from "@/components/ui/Toast";
 import type { SystemStatus, AccentColor } from "@/types/hermes";
-import { timeAgo, timeUntil, titleCase } from "@/lib/utils";
+import { timeAgo, timeUntil, titleCase, parseSchedule } from "@/lib/utils";
 
-interface AgentRun {
+const MONITOR_FETCH_INIT: RequestInit = { cache: "no-store" };
+import AppPageShell from "@/components/layout/AppPageShell";
+import { shellHeaderBarClasses } from "@/lib/theme";
+import { StatPillSkeleton } from "@/components/skeletons";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+
+interface HermesProcess {
   id: string;
   type: "cron" | "gateway" | "manual" | "subagent";
   name: string;
@@ -83,14 +95,14 @@ const LiveClock = reactMemo(function LiveClock() {
 // ── Status Badge ──────────────────────────────────────────────
 function MissionStatusBadge({ status }: { status: string }) {
   const styles: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-    queued: { bg: "bg-orange-500/10", text: "text-neon-orange", icon: <Clock className="w-3 h-3" /> },
-    dispatched: { bg: "bg-blue-500/10", text: "text-blue-400", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
-    successful: { bg: "bg-green-500/10", text: "text-neon-green", icon: <CheckCircle2 className="w-3 h-3" /> },
-    failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-3 h-3" /> },
+    queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-3 h-3 flex-shrink-0" /> },
+    dispatched: { bg: "bg-neon-cyan/10", text: "text-neon-cyan", icon: <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" /> },
+    successful: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> },
+    failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-3 h-3 flex-shrink-0" /> },
   };
   const s = styles[status] || styles.queued;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${s.bg} ${s.text}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${s.bg} ${s.text} flex-shrink-0`}>
       {s.icon} {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
@@ -112,56 +124,30 @@ interface MonitorData {
   sessions: { total: number; recent: Array<{ id: string; modified: string; size: number }> };
   gateway: { platforms: Record<string, boolean>; connectedCount: number };
   memory: { factCount: number; dbSize: string; provider: string };
-  errors: Array<{ source: string; message: string; timestamp: string }>;
-  system: { lastCronRun: string | null; lastCronStatus: string | null };
+  errors: Array<{ source: string; message: string; timestamp: string; severity: string }>;
+  system: { uptime: string; configPresent: boolean; soulPresent: boolean };
+  sync: { lastRun: string | null; allSuccessful: boolean; sourceStatuses: Record<string, string> };
 }
 
 function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }) {
   if (!enabled) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-white/40">
-        <Pause className="w-2.5 h-2.5" /> Paused
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-white/40 flex-shrink-0">
+        <Pause className="w-2.5 h-2.5 flex-shrink-0" /> Paused
       </span>
     );
   }
-  if (state === "running") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-green-500/10 text-neon-green">
-        <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running
-      </span>
-    );
-  }
-  if (state === "scheduled") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-green-500/10 text-neon-green">
-        <Play className="w-2.5 h-2.5" /> Active
-      </span>
-    );
-  }
-  if (state === "queued") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-500/10 text-neon-orange">
-        <Clock className="w-2.5 h-2.5" /> Queued
-      </span>
-    );
-  }
-  if (state === "completed") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-green-500/10 text-neon-green">
-        <CheckCircle2 className="w-2.5 h-2.5" /> Done
-      </span>
-    );
-  }
-  if (state === "failed") {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-red-500/10 text-red-400">
-        <XCircle className="w-2.5 h-2.5" /> Failed
-      </span>
-    );
-  }
+  const styles: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
+    running: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />, label: "Running" },
+    scheduled: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Play className="w-2.5 h-2.5 flex-shrink-0" />, label: "Active" },
+    queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-2.5 h-2.5 flex-shrink-0" />, label: "Queued" },
+    completed: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-2.5 h-2.5 flex-shrink-0" />, label: "Done" },
+    failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-2.5 h-2.5 flex-shrink-0" />, label: "Failed" },
+  };
+  const s = styles[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: state.charAt(0).toUpperCase() + state.slice(1) };
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-white/40">
-      {state.charAt(0).toUpperCase() + state.slice(1)}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${s.bg} ${s.text} flex-shrink-0`}>
+      {s.icon} {s.label}
     </span>
   );
 }
@@ -179,35 +165,115 @@ function StatPill({
   color: AccentColor;
 }) {
   const colorClasses: Record<AccentColor, string> = {
-    cyan: "border-cyan-500/20 text-neon-cyan",
-    purple: "border-purple-500/20 text-neon-purple",
-    green: "border-green-500/20 text-neon-green",
-    pink: "border-pink-500/20 text-neon-pink",
-    orange: "border-orange-500/20 text-neon-orange",
+    cyan: "border-neon-cyan/20 text-neon-cyan",
+    purple: "border-neon-purple/20 text-neon-purple",
+    green: "border-neon-green/20 text-neon-green",
+    pink: "border-neon-pink/20 text-neon-pink",
+    orange: "border-neon-orange/20 text-neon-orange",
+    red: "border-red-500/20 text-red-400",
+    blue: "border-blue-500/20 text-blue-400",
+    yellow: "border-yellow-500/20 text-yellow-400",
   };
   return (
-    <div className={`rounded-lg border ${colorClasses[color]} bg-dark-900/50 px-4 py-3 flex items-center gap-3`}>
-      <Icon className="w-4 h-4 opacity-60" />
-      <div>
-        <div className="text-[10px] font-mono text-white/40 uppercase">{label}</div>
-        <div className="text-lg font-bold font-mono">{value}</div>
+    <div className={`rounded-lg border ${colorClasses[color]} bg-dark-900/50 px-4 py-3 flex items-center gap-3 min-w-0`}>
+      <Icon className="w-4 h-4 opacity-60 flex-shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-mono text-white/40 uppercase truncate">{label}</div>
+        <div className="text-lg font-bold font-mono truncate">{value}</div>
       </div>
     </div>
   );
 }
 
+// ── Template Category Constants (module-level — don't re-create on every render) ──
+
+const DEFAULT_PLATFORMS = ["discord", "telegram", "slack", "whatsapp"] as const;
+
+
 export default function Dashboard() {
-  const [status, setStatus] = useState<SystemStatus | null>(null);
-  const [monitor, setMonitor] = useState<MonitorData | null>(null);
-  const [agents, setAgents] = useState<AgentRun[]>([]);
-  const [missions, setMissions] = useState<MissionBrief[]>([]);
-  const [config, setConfig] = useState<Record<string, unknown> | null>(null);
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; icon: string; color: string; category: string; profile: string; description: string; isCustom?: boolean }>>([]);
+  const [data, setDataFields] = useState<{
+    status: SystemStatus | null;
+    monitor: MonitorData | null;
+    processes: HermesProcess[];
+    missions: MissionBrief[];
+    config: Record<string, unknown> | null;
+    templates: Array<{
+      id: string;
+      name: string;
+      icon: string;
+      color: string;
+      category: string;
+      categoryId?: string;
+      profile: string;
+      description: string;
+      isCustom?: boolean;
+    }>;
+    categories: MissionCategory[];
+  }>({
+    status: null,
+    monitor: null,
+    processes: [],
+    missions: [],
+    config: null,
+    templates: [],
+    categories: [],
+  });
+  const { status, monitor, processes, missions, config, templates, categories } =
+    data;
+
+  const setData = useCallback((partial: Partial<typeof data>) => {
+    setDataFields(prev => ({ ...prev, ...partial }));
+  }, []);
+  const [ready, setReady] = useState(false);
   const [dispatchExpanded, setDispatchExpanded] = useState(false);
+  const [errorSev, setErrorSev] = useState<"all" | "error" | "warning">("all");
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [syncNowBusy, setSyncNowBusy] = useState(false);
+  const { showToast, toastElement } = useToast();
+  const router = useRouter();
+
+  const refreshMonitor = useCallback(async () => {
+    const res = await fetch("/api/monitor", MONITOR_FETCH_INIT).catch(() => null);
+    if (res?.ok) {
+      const d = await res.json().catch(() => null);
+      if (d?.data) setData({ monitor: d.data });
+    }
+  }, [setData]);
+
+  const handleSyncNow = useCallback(async () => {
+    setSyncNowBusy(true);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error ?? "Sync failed", "error");
+        return;
+      }
+      showToast("Background sync completed", "success");
+      await refreshMonitor();
+    } catch {
+      showToast("Sync failed", "error");
+    } finally {
+      setSyncNowBusy(false);
+    }
+  }, [refreshMonitor, showToast]);
+
+  const filteredErrors = useMemo(() => {
+    if (!monitor?.errors) return [];
+    if (errorSev === "all") return monitor.errors;
+    // Use the DB severity field — reliable, no string matching
+    return monitor.errors.filter((e) => e.severity === errorSev);
+  }, [monitor, errorSev]);
 
   // Cancel a mission from the dashboard
   const handleCancelMission = useCallback(async (missionId: string, missionName: string) => {
-    if (!confirm(`Cancel "${missionName}"? The cron job will be paused.`)) return;
+    // First click: show confirmation state
+    if (cancelConfirmId !== missionId) {
+      setCancelConfirmId(missionId);
+      setTimeout(() => setCancelConfirmId((prev) => prev === missionId ? null : prev), 4000);
+      return;
+    }
+    setCancelConfirmId(null);
     try {
       const res = await fetch("/api/missions", {
         method: "POST",
@@ -216,83 +282,187 @@ export default function Dashboard() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        console.error("Failed to cancel mission:", body?.error || res.statusText);
+        showToast(body?.error || "Failed to cancel mission", "error");
         return;
       }
+      showToast(`Cancelled "${missionName}"`, "success");
       // Refresh missions
       const data = await fetch("/api/missions");
       const d = await data.json();
-      if (d.data) setMissions(d.data.missions || []);
-    } catch (e) { console.error("Failed to cancel mission:", e); }
-  }, []);
+      if (d.data) setData({ missions: d.data.missions || [] });
+    } catch {
+      showToast("Failed to cancel mission", "error");
+    }
+  }, [showToast, setData, cancelConfirmId]);
 
   // Update cron job schedule inline
   const handleCronScheduleChange = useCallback(async (jobId: string, newSchedule: string) => {
+    const parsed = parseSchedule(newSchedule);
+    const scheduleDisplay =
+      parsed.kind !== "invalid"
+        ? parsed.display
+        : newSchedule;
+
+    setDataFields((prev) => {
+      if (!prev.monitor?.cron.jobs) return prev;
+      return {
+        ...prev,
+        monitor: {
+          ...prev.monitor,
+          cron: {
+            ...prev.monitor.cron,
+            jobs: prev.monitor.cron.jobs.map((job) =>
+              job.id === jobId
+                ? { ...job, schedule: scheduleDisplay }
+                : job,
+            ),
+          },
+        },
+      };
+    });
+
     try {
-      await fetch("/api/cron", {
+      const putRes = await fetch("/api/cron", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: jobId, schedule: newSchedule }),
       });
-      // Refresh monitor data to show updated schedule
-      const res = await fetch("/api/monitor");
+      if (!putRes.ok) {
+        const body = await putRes.json().catch(() => null);
+        showToast(body?.error || "Failed to update cron schedule", "error");
+        const res = await fetch("/api/monitor", MONITOR_FETCH_INIT);
+        const d = await res.json();
+        if (d.data) setData({ monitor: d.data });
+        return;
+      }
+      const res = await fetch("/api/monitor", MONITOR_FETCH_INIT);
       const d = await res.json();
-      if (d.data) setMonitor(d.data);
-    } catch (error) {
-      console.error("Failed to update cron schedule:", error);
+      if (d.data) setData({ monitor: d.data });
+      showToast("Schedule updated", "success");
+    } catch {
+      showToast("Failed to update cron schedule", "error");
+      const res = await fetch("/api/monitor", MONITOR_FETCH_INIT).catch(() => null);
+      if (res?.ok) {
+        const d = await res.json().catch(() => null);
+        if (d?.data) setData({ monitor: d.data });
+      }
     }
-  }, []);
+  }, [showToast, setData]);
 
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
 
-    // One-shot fetches (fire-and-forget with abort support)
-    fetch("/api/status", { signal }).then((r) => r.json()).then((d) => setStatus(d.data)).catch(() => {});
-    fetch("/api/config", { signal }).then((r) => r.json()).then((d) => setConfig(d.data)).catch(() => {});
-    fetch("/api/missions?action=templates", { signal }).then((r) => r.json()).then((d) => setTemplates(d.data?.templates || [])).catch(() => {});
+    // Batch all initial fetches — single render update
+    const initialLoad = async () => {
+      const [
+        statusRes,
+        configRes,
+        templatesRes,
+        categoriesRes,
+        monitorRes,
+        processesRes,
+        missionsRes,
+      ] = await Promise.all([
+          fetch("/api/status", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/config", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/templates", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/mission-categories", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/agents", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/missions", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+        ]);
 
-    // Staggered polling — avoid burst load from simultaneous API calls
-    fetch("/api/monitor", { signal }).then((r) => r.json()).then((d) => setMonitor(d.data)).catch(() => {});
-    const monitorInterval = setInterval(() => {
-      if (!signal.aborted) fetch("/api/monitor", { signal }).then((r) => r.json()).then((d) => setMonitor(d.data)).catch(() => {});
+      if (!signal.aborted) {
+        setData({
+          status: statusRes.data,
+          config: configRes.data,
+          templates: templatesRes.data?.templates || [],
+          categories: categoriesRes.data?.categories || [],
+          monitor: monitorRes.data,
+          processes: processesRes.data?.processes || processesRes.processes || [],
+          missions: missionsRes.data?.missions || [],
+        });
+        setReady(true);
+      }
+    };
+    initialLoad();
+
+    // Polling: monitor (10s), processes (15s), missions (15s)
+    const monitorInterval = setInterval(async () => {
+      if (!signal.aborted) {
+        const res = await fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).catch(() => null);
+        if (res?.ok) {
+          const d = await res.json().catch(() => null);
+          if (d?.data) setData({ monitor: d.data });
+        }
+      }
     }, 10000);
 
-    // Agents + missions poll at offset intervals to spread network load
-    const fetchAgents = () => {
-      if (!signal.aborted) fetch("/api/agents", { signal }).then((r) => r.json()).then((d) => setAgents(d.data?.agents || d.agents || [])).catch(() => {});
-    };
-    const fetchMissions = () => {
-      if (!signal.aborted) fetch("/api/missions", { signal }).then((r) => r.json()).then((d) => setMissions(d.data?.missions || [])).catch(() => {});
-    };
-    fetchAgents();
-    fetchMissions();
-    const agentsInterval = setInterval(fetchAgents, 15000);
-    const missionsInterval = setInterval(fetchMissions, 15000);
+    const processesInterval = setInterval(async () => {
+      if (!signal.aborted) {
+        const res = await fetch("/api/agents", { signal }).catch(() => null);
+        if (res?.ok) {
+          const d = await res.json().catch(() => null);
+          if (d?.data) setData({ processes: d.data.processes || [] });
+        }
+      }
+    }, 15000);
+
+    const missionsInterval = setInterval(async () => {
+      if (!signal.aborted) {
+        const res = await fetch("/api/missions", { signal }).catch(() => null);
+        if (res?.ok) {
+          const d = await res.json().catch(() => null);
+          if (d?.data) setData({ missions: d.data.missions || [] });
+        }
+      }
+    }, 15000);
 
     return () => {
       controller.abort();
       clearInterval(monitorInterval);
-      clearInterval(agentsInterval);
+      clearInterval(processesInterval);
       clearInterval(missionsInterval);
     };
-  }, []);
+  }, [setData]);
 
   const modelConfig = config?.model as Record<string, unknown> | undefined;
   const currentModel = (modelConfig?.default as string) || "-";
   const currentProvider = (modelConfig?.provider as string) || "";
-  const activeAgents = useMemo(() => agents.filter((a) => a.status === "running"), [agents]);
+  const activeProcesses = useMemo(() => processes.filter((p) => p.status === "running"), [processes]);
   const activeMissions = useMemo(() => missions.filter((m) => m.status === "queued" || m.status === "dispatched"), [missions]);
 
+  // Snapshot current time for render — capture once on mount
+  const [now] = useState(() => Date.now());
+
+  // Group templates by category for the dispatch section
+  const templateGroups = useMemo(
+    () =>
+      groupTemplatesByCategory(
+        templates as TemplateLike[],
+        categories,
+      ),
+    [templates, categories],
+  );
+
+  const collapsedTemplateStrip = useMemo(() => {
+    if (templates.length <= 8) return templates;
+    const sorted = [...templates].sort((a, b) => {
+      if (a.isCustom !== b.isCustom) return a.isCustom ? 1 : -1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+    return sorted.slice(0, 12);
+  }, [templates]);
+
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg relative scanlines">
+    <AppPageShell variant="scanlines">
       {/* Top Bar */}
-      <div className="border-b border-white/10 bg-dark-900/50 px-6 py-3 flex items-center justify-between">
+      <div className={`${shellHeaderBarClasses} sticky top-0 z-30 justify-between gap-4 w-full`}>
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            <span className="text-neon-cyan text-glow-cyan">MISSION</span>
-            <span className="text-white/40 mx-1">/</span>
-            <span className="text-white">CONTROL</span>
+            <span className="text-neon-cyan text-glow-cyan">CONTROL</span>{" "}
+            <span className="text-white/70">HUB</span>
           </h1>
           <p className="text-xs text-white/40 font-mono">
             {currentModel}{currentProvider ? ` · ${currentProvider}` : ""}
@@ -308,34 +478,51 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      {toastElement}
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      {!ready ? (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <LoadingSpinner text="Loading dashboard..." />
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* ═══ Compact Stat Row ═══ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatPill
-            icon={Bot}
-            label="Agents"
-            value={activeAgents.length > 0 ? `${activeAgents.length} Active` : status?.soulFile ? "Idle" : "Offline"}
-            color={activeAgents.length > 0 ? "green" : status?.soulFile ? "cyan" : "pink"}
-          />
-          <StatPill
-            icon={ListTodo}
-            label="Cron Jobs"
-            value={monitor ? `${monitor.cron.active} Active` : "..."}
-            color="orange"
-          />
-          <StatPill
-            icon={Activity}
-            label="Sessions"
-            value={monitor ? `${monitor.sessions.total}` : status ? `${status.sessionsCount}` : "..."}
-            color="purple"
-          />
-          <StatPill
-            icon={Layers}
-            label={`Memory · ${monitor?.memory.provider || "Not Installed"}`}
-            value={monitor ? (monitor.memory.factCount > 0 ? `${monitor.memory.factCount} facts` : monitor.memory.provider === "Not Installed" ? "Not Installed" : "0 facts") : "..."}
-            color="pink"
-          />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 min-w-0">
+          {monitor ? (
+            <>
+              <StatPill
+                icon={Radio}
+                label="Processes"
+                value={activeProcesses.length > 0 ? `${activeProcesses.length} Active` : status?.soulFile ? "Idle" : "Offline"}
+                color={activeProcesses.length > 0 ? "green" : status?.soulFile ? "cyan" : "pink"}
+              />
+              <StatPill
+                icon={ListTodo}
+                label="Cron Jobs"
+                value={`${monitor.cron.active} Active`}
+                color="orange"
+              />
+              <StatPill
+                icon={Activity}
+                label="Sessions"
+                value={`${monitor.sessions.total}`}
+                color="purple"
+              />
+              <StatPill
+                icon={Layers}
+                label={`Memory · ${monitor.memory.provider || "Not Installed"}`}
+                value={monitor.memory.factCount >= 0 ? `${monitor.memory.factCount} facts` : "0 facts"}
+                color="pink"
+              />
+            </>
+          ) : (
+            <>
+              <StatPillSkeleton />
+              <StatPillSkeleton />
+              <StatPillSkeleton />
+              <StatPillSkeleton />
+            </>
+          )}
         </div>
 
         {/* ═══ Handoff / continuation ═══ */}
@@ -369,7 +556,7 @@ export default function Dashboard() {
         </div>
 
         {/* ═══ Mission Dispatch Quick Launch ═══ */}
-        <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50 overflow-hidden">
+        <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 overflow-hidden">
           <button
             onClick={() => setDispatchExpanded(!dispatchExpanded)}
             className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.02] transition-colors"
@@ -381,7 +568,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2">
               <Link
-                href="/missions"
+                href="/orchestration/missions"
                 onClick={(e) => e.stopPropagation()}
                 className="text-[10px] font-mono text-neon-cyan hover:underline flex items-center gap-1"
               >
@@ -398,7 +585,7 @@ export default function Dashboard() {
           {/* Collapsed: horizontal pill strip */}
           {!dispatchExpanded && (
             <div className="px-4 pb-3 flex flex-wrap gap-1.5">
-              {templates.slice(0, 12).map((t) => (
+              {collapsedTemplateStrip.map((t) => (
                 <TemplateCard
                   key={t.id}
                   id={t.id}
@@ -408,7 +595,11 @@ export default function Dashboard() {
                   description={t.description}
                   isCustom={t.isCustom}
                   compact
-                  onSelect={() => window.location.href = `/missions?template=${t.id}`}
+                  onSelect={() =>
+                    router.push(
+                      `/orchestration/missions?template=${t.id}&compose=1`,
+                    )
+                  }
                 />
               ))}
               {templates.length > 12 && (
@@ -425,74 +616,43 @@ export default function Dashboard() {
           {/* Expanded: grouped by category, all compact pills */}
           {dispatchExpanded && (
             <div className="px-4 pb-4 space-y-3">
-              {(() => {
-                const grouped: Record<string, typeof templates> = {};
-                for (const t of templates) {
-                  const cat = t.isCustom ? "Custom" : (t.category || "Other");
-                  if (!grouped[cat]) grouped[cat] = [];
-                  grouped[cat].push(t);
-                }
-                const catOrder = [
-                  "Business - Operations",
-                  "Engineering - QA",
-                  "Engineering - DevOps",
-                  "Engineering - Software",
-                  "Engineering - Data",
-                  "Engineering - Data Science",
-                  "Business - Creative",
-                  "Support",
-                  "Custom",
-                ].filter((c) => grouped[c]);
-                const categoryColors: Record<string, string> = {
-                  "Engineering - QA": "pink",
-                  "Engineering - DevOps": "cyan",
-                  "Engineering - Software": "purple",
-                  "Engineering - Data": "green",
-                  "Engineering - Data Science": "orange",
-                  "Business - Operations": "cyan",
-                  "Business - Creative": "orange",
-                  "Support": "blue",
-                  "Custom": "purple",
-                };
-                return catOrder.map((cat) => {
-                  const items = grouped[cat];
-                  if (!items) return null;
-                  const color = categoryColors[cat] || "cyan";
-                  return (
-                    <CategoryAccordion
-                      key={cat}
-                      name={cat}
-                      count={items.length}
-                      color={color}
-                      expandable={cat === "Custom" && items.length > 6}
-                      defaultOpen={true}
-                    >
-                      <div className="flex flex-wrap gap-1.5">
-                        {items.map((t) => (
-                          <TemplateCard
-                            key={t.id}
-                            id={t.id}
-                            name={t.name}
-                            icon={t.icon}
-                            color={t.color}
-                            description={t.description}
-                            isCustom={t.isCustom}
-                            compact
-                            onSelect={() => window.location.href = `/missions?template=${t.id}`}
-                          />
-                        ))}
-                      </div>
-                    </CategoryAccordion>
-                  );
-                });
-              })()}
+              {templateGroups.map((group) => (
+                <CategoryAccordion
+                  key={group.categoryId ?? "__none__"}
+                  name={group.label}
+                  count={group.items.length}
+                  color={group.color as AccentColor}
+                  expandable={group.items.length > 6}
+                  defaultOpen={true}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.items.map((t) => (
+                      <TemplateCard
+                        key={t.id}
+                        id={t.id}
+                        name={t.name ?? t.id}
+                        icon={t.icon ?? "Zap"}
+                        color={t.color ?? "cyan"}
+                        description={t.description ?? ""}
+                        isCustom={t.isCustom}
+                        compact
+                        onSelect={() =>
+                          router.push(
+                            `/orchestration/missions?template=${t.id}&compose=1`,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </CategoryAccordion>
+              ))}
             </div>
           )}
         </div>
 
         {/* ═══ Active Missions ═══ */}
         {activeMissions.length > 0 && (
-          <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50 overflow-hidden">
+          <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-dark-800/50">
               <div className="flex items-center gap-2">
                 <Rocket className="w-3.5 h-3.5 text-neon-cyan" />
@@ -501,7 +661,7 @@ export default function Dashboard() {
                   ({activeMissions.length})
                 </span>
               </div>
-              <Link href="/missions" className="text-[10px] font-mono text-neon-cyan hover:underline flex items-center gap-1">
+              <Link href="/orchestration/missions" className="text-[10px] font-mono text-neon-cyan hover:underline flex items-center gap-1">
                 all missions <ChevronRight className="w-3 h-3" />
               </Link>
             </div>
@@ -514,7 +674,7 @@ export default function Dashboard() {
                         status={m.status === "dispatched" ? "online" : "warning"}
                         pulse={m.status === "dispatched"}
                       />
-                      <Link href="/missions" className="text-xs text-white/80 truncate hover:text-neon-cyan transition-colors">{m.name}</Link>
+                      <Link href="/orchestration/missions" className="text-xs text-white/80 truncate hover:text-neon-cyan transition-colors">{m.name}</Link>
                       <span className="text-[10px] font-mono text-white/30 capitalize">{m.dispatchMode}</span>
                       {m.latestSession ? (
                         <Link
@@ -535,10 +695,14 @@ export default function Dashboard() {
                       <span className="text-[10px] font-mono text-white/25">{timeAgo(m.createdAt)}</span>
                       <button
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCancelMission(m.id, m.name); }}
-                        className="text-[10px] font-mono text-white/20 hover:text-red-400 transition-colors px-1.5 py-0.5 rounded hover:bg-red-500/10"
+                        className={`text-[10px] font-mono transition-colors px-1.5 py-0.5 rounded ${
+                          cancelConfirmId === m.id
+                            ? "bg-red-500/20 text-red-400"
+                            : "text-white/20 hover:text-red-400 hover:bg-red-500/10"
+                        }`}
                         title="Cancel mission"
                       >
-                        Cancel
+                        {cancelConfirmId === m.id ? "Confirm?" : "Cancel"}
                       </button>
                     </div>
                   </div>
@@ -550,13 +714,13 @@ export default function Dashboard() {
         {/* ═══ Three-Panel System Monitor ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Cron Jobs Panel */}
-          <div className="rounded-xl border border-orange-500/20 bg-dark-900/50 overflow-hidden">
+          <div className="rounded-xl border border-neon-orange/20 bg-dark-900/50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-dark-800/50">
               <div className="flex items-center gap-2">
                 <ListTodo className="w-3.5 h-3.5 text-neon-orange" />
                 <span className="text-xs font-mono text-white/60">Cron Jobs</span>
               </div>
-              <Link href="/cron" className="text-[10px] font-mono text-neon-orange hover:underline">
+              <Link href="/orchestration/cron" className="text-[10px] font-mono text-neon-orange hover:underline">
                 manage →
               </Link>
             </div>
@@ -565,17 +729,19 @@ export default function Dashboard() {
                 <div className="px-4 py-6 text-center text-xs text-white/30">No cron jobs</div>
               )}
               {monitor?.cron.jobs.map((job) => (
-                <div key={job.id} className="px-4 py-2.5 flex items-center justify-between">
+                <div key={job.id} className="px-4 py-2.5 flex items-center justify-between gap-3 min-w-0">
                   <div className="min-w-0 flex-1">
                     <div className="text-xs text-white/80 truncate">{job.name}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <IntervalSelector
-                        value={job.schedule}
-                        onChange={(v) => handleCronScheduleChange(job.id, v)}
-                        compact
-                      />
+                    <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                      <div className="flex-shrink-0">
+                        <IntervalSelector
+                          value={job.schedule}
+                          onChange={(v) => handleCronScheduleChange(job.id, v)}
+                          compact
+                        />
+                      </div>
                       {job.enabled && (
-                        <span className={`ml-2 ${
+                        <span className={`text-xs truncate min-w-0 flex-1 ${
                           job.state === "running"
                             ? "text-neon-green"
                             : job.lastStatus === "ok"
@@ -589,9 +755,7 @@ export default function Dashboard() {
                             : job.lastRun && !job.nextRun
                             ? `${titleCase(job.lastStatus || "Ok")} ${timeAgo(job.lastRun)}`
                             : job.nextRun &&
-                              new Date(job.nextRun).getTime() >
-                                // eslint-disable-next-line react-hooks/purity -- need current time vs scheduled next_run
-                                Date.now()
+                              new Date(job.nextRun).getTime() > now
                             ? "Next " + timeUntil(job.nextRun)
                             : job.lastRun
                             ? `Active · Ran ${timeAgo(job.lastRun)}`
@@ -607,30 +771,30 @@ export default function Dashboard() {
           </div>
 
           {/* Platforms Panel */}
-          <div className="rounded-xl border border-cyan-500/20 bg-dark-900/50 overflow-hidden">
+          <div className="rounded-xl border border-neon-cyan/20 bg-dark-900/50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-dark-800/50">
               <div className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-neon-cyan" />
                 <span className="text-xs font-mono text-white/60">Platforms</span>
               </div>
-              <Link href="/gateway" className="text-[10px] font-mono text-neon-cyan hover:underline">
-                details →
-              </Link>
             </div>
-            <div className="px-4 py-3 space-y-2">
+            <div
+              className="px-4 py-3 space-y-2"
+              title="Token present in Hermes .env; gateway must be running for live messaging."
+            >
               {monitor
-                ? Object.entries(monitor.gateway.platforms).map(([platform, connected]) => (
+                ? Object.entries(monitor.gateway.platforms).map(([platform, configured]) => (
                     <div key={platform} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <StatusDot status={connected ? "online" : "idle"} pulse={connected} />
+                        <StatusDot status={configured ? "online" : "idle"} pulse={configured} />
                         <span className="text-xs text-white/70 capitalize">{platform}</span>
                       </div>
-                      <span className={`text-[10px] font-mono ${connected ? "text-neon-green" : "text-white/25"}`}>
-                        {connected ? "Connected" : "Disabled"}
+                      <span className={`text-[10px] font-mono ${configured ? "text-neon-green" : "text-white/25"}`}>
+                        {configured ? "Configured" : "Not configured"}
                       </span>
                     </div>
                   ))
-                : ["discord", "telegram", "slack", "whatsapp"].map((p) => (
+                : DEFAULT_PLATFORMS.map((p) => (
                     <div key={p} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <StatusDot status="idle" />
@@ -643,19 +807,31 @@ export default function Dashboard() {
                 <div className="text-[10px] text-white/30 text-center py-2">No platforms configured</div>
               )}
             </div>
-            {monitor?.system.lastCronRun && (
-              <div className="px-4 py-2 border-t border-white/10">
-                <div className="text-[10px] text-white/30 font-mono flex items-center gap-2">
-                  <Clock className="w-3 h-3" />
-                  Last cron: {timeAgo(monitor.system.lastCronRun)}
-                  {monitor.system.lastCronStatus && (
-                    <span className={monitor.system.lastCronStatus === "ok" ? "text-neon-green" : "text-red-400"}>
-                      {monitor.system.lastCronStatus === "ok" ? "✓" : "✗"}
-                    </span>
-                  )}
-                </div>
+            <div className="px-4 py-2 border-t border-white/10 flex items-center justify-between gap-2">
+              <div className="text-[10px] text-white/30 font-mono flex items-center gap-2 min-w-0">
+                <RefreshCw className="w-3 h-3 shrink-0" />
+                {monitor?.sync.lastRun ? (
+                  <>
+                    Sync: {timeAgo(monitor.sync.lastRun)}
+                    {monitor.sync.allSuccessful ? (
+                      <span className="text-neon-green">✓</span>
+                    ) : (
+                      <span className="text-red-400">✗</span>
+                    )}
+                  </>
+                ) : (
+                  <span>Background sync idle</span>
+                )}
               </div>
-            )}
+              <button
+                type="button"
+                disabled={syncNowBusy}
+                onClick={() => void handleSyncNow()}
+                className="shrink-0 px-2 py-1 text-[10px] font-mono rounded border border-neon-cyan/30 text-neon-cyan/80 hover:bg-neon-cyan/10 disabled:opacity-50"
+              >
+                {syncNowBusy ? "Syncing…" : "Sync now"}
+              </button>
+            </div>
           </div>
 
           {/* Errors Panel */}
@@ -665,18 +841,28 @@ export default function Dashboard() {
                 <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                 <span className="text-xs font-mono text-white/60">Errors</span>
               </div>
-              <Link href="/logs" className="text-[10px] font-mono text-red-400 hover:underline">
-                logs →
-              </Link>
+              <div className="flex items-center gap-1">
+                {(["all", "error", "warning"] as const).map((sev) => (
+                  <button
+                    key={sev}
+                    onClick={() => setErrorSev(sev)}
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors ${
+                      errorSev === sev ? "bg-red-500/20 text-red-400" : "text-white/30 hover:text-white/60"
+                    }`}
+                  >
+                    {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="max-h-48 overflow-y-auto">
-              {monitor?.errors.length === 0 && (
+              {filteredErrors.length === 0 && (
                 <div className="px-4 py-6 text-center">
                   <CheckCircle2 className="w-5 h-5 text-neon-green mx-auto mb-1" />
                   <div className="text-xs text-neon-green">No recent errors</div>
                 </div>
               )}
-              {monitor?.errors.map((err, i) => (
+              {filteredErrors.map((err, i) => (
                 <div key={i} className="px-4 py-2 border-b border-white/5 last:border-0">
                   <div className="text-[10px] text-red-400/80 font-mono truncate">{err.message}</div>
                   <div className="text-[10px] text-white/20 font-mono mt-0.5">
@@ -687,61 +873,65 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-        {/* ═══ Running Agents ═══ */}
+        {/* ═══ Running Hermes Processes ═══ */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-mono text-white/40 uppercase tracking-widest flex items-center gap-2">
-              <Bot className="w-3 h-3 text-neon-purple" />
-              Running Agents
-              <span className="text-[10px] text-white/25 ml-1">({activeAgents.length} Active)</span>
+              <Radio className="w-3 h-3 text-neon-purple" />
+              Running Hermes Processes
+              <span className="text-[10px] text-white/25 ml-1">({activeProcesses.length} Active)</span>
             </h2>
             <RefreshCw
               className="w-3 h-3 text-white/20 hover:text-white/50 cursor-pointer"
-              onClick={() => fetch("/api/agents").then((r) => r.json()).then((d) => setAgents(d.data?.agents || d.agents || []))}
+              onClick={() => {
+                fetch("/api/agents")
+                  .then((r) => r.json())
+                  .then((d) => setData({ processes: d.data?.processes || d.processes || [] }))
+                  .catch(() => showToast("Failed to refresh processes", "error"));
+              }}
             />
           </div>
-          {agents.length === 0 ? (
-            <div className="rounded-xl border border-purple-500/20 bg-dark-900/50 p-6 text-center">
-              <Bot className="w-8 h-8 text-white/20 mx-auto mb-2" />
-              <div className="text-xs text-white/30">No Active Agents Detected</div>
+          {processes.length === 0 ? (
+            <div className="rounded-xl border border-neon-purple/20 bg-dark-900/50 p-6 text-center">
+              <Radio className="w-8 h-8 text-white/20 mx-auto mb-2" />
+              <div className="text-xs text-white/30">No Active Processes Detected</div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {agents.map((agent) => (
-                <div key={agent.id} className="rounded-xl border border-purple-500/20 bg-dark-900/50 p-4">
+              {processes.map((proc) => (
+                <div key={proc.id} className="rounded-xl border border-neon-purple/20 bg-dark-900/50 p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Radio className={`w-4 h-4 ${agent.status === "running" ? "text-neon-green pulse-glow" : "text-white/30"}`} />
-                      <span className="text-sm text-white/90 font-medium truncate">{agent.name}</span>
+                      <Radio className={`w-4 h-4 ${proc.status === "running" ? "text-neon-green pulse-glow" : "text-white/30"}`} />
+                      <span className="text-sm text-white/90 font-medium truncate">{proc.name}</span>
                     </div>
                     <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                      agent.status === "running" ? "bg-green-500/10 text-neon-green" : "bg-white/5 text-white/30"
+                      proc.status === "running" ? "bg-neon-green/10 text-neon-green" : "bg-white/5 text-white/30"
                     }`}>
-                      {titleCase(agent.status)}
+                      {titleCase(proc.status)}
                     </span>
                   </div>
                   <div className="space-y-1 text-[10px] font-mono text-white/40">
                     <div className="flex justify-between">
                       <span>Type</span>
-                      <span className="text-white/60 capitalize">{agent.type}</span>
+                      <span className="text-white/60 capitalize">{proc.type}</span>
                     </div>
-                    {agent.model !== "unknown" && agent.model !== "gateway" && (
+                    {proc.model !== "unknown" && proc.model !== "gateway" && (
                       <div className="flex justify-between">
                         <span>Model</span>
-                        <span className="text-white/60">{agent.model}</span>
+                        <span className="text-white/60">{proc.model}</span>
                       </div>
                     )}
-                    {agent.turns > 0 && (
+                    {proc.turns > 0 && (
                       <div className="flex justify-between">
                         <span>Turns</span>
-                        <span className="text-white/60">{agent.turns}</span>
+                        <span className="text-white/60">{proc.turns}</span>
                       </div>
                     )}
-                    {agent.lastActivity && (
+                    {proc.lastActivity && (
                       <div className="flex justify-between">
                         <span>Last activity</span>
-                        <span className="text-white/60">{timeAgo(agent.lastActivity)}</span>
+                        <span className="text-white/60">{timeAgo(proc.lastActivity)}</span>
                       </div>
                     )}
                   </div>
@@ -758,9 +948,6 @@ export default function Dashboard() {
               <Gamepad2 className="w-3.5 h-3.5 text-neon-purple" />
               <span className="text-xs font-mono text-white/60">Rec Room</span>
             </div>
-            <Link href="/recroom" className="text-[10px] font-mono text-neon-purple hover:underline flex items-center gap-1">
-              explore <ChevronRight className="w-3 h-3" />
-            </Link>
           </div>
           <Link href="/recroom/story-weaver" className="flex items-center justify-center gap-3 py-4 hover:bg-white/[0.02] transition-colors">
             <BookOpen className="w-5 h-5 text-neon-purple" />
@@ -768,6 +955,7 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
-    </div>
+      )}
+    </AppPageShell>
   );
 }

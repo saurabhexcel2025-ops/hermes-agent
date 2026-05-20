@@ -1,0 +1,74 @@
+import "@testing-library/jest-dom";
+
+// Polyfill globals required by Next.js 14 server route imports.
+// These are referenced during module evaluation in next/dist/server/web/spec-extension/
+// Add Response.json static method if jsdom's Response doesn't have it.
+// jsdom defines Response but not Response.json(), which NextResponse.json() calls.
+// We only augment — we do NOT replace the existing Response object.
+type JestResponse = { json?: (...args: unknown[]) => unknown; new(body?: BodyInit | null, init?: ResponseInit): Response };
+const _Response = globalThis.Response as unknown as JestResponse;
+if (_Response && typeof _Response.json !== "function") {
+  Object.defineProperty(_Response, "json", {
+    value: function responseJson(data: unknown, init?: ResponseInit): Response {
+      return new _Response(JSON.stringify(data), {
+        ...init,
+        headers: { "content-type": "application/json", ...Object.fromEntries(new Headers(init?.headers as HeadersInit) ?? []) },
+      } as ResponseInit);
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+if (typeof globalThis.Request === "undefined") {
+  (globalThis as Record<string, unknown>).Request = class Request {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      const url = typeof input === "string" ? input : (input as URL).href ?? String(input);
+      Object.assign(this, { url, method: init?.method ?? "GET", headers: new Headers(init?.headers) });
+    }
+    get url() { return (this as Record<string, unknown>)._url as string; }
+    get method() { return (this as Record<string, unknown>)._method as string; }
+    get headers() { return (this as Record<string, unknown>)._headers as Headers; }
+  } as unknown as typeof Request;
+}
+
+// ─── Global better-sqlite3 mock ─────────────────────────────────────────────────
+// All test files that mock "@/lib/db" OR use jest.mock("fs") need better-sqlite3
+// mocked so its native addon never loads. This global mock ensures that any test
+// that imports @/lib/db (which imports better-sqlite3) gets an in-memory mock
+// instead of the real native module.
+//
+// Individual test files that need specific mock behavior should additionally mock
+// "@/lib/db" to return their per-test mock values.
+//
+// NOTE: tests that call jest.restoreAllMocks() in afterAll may inadvertently
+// remove this global mock — avoid calling restoreAllMocks() in new tests.
+const mockDbMethods = {
+  pragma: jest.fn(),
+  exec: jest.fn(),
+  prepare: jest.fn(() => ({
+    run: jest.fn(),
+    get: jest.fn(),
+    all: jest.fn(() => []),
+  })),
+  transaction: jest.fn((fn: () => unknown) => fn()),
+  close: jest.fn(),
+};
+
+jest.mock("better-sqlite3", () => ({
+  __esModule: true,
+  default: jest.fn(() => mockDbMethods),
+}));
+
+jest.mock("@/lib/db", () => ({
+  db: jest.fn(() => mockDbMethods),
+  getDb: jest.fn(() => mockDbMethods),
+  ensureDb: jest.fn(),
+  getSchemaHealth: jest.fn(() => ({
+    schemaVersion: 2,
+    hasMissionCategoriesTable: true,
+    categoryCount: 2,
+  })),
+  inTransaction: jest.fn((fn: () => unknown) => fn()),
+  uuid: jest.fn(() => "test-uuid-" + Math.random().toString(36).slice(2)),
+  now: jest.fn(() => "2026-01-01T00:00:00.000Z"),
+}));

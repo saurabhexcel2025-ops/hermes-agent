@@ -5,9 +5,10 @@
 import { relative, resolve } from "path";
 import { homedir } from "os";
 
-import { HERMES_HOME, CH_DATA_DIR } from "@/lib/hermes";
+import { CH_DATA_DIR } from "@/lib/paths";
+import { getHermesFilesystemRoot } from "@/lib/hermes-home";
 
-const PROFILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
+const PROFILE_PATTERN = /^\.[a-zA-Z0-9][a-zA-Z0-9_-]{0,126}$|^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 /** On Unix, `path.resolve("C:/...")` is relative to cwd; reject drive paths. */
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[/\\]/;
@@ -21,7 +22,7 @@ function isPathUnderRoot(absolutePath: string, root: string): boolean {
 }
 
 /**
- * Workspace paths must resolve under home, HERMES_HOME, or CH_DATA_DIR.
+ * Workspace paths must resolve under home, CH_DATA_DIR, or any registered Hermes root.
  */
 export function resolveAllowedWorkspacePath(
   input: string
@@ -42,7 +43,7 @@ export function resolveAllowedWorkspacePath(
   } catch {
     return { ok: false, error: "Invalid path" };
   }
-  const roots = [homedir(), HERMES_HOME, CH_DATA_DIR];
+  const roots = [homedir(), CH_DATA_DIR, getHermesFilesystemRoot()];
   for (const root of roots) {
     if (isPathUnderRoot(abs, root)) {
       return { ok: true, absolute: abs };
@@ -50,12 +51,12 @@ export function resolveAllowedWorkspacePath(
   }
   return {
     ok: false,
-    error: "Path must be under your home directory, HERMES_HOME, or CH_DATA_DIR",
+    error: "Path must be under your home directory, Control Hub data, or the Hermes install root",
   };
 }
 
 /**
- * Returns a safe profile segment for paths under HERMES_HOME/profiles/<profile>/.
+ * Returns a safe profile segment for paths under <agent>/profiles/<profile>/.
  * Rejects "..", slashes, and other metacharacters. "default" uses global paths.
  */
 export function resolveSafeProfileName(

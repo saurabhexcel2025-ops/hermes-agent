@@ -1,18 +1,30 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  workflow_dispatch:
 
-# Parallel jobs: unit+build per OS, and E2E on Ubuntu only — avoids duplicate Jest runs and long serial time.
+# Parallel jobs: unit+build per OS, shell helpers test (bash only), and E2E on Ubuntu only.
 jobs:
+  shell-custom-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Hermes profile helpers + dotenv (isolated /tmp HERMES_HOME)
+        run: bash tests/scripts/run-shell-custom-tests.sh
+
   build-test-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -20,23 +32,29 @@ jobs:
       - name: Install dependencies (with cache reset retry)
         run: |
           npm ci || (npm cache clean --force && npm ci)
-      - run: npm run lint
-      - run: npx tsc --noEmit -p tsconfig.json
+      - name: Run database migrations
+        run: npm run prebuild
+      - name: ESLint
+        run: npm run lint
+      - uses: ./.github/actions/forbid-hermes-paths-in-api
+      - name: TypeScript (tsc --noEmit)
+        run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
         run: npm run test:coverage
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
-      - run: npm run build
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
+      - name: Next.js production build
+        run: npm run build
+      - name: Upload coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov-report
+          if-no-files-found: ignore
 
   build-test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -44,23 +62,23 @@ jobs:
       - name: Install dependencies (with cache reset retry)
         run: |
           npm ci || (npm cache clean --force && npm ci)
-      - run: npm run lint
-      - run: npx tsc --noEmit -p tsconfig.json
+      - name: Run database migrations
+        run: npm run prebuild
+      - name: ESLint
+        run: npm run lint
+      - uses: ./.github/actions/forbid-hermes-paths-in-api
+      - name: TypeScript (tsc --noEmit)
+        run: npx tsc --noEmit -p tsconfig.json
       - name: Unit tests with coverage
         run: npm run test:coverage
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
-      - run: npm run build
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
+      - name: Next.js production build
+        run: npm run build
 
   e2e-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -69,7 +87,7 @@ jobs:
         run: |
           npm ci || (npm cache clean --force && npm ci)
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -77,14 +95,25 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Install Playwright Chromium
         run: npx playwright install chromium
-      - run: npm run build
-        env:
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
+      - name: Run database migrations
+        run: npm run prebuild
+      - name: Next.js production build
+        run: npm run build
       - name: E2E smoke
         run: npm run test:e2e
         env:
           CI: true
-          CH_EDITION: oss
-          NEXT_PUBLIC_CH_EDITION: oss
-          PLAYWRIGHT_OSS_ONLY: "1"
+          PORT: "3000"
+          PLAYWRIGHT_SMOKE: "1"
+
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build production Docker image
+        run: docker build -f Dockerfile -t control-hub:ci .
+      - name: Dashboard deploy API — restart smoke (Docker)
+        run: bash tests/scripts/docker-deploy-api-smoke.sh
+        env:
+          CH_DOCKER_TEST_IMAGE: control-hub:ci
+          CH_DOCKER_TEST_PORT: "42090"

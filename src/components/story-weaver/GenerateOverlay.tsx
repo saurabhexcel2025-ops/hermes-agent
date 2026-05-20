@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect -- overlay resets and completion snap are driven by props (visible/done) */
 // GenerateOverlay — Loading overlay with smooth progress bar and fun messages
 "use client";
 import { useState, useEffect, useRef } from "react";
@@ -47,19 +46,19 @@ export default function GenerateOverlay({ title, visible, done, onComplete }: Ge
     return () => clearInterval(interval);
   }, [visible, phase]);
 
-  // Smooth progress bar with ease-out curve — 30s to ~80%
+  // Smooth progress bar with ease-out curve — 90s to ~85%
   useEffect(() => {
     if (!visible || phase !== "generating") return;
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTimeRef.current;
       // Ease-out curve: fast start, gradual slowdown
-      // Reaches ~80% at 30 seconds
-      const t = Math.min(elapsed / 30000, 1); // normalised 0-1 over 30s
+      // Reaches ~85% at 90 seconds
+      const t = Math.min(elapsed / 90000, 1); // normalised 0-1 over 90s
       const eased = 1 - Math.pow(1 - t, 2.5); // ease-out
-      const target = eased * 80;
+      const target = eased * 85;
       // Subtle noise to feel organic (±1.5%)
       const noise = (Math.random() - 0.5) * 3;
-      setProgress((prev) => Math.min(85, Math.max(prev, target + noise)));
+      setProgress((prev) => Math.min(90, Math.max(prev, target + noise)));
     }, 300);
     return () => clearInterval(interval);
   }, [visible, phase]);
@@ -76,7 +75,7 @@ export default function GenerateOverlay({ title, visible, done, onComplete }: Ge
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-dark-950/90 backdrop-blur-sm">
-      <div className="rounded-2xl border border-purple-500/20 bg-dark-900/80 p-10 text-center max-w-md w-full mx-4">
+      <div className="rounded-2xl border border-neon-purple/20 bg-dark-900/80 p-10 text-center max-w-md w-full mx-4">
         {phase === "generating" ? (
           <>
             <Sparkles className="w-12 h-12 text-neon-purple animate-pulse mx-auto mb-6" />
@@ -94,7 +93,7 @@ export default function GenerateOverlay({ title, visible, done, onComplete }: Ge
         {/* Progress bar */}
         <div className="w-full h-2.5 rounded-full bg-white/5 mb-6 overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-500 ${
-            phase === "complete" ? "bg-gradient-to-r from-green-500 to-emerald-400" : "bg-gradient-to-r from-purple-500 to-purple-400"
+            phase === "complete" ? "bg-gradient-to-r from-semantic-success to-emerald-400" : "bg-gradient-to-r from-neon-purple to-neon-pink"
           }`} style={{ width: `${progress}%` }} />
         </div>
 

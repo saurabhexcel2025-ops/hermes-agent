@@ -7,18 +7,126 @@
 //
 // Supported providers:
 //   - holographic: SQLite direct access (memory_store.db)
-//   - hindsight: HTTP API to local/cloud Hindsight server
+//   - hindsight: Control Hub `/api/memory/hindsight` makes direct HTTP calls to the Hindsight HTTP server (port 9177)
 //   - none: Graceful degradation when no provider configured
 
 import { readFileSync, existsSync } from "fs";
-import { HERMES_HOME } from "@/lib/hermes";
-import type { MemoryProvider, MemoryProviderType } from "./types";
+import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { holographicProvider } from "./holographic";
+
+// ── Shared Types (inlined from former ./types.ts) ─────────────────
+
+/** Supported memory provider types */
+export type MemoryProviderType = "holographic" | "hindsight" | "none";
+
+/** A single memory fact from any provider */
+export interface MemoryFact {
+  id: number;
+  content: string;
+  category: string;
+  tags: string;
+  trust: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Memory bank info (Holographic-specific but generic enough) */
+export interface MemoryBank {
+  bank_name: string;
+  fact_count: number;
+  updated_at: string;
+}
+
+/** Response from reading memory facts */
+export interface MemoryReadResult {
+  facts: MemoryFact[];
+  total: number;
+  dbSize: number;
+  available: boolean;
+  provider: MemoryProviderType;
+  message?: string;
+  entities?: number;
+  banks?: MemoryBank[];
+}
+
+/** Response from adding a fact */
+export interface MemoryAddResult {
+  success: boolean;
+  fact?: MemoryFact;
+  error?: string;
+}
+
+/** Response from updating a fact */
+export interface MemoryUpdateResult {
+  success: boolean;
+  id?: number;
+  error?: string;
+}
+
+/** Response from deleting a fact */
+export interface MemoryDeleteResult {
+  success: boolean;
+  id?: number;
+  error?: string;
+}
+
+/** Provider health status */
+export interface MemoryProviderHealth {
+  available: boolean;
+  provider: MemoryProviderType;
+  message: string;
+  factCount?: number;
+  dbSize?: number;
+}
+
+/** Fact input for adding */
+export interface FactInput {
+  content: string;
+  category?: string;
+  tags?: string;
+  trust_score?: number;
+}
+
+/** Fact input for updating */
+export interface FactUpdateInput {
+  id: number;
+  content?: string;
+  category?: string;
+  tags?: string;
+  trust_score?: number;
+}
+
+/** Memory provider interface — all providers must implement this */
+export interface MemoryProvider {
+  /** Provider type identifier */
+  readonly type: MemoryProviderType;
+
+  /** Check if this provider is available and healthy */
+  healthCheck(): Promise<MemoryProviderHealth>;
+
+  /** Read facts with optional search/filter */
+  readFacts(options?: {
+    search?: string;
+    category?: string;
+    limit?: number;
+  }): Promise<MemoryReadResult>;
+
+  /** Add a new fact */
+  addFact(input: FactInput): Promise<MemoryAddResult>;
+
+  /** Update an existing fact */
+  updateFact(input: FactUpdateInput): Promise<MemoryUpdateResult>;
+
+  /** Delete a fact by ID */
+  deleteFact(id: number): Promise<MemoryDeleteResult>;
+}
+
+// ── Provider Factory ───────────────────────────────────────────────
 
 /** Parse the memory provider from config.yaml */
 function getConfiguredProvider(): MemoryProviderType {
   try {
-    const configPath = HERMES_HOME + "/config.yaml";
+    const configPath = getActiveHermesPaths().config;
     if (!existsSync(configPath)) return "none";
 
     const content = readFileSync(configPath, "utf-8");
@@ -35,7 +143,6 @@ function getConfiguredProvider(): MemoryProviderType {
         const val = line.split("provider:")[1].trim().replace(/['"]/g, "");
         if (val === "holographic") return "holographic";
         if (val === "hindsight") return "hindsight";
-        if (val && val !== "none") return val as MemoryProviderType;
         return "none";
       }
     }
@@ -94,10 +201,8 @@ export function getMemoryProviderType(): MemoryProviderType {
   return getConfiguredProvider();
 }
 
-/** Check if holographic DB exists (for backward compat) */
+/** Check if holographic DB exists on disk */
 export function hasHolographicDb(): boolean {
-  const dbPath = HERMES_HOME + "/memory_store.db";
+  const dbPath = getActiveHermesPaths().memoryDb;
   return existsSync(dbPath);
 }
-
-export type { MemoryProvider, MemoryProviderType } from "./types";

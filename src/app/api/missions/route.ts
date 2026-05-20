@@ -1,1120 +1,558 @@
+// ═══════════════════════════════════════════════════════════════
+// /api/missions — Mission CRUD + dispatch (SQLite)
+// ═══════════════════════════════════════════════════════════════
+// Missions are stored in Control Hub SQLite. Dispatch is handled
+// by the Hermes backend for mission execution.
 import { NextRequest, NextResponse } from "next/server";
-
-// ═══════════════════════════════════════════════════════════════
-
-// Missions API — CRUD + Real Dispatch via Cron Jobs
-
-// ═══════════════════════════════════════════════════════════════
-
-
-
-import { PATHS, getDefaultModelConfig } from "@/lib/hermes";
-
-import { existsSync, readFileSync, readdirSync, unlinkSync, statSync } from "fs";
-
-import { logApiError } from "@/lib/api-logger";
-
-import { parseSchedule, CronJobData } from "@/lib/utils";
-
-import { readJobsFile, withJobsFileLock } from "@/lib/jobs-repository";
-
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
-
-import { appendAuditLine } from "@/lib/audit-log";
-
 import {
-
+  getMission,
+  listMissions,
+  createMission,
+  updateMission,
+  deleteMission,
   buildMissionPrompt,
-
-  getMissionStatus,
-
-  TEMPLATES,
-
-} from "@/lib/mission-helpers";
-
+} from "@/lib/mission-repository";
+import { parseMissionPrompt } from "@/lib/build-mission-prompt";
+import { createSession, updateSession } from "@/lib/session-repository";
+import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
+import type { LocalDirEntry } from "@/types/hermes";
+import { requireAuth } from "@/lib/api-auth";
+import { logApiError } from "@/lib/api-logger";
+import { appendAuditLine } from "@/lib/audit-log";
+import type { MissionStatus } from "@/lib/agent-backend/types";
+import { agentBackend } from "@/lib/backends";
+import { createCronJob, pushJobToHermes } from "@/lib/cron-repository";
+import { getCategory } from "@/lib/mission-category-repository";
+import { listProfiles } from "@/lib/profiles-repository";
 import {
+  deleteMissionCron,
+  enrichMissionCron,
+  pauseMissionCron,
+  syncMissionToCronJob,
+} from "@/lib/mission-cron-sync";
 
-  ensureMissionsDir,
+// ── Helpers ───────────────────────────────────────────────────────
 
-  getMissionsDataDir,
-
-  loadMission,
-
-  saveMission,
-
-  sanitizeMissionId,
-
-} from "@/lib/missions-repository";
-
-import { missionPostBodySchema, zodErrorResponse } from "@/lib/api-schemas";
-
-import type { Mission } from "@/types/hermes";
-
-
-
-const CRON_PATH = PATHS.cronJobs;
-
-const JOBS_BACKUP_DIR = PATHS.backups + "/ch-cron-jobs";
-
-
-
-// Resolve delivery target from .env or config
-
-function getDeliverTarget(): string {
-
-  try {
-
-    if (existsSync(PATHS.env)) {
-
-      const env = readFileSync(PATHS.env, "utf-8");
-
-      const match = env.match(/^DISCORD_HOME_CHANNEL=(.+)$/m);
-
-      if (match) {
-
-        const channel = match[1].trim().replace(/^['"]|['"]$/g, "");
-
-        if (channel) return "discord:" + channel;
-
-      }
-
-    }
-
-  } catch {}
-
-  return "local";
-
+function resolveMissionId(body: Record<string, unknown>): string | undefined {
+  return (body.id ?? body.missionId) as string | undefined;
 }
 
-
-
-// ── Cron helpers ──────────────────────────────────────────────
-
-
-
-function findCronJobForMission(missionId: string): CronJobData | null {
-
-  const parsed = readJobsFile(CRON_PATH);
-
-  if (!parsed.ok) return null;
-
-  return parsed.jobs.find((j) => j.mission_id === missionId) || null;
-
-}
-
-
-
-// ── Find sessions that ran a specific cron job ────────────────
-
-// PERFORMANCE: Match by filename pattern (session_cron_<jobId>_*.json)
-
-// instead of reading every file's content. O(directory listing) vs O(N file reads).
-
-
-
-function findSessionsForCronJob(cronJobId: string): Array<{ id: string; modified: string; size: number }> {
-
-  const sessionsDir = PATHS.sessions;
-
-  if (!existsSync(sessionsDir)) return [];
-
-  try {
-
-    const files = readdirSync(sessionsDir);
-
-    const results: Array<{ id: string; modified: string; size: number }> = [];
-
-    for (const file of files) {
-
-      if (!file.endsWith(".json") && !file.endsWith(".jsonl")) continue;
-
-      if (!file.includes(cronJobId)) continue;
-
-      const filePath = sessionsDir + "/" + file;
-
-      try {
-
-        const stat = statSync(filePath);
-
-        results.push({
-
-          id: file.replace(/\.(json|jsonl)$/, ""),
-
-          modified: stat.mtime.toISOString(),
-
-          size: stat.size,
-
-        });
-
-      } catch {}
-
-    }
-
-    return results.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime()).slice(0, 5);
-
-  } catch {
-
-    return [];
-
+function parseCategoryId(
+  raw: unknown,
+): { ok: true; value: string | null | undefined } | { ok: false; error: string } {
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (raw === null || raw === "") return { ok: true, value: null };
+  if (typeof raw !== "string") {
+    return { ok: false, error: "categoryId must be a string" };
   }
-
+  if (!getCategory(raw)) {
+    return { ok: false, error: "Category not found" };
+  }
+  return { ok: true, value: raw };
 }
-
-
-
-// ── Mission Templates ─────────────────────────────────────────
-
-// (template definitions and helper functions live in @/lib/mission-helpers)
-
-
-
-// ── Template definitions (28 built-in templates across 8 categories) ──
-
-// Defined in @/lib/mission-helpers and imported above.
-
-// (TEMPLATES array removed — now sourced from mission-helpers.ts)
-
-
-
-
 
 // ── GET ───────────────────────────────────────────────────────
 
-
-
 export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
 
   try {
-
-    const url = new URL(request.url);
-
-    const action = url.searchParams.get("action");
-
-    const missionId = url.searchParams.get("id")
-
-      ? sanitizeMissionId(url.searchParams.get("id")!)
-
-      : null;
-
-
-
-    if (action === "templates") {
-
-      // Merge built-in templates with custom templates
-
-      const builtIn = TEMPLATES.map((t) => ({ ...t, isCustom: false }));
-
-      const custom: Array<Record<string, unknown>> = [];
-
-
-
-      const customDir = PATHS.templates;
-
-      if (existsSync(customDir)) {
-
-        try {
-
-          const files = readdirSync(customDir).filter((f) => f.endsWith(".json"));
-
-          for (const file of files) {
-
-            try {
-
-              const tmpl = JSON.parse(readFileSync(customDir + "/" + file, "utf-8"));
-
-              // Provide defaults for legacy templates missing new fields
-
-              custom.push({
-
-                ...tmpl,
-
-                category: tmpl.category || "Custom",
-
-                profile: tmpl.profile || "",
-
-                isCustom: true,
-
-              });
-
-            } catch {}
-
-          }
-
-        } catch {}
-
-      }
-
-
-
-      return NextResponse.json({ data: { templates: [...builtIn, ...custom] } });
-
-    }
-
-
-
-    // ── Status Mapper ─────────────────────────────────────────────
-
-    // Maps cron job state directly to mission status.
-
-    // Source of truth: cron job file. No session reading, no heuristics.
-
-    // Get single mission with linked cron job + sessions
-
-    if (missionId) {
-
-      const mission = loadMission(missionId);
-
+    if (id) {
+      const mission = getMission(id);
       if (!mission) {
-
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
-
       }
-
-
-
-      let cronJob = null;
-
-      let sessions: Array<{ id: string; modified: string; size: number }> = [];
-
-
-
-      if (mission.cronJobId) {
-
-        const job = findCronJobForMission(missionId);
-
-        const mapped = getMissionStatus(job, mission.status);
-
-        mission.status = mapped.status as Mission["status"];
-
-        if (mapped.error) mission.error = mapped.error;
-
-        mission.updatedAt = new Date().toISOString();
-
-
-
-        if (job) {
-
-          cronJob = {
-
-            id: job.id,
-
-            name: job.name,
-
-            state: job.state || "unknown",
-
-            enabled: job.enabled !== false,
-
-            lastRun: job.last_run_at || null,
-
-            nextRun: job.next_run_at || null,
-
-            lastStatus: job.last_status || null,
-
-            schedule: typeof job.schedule === "object" ? job.schedule.display || "" : String(job.schedule || ""),
-
-          };
-
-          sessions = findSessionsForCronJob(job.id);
-
-        }
-
-      }
-
-
-
-      return NextResponse.json({ data: { mission, cronJob, sessions } });
-
+      // Mission status is synced in background by MissionSync
+      return NextResponse.json({ data: { mission: enrichMissionCron(mission) } });
     }
 
-
-
-    // List all missions with linked cron status
-
-    ensureMissionsDir();
-
-    const missionsDir = getMissionsDataDir();
-
-    const files = existsSync(missionsDir)
-
-      ? readdirSync(missionsDir).filter((f) => f.endsWith(".json"))
-
-      : [];
-
-    const missions: Array<
-
-      Mission & {
-
-        cronJob?: {
-
-          state: string;
-
-          enabled: boolean;
-
-          lastRun: string | null;
-
-          lastStatus: string | null;
-
-        };
-
-        latestSession?: { id: string; modified: string } | null;
-
-      }
-
-    > = [];
-
-
-
-    // PERFORMANCE: Read cron jobs once, build lookup map instead of re-reading per mission
-
-    const cronParsed = readJobsFile(CRON_PATH);
-
-    const allCronJobs = cronParsed.ok
-
-      ? cronParsed.jobs
-
-      : (() => {
-
-          logApiError(
-
-            "GET /api/missions",
-
-            "cron jobs file unreadable: " + cronParsed.error,
-
-            new Error(cronParsed.error)
-
-          );
-
-          return [];
-
-        })();
-
-    const cronJobMap = new Map(
-
-      allCronJobs
-
-        .filter((j) => j.mission_id != null && j.mission_id !== "")
-
-        .map((j) => [j.mission_id as string, j])
-
-    );
-
-
-
-    // PERFORMANCE: Scan sessions directory once, build map of missionId -> latest session
-
-    const sessionsMap = new Map<string, { id: string }>();
-
-    try {
-
-      const sessionsDir = PATHS.sessions;
-
-      if (existsSync(sessionsDir)) {
-
-        const sessionFiles = readdirSync(sessionsDir);
-
-        for (const sf of sessionFiles) {
-
-          if (!sf.endsWith(".json") && !sf.endsWith(".jsonl")) continue;
-
-          // Session filename: session_cron_<cronJobId>_<YYYYMMDD_HHMMSS>.json
-
-          // cronJobId for missions is "mission-<missionId>"
-
-          // Extract missionId directly from filename
-
-          const match = sf.match(/session_cron_mission-(m_[a-z0-9]+)_\d{8}_\d{6}\./);
-
-          if (match) {
-
-            const missionId = match[1];
-
-            const sessionId = sf.replace(/\.(json|jsonl)$/, "");
-
-            const existing = sessionsMap.get(missionId);
-
-            // Keep the most recent session (filenames are lexicographically timestamped)
-
-            if (!existing || sessionId > existing.id) {
-
-              sessionsMap.set(missionId, { id: sessionId });
-
-            }
-
-          }
-
-        }
-
-      }
-
-    } catch {}
-
-
-
-    for (const file of files) {
-
-      try {
-
-        const content = readFileSync(missionsDir + "/" + file, "utf-8");
-
-        const m = JSON.parse(content) as Mission;
-
-
-
-        // Derive status from cron job
-
-        if (m.cronJobId) {
-
-          const job = cronJobMap.get(m.id) || null;
-
-          const mapped = getMissionStatus(job, m.status);
-
-          m.status = mapped.status as Mission["status"];
-
-          if (mapped.error) m.error = mapped.error;
-
-          m.updatedAt = new Date().toISOString();
-
-
-
-          if (job) {
-
-            (m as Mission & { cronJob: unknown }).cronJob = {
-
-              state: job.state || "unknown",
-
-              enabled: job.enabled !== false,
-
-              lastRun: job.last_run_at || null,
-
-              lastStatus: job.last_status || null,
-
-            };
-
-          }
-
-        }
-
-
-
-        // Attach latest session if available
-
-        const latestSession = sessionsMap.get(m.id) || null;
-
-
-
-        missions.push({ ...m, latestSession } as typeof missions[0]);
-
-      } catch {}
-
-    }
-
-
-
-    missions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-
-
-    return NextResponse.json(
-      { data: { missions, total: missions.length, active: missions.filter((m) => m.status === "queued" || m.status === "dispatched").length, completed: missions.filter((m) => m.status === "successful").length } },
-      { headers: { "Cache-Control": "public, max-age=3, stale-while-revalidate=5" } }
-    );
-
-  } catch (err) {
-
-    logApiError("GET /api/missions", "listing missions", err);
-
-    return NextResponse.json({ error: "Failed to list missions" }, { status: 500 });
-
+    const categoryIdParam = url.searchParams.get("categoryId");
+    const missions = listMissions(
+      categoryIdParam === "__uncategorized__"
+        ? { categoryId: null }
+        : categoryIdParam
+          ? { categoryId: categoryIdParam }
+          : undefined,
+    ).map((m) => enrichMissionCron(m));
+    return NextResponse.json({ data: { missions } });
+  } catch (error) {
+    logApiError("GET /api/missions", id ? `mission ${id}` : "listing missions", error);
+    return NextResponse.json({ error: "Failed to load missions" }, { status: 500 });
   }
-
 }
-
-
 
 // ── POST ──────────────────────────────────────────────────────
 
-
-
 export async function POST(request: NextRequest) {
-
-  const ro = requireNotReadOnly();
-
-  if (ro) return ro;
-
-  const auth = requireMcApiKey(request);
-
+  const auth = requireAuth(request);
   if (auth) return auth;
 
-
-
   try {
+    const body = await request.json();
+    const { action } = body as { action?: string };
 
-    let raw: unknown;
-
-    try {
-
-      raw = await request.json();
-
-    } catch {
-
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-
-    }
-
-    const parsedBody = missionPostBodySchema.safeParse(raw);
-
-    if (!parsedBody.success) {
-
-      return zodErrorResponse(parsedBody.error);
-
-    }
-
-    const payload = parsedBody.data;
-
-
-
-    if (payload.action === "create") {
-
-      const id = "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-
-      const now = new Date().toISOString();
-
-      const dispatchMode: "save" | "now" | "cron" = payload.dispatchMode ?? "save";
-
-
-
-      const record: Mission = {
-
-        id,
-
-        name: payload.name || "Untitled Mission",
-
-        prompt: payload.prompt || "",
-
-        goals: payload.goals || [],
-
-        skills: payload.skills || [],
-
-        model: payload.model || "",
-
-        profile: payload.profile || "",
-
-        missionTimeMinutes: Math.max(5, Math.min(120, payload.missionTimeMinutes ?? 15)),
-
-        timeoutMinutes: Math.max(1, Math.min(120, payload.timeoutMinutes ?? 10)),
-
-        schedule: payload.schedule || "every 5m",
-
-        status: "queued",
-
+    // ── Dispatch Mission ────────────────────────────────────────
+    if (action === "dispatch") {
+      const {
+        name,
+        instruction,
+        profileId,
+        profileName,
+        modelId,
+        provider,
+        localDirs,
+        references,
+        skills,
+        goals,
+        context,
         dispatchMode,
-
-        createdAt: now,
-
-        updatedAt: now,
-
-        results: null,
-
-        duration: null,
-
-        error: null,
-
-        templateId: payload.templateId ?? null,
-
+        schedule: scheduleVal,
+        missionTimeMinutes,
+        timeoutMinutes,
+        categoryId: categoryIdRaw,
+        outputFormat,
+        constraints,
+      } = body as {
+        name?: string;
+        instruction?: string;
+        profileId?: string;
+        profileName?: string;
+        modelId?: string;
+        provider?: string;
+        localDirs?: unknown;
+        references?: string[];
+        skills?: string[];
+        goals?: string[];
+        context?: string;
+        dispatchMode?: string;
+        schedule?: string;
+        missionTimeMinutes?: number;
+        timeoutMinutes?: number;
+        categoryId?: string | null;
+        outputFormat?: string;
+        constraints?: string;
       };
 
+      const categoryParsed = parseCategoryId(categoryIdRaw);
+      if (!categoryParsed.ok) {
+        return NextResponse.json({ error: categoryParsed.error }, { status: 400 });
+      }
 
+      if (!instruction || typeof instruction !== "string" || !instruction.trim()) {
+        return NextResponse.json({ error: "instruction is required" }, { status: 400 });
+      }
 
-      // If dispatch mode is "now" or "cron", create a real cron job
+      const dirsNorm = normalizeLocalDirsInput(localDirs);
 
-      if (dispatchMode !== "save") {
+      const prompt = buildMissionPrompt({
+        instruction: instruction.trim(),
+        localDirs: dirsNorm,
+        references: references ?? [],
+        skills: skills ?? [],
+        goals: goals ?? [],
+        context: context ?? "",
+        missionTimeMinutes: missionTimeMinutes ?? undefined,
+        timeoutMinutes: timeoutMinutes ?? undefined,
+        outputFormat: outputFormat ?? "",
+        constraints: constraints ?? "",
+      });
 
-        const cronId = "mission-" + id;
-
-
-
-        // Build enhanced prompt with Mission Scope + Safety Limits
-
-        const missionPrompt = buildMissionPrompt(record);
-
-
-
-        let parsedSchedule: CronJobData["schedule"];
-
-        let scheduleDisplay: string;
-
-        if (dispatchMode === "cron") {
-
-          const sched = parseSchedule(record.schedule);
-
-          if (sched.kind === "invalid") {
-
-            return NextResponse.json({ error: sched.message }, { status: 400 });
-
-          }
-
-          parsedSchedule = sched;
-
-          scheduleDisplay = sched.display;
-
+      // Resolve profile slug from Control Hub registry (matches Hermes --profile <slug>).
+      let resolvedProfileId: string | undefined;
+      const profileKey = profileName ?? profileId;
+      if (profileKey) {
+        if (profileKey === "default") {
+          resolvedProfileId = "default";
         } else {
-
-          parsedSchedule = { kind: "once", run_at: now, display: "once (immediate)" };
-
-          scheduleDisplay = "once (immediate)";
-
+          try {
+            const profiles = listProfiles();
+            const match = profiles.find(
+              (p) =>
+                p.slug === profileKey ||
+                p.displayName === profileKey,
+            );
+            resolvedProfileId = match?.slug ?? profileKey;
+          } catch {
+            resolvedProfileId = profileKey;
+          }
         }
+      }
 
+      const mission = createMission({
+        name: (name as string)?.trim() || "Untitled Mission",
+        prompt,
+        profileId: resolvedProfileId ?? profileId,
+        localDirs: dirsNorm,
+        references: references ?? [],
+        skills: skills ?? [],
+        goals: goals ?? [],
+        modelId: modelId ?? undefined,
+        provider: provider ?? undefined,
+        profileName: profileName ?? undefined,
+        missionTimeMinutes,
+        timeoutMinutes,
+        schedule: scheduleVal,
+        categoryId: categoryParsed.value ?? null,
+        outputFormat: outputFormat?.trim() || undefined,
+        constraints: constraints?.trim() || undefined,
+      });
 
+      const isSaveMode = dispatchMode === "save" || dispatchMode === "queue";
+      const isCronMode = dispatchMode === "cron" && scheduleVal;
 
-        const defaults = getDefaultModelConfig();
+      if (isCronMode) {
+        // ── Recurring mission: create a cron job instead of dispatching one-shot ──
+        // The mission record stays "queued"; the cron job will dispatch it on schedule.
+        updateMission(mission.id, { status: "queued" });
 
-        const baseUrl = (payload.base_url ?? defaults.base_url).trim();
+        try {
+          const profileNameFinal = profileName as string | undefined;
+          const cronJob = createCronJob({
+            name: mission.name,
+            prompt: mission.prompt,
+            skills: skills as string[] | undefined,
+            model: modelId as string | undefined,
+            provider: provider as string | undefined,
+            schedule: scheduleVal!,
+            repeat: { times: null }, // infinite
+            enabled: true,
+            state: "scheduled",
+            deliver: "none",
+            profile_name: profileNameFinal ?? "default",
+            source: "ch",
+          });
 
+          // Link mission to cron job
+          updateMission(mission.id, { cronJobId: cronJob.id });
 
+          // Push to Hermes so the scheduler picks it up
+          const pushResult = pushJobToHermes(cronJob.id);
+          if (!pushResult.ok) {
+            logApiError("POST /api/missions", "pushJobToHermes", pushResult.error);
+          }
 
-        const cronJob = {
-
-          id: cronId,
-
-          name: "Mission: " + record.name,
-
-          prompt: missionPrompt,
-
-          skills: record.skills,
-
-          model: record.model || defaults.model,
-
-          provider: defaults.provider,
-
-          ...(baseUrl ? { base_url: baseUrl } : {}),
-
-          schedule: parsedSchedule,
-
-          schedule_display: scheduleDisplay,
-
-          repeat: dispatchMode === "now"
-
-            ? { times: 1, completed: 0 }
-
-            : { times: null, completed: 0 },
-
-          enabled: true,
-
-          state: "scheduled",
-
-          deliver: getDeliverTarget(),
-
-          created_at: now,
-
-          next_run_at: now,
-
-          mission_id: id,
-
-          timeout: record.timeoutMinutes * 60,
-
-          profile: record.profile || undefined,
-
-        } as CronJobData;
-
-
-
-        const w = await withJobsFileLock(
-
-          CRON_PATH,
-
-          JOBS_BACKUP_DIR,
-
-          (jobs) => ({
-
-            action: "write" as const,
-
-            jobs: [...jobs, cronJob],
-
-            value: undefined,
-
-          })
-
-        );
-
-        if (!w.ok) {
-
+          appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: true });
           return NextResponse.json(
-
-            { error: w.error },
-
-            { status: 503 }
-
+            { data: { mission: enrichMissionCron(getMission(mission.id)!) } },
+            { status: 201 }
           );
-
+        } catch (err) {
+          logApiError("POST /api/missions", "cron dispatch", err);
+          updateMission(mission.id, { status: "failed" });
+          appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: false });
+          return NextResponse.json({ error: "Failed to create cron job for mission" }, { status: 500 });
         }
-
-
-
-        record.cronJobId = cronId;
-
-        record.status = "dispatched";
-
       }
 
+      if (!isSaveMode) {
+        updateMission(mission.id, { status: "dispatched" });
 
+        // Pre-register the session in Control Hub's unified registry.
+        // This links the mission to its session before hermes even starts,
+        // so the Sessions page shows it immediately after dispatch.
+        let sessionIdFromDb: string | undefined;
+        try {
+          const session = createSession({
+            source: "mission",
+            missionId: mission.id,
+            profileName: profileName ?? null,
+            modelId: modelId ?? null,
+            provider: provider ?? null,
+            title: mission.name,
+            status: "active",
+          });
+          sessionIdFromDb = session.id;
+        } catch (err) {
+          logApiError("POST /api/missions", "createSession", err);
+        }
 
-      saveMission(record);
+        try {
+          // Pass mission.id so dispatchMission writes all output files
+          // (.session, .status.json, .output.log) under the same ID the
+          // API returned to the caller. Without this, the backend generates
+          // its own UUID and files are never matched to the DB record.
+          const dispatched = await agentBackend.dispatchMission({
+            missionId: mission.id,
+            name: mission.name,
+            prompt: mission.prompt,
+            profileId: mission.profileId,
+            profileName,
+            modelId,
+            provider,
+          });
 
-      appendAuditLine({
+          // Capture session ID from the running hermes process.
+          // Prefer the hermes-reported session ID; fall back to our pre-registered one.
+          let sessionId: string | undefined = dispatched.sessionId ?? sessionIdFromDb;
+          if (!sessionId && sessionIdFromDb) {
+            sessionId = sessionIdFromDb;
+          } else if (!sessionId) {
+            for (let attempt = 0; attempt < 10; attempt++) {
+              await new Promise((r) => setTimeout(r, 800));
+              try {
+                const sid = await agentBackend.getMissionSessionId?.(mission.id);
+                if (sid) {
+                  sessionId = sid;
+                  break;
+                }
+              } catch { /* keep polling */ }
+            }
+          }
 
-        action: "mission.create",
+          updateMission(mission.id, {
+            sessionId,
+            status: "dispatched",
+          });
+        } catch (err) {
+          logApiError("POST /api/missions", "dispatch", err);
+          // Mark the session as failed
+          if (sessionIdFromDb) {
+            updateSession(sessionIdFromDb, { status: "failed", endedAt: new Date().toISOString() });
+          }
+          updateMission(mission.id, { status: "failed" });
+        }
+      }
 
-        resource: record.id,
-
-        ok: true,
-
-      });
-
-      return NextResponse.json({ data: record });
-
+      appendAuditLine({ action: "mission.dispatch", resource: mission.id, ok: true });
+      return NextResponse.json(
+        { data: { mission: enrichMissionCron(getMission(mission.id)!) } },
+        { status: 201 }
+      );
     }
 
+    // ── Update Mission ─────────────────────────────────────────
+    if (action === "update") {
+      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw, outputFormat, constraints } = body as {
+        id?: string;
+        missionId?: string;
+        status?: string;
+        result?: string;
+        instruction?: string;
+        localDirs?: unknown;
+        references?: string[];
+        skills?: string[];
+        goals?: string[];
+        modelId?: string;
+        provider?: string;
+        profileName?: string;
+        missionTimeMinutes?: number;
+        timeoutMinutes?: number;
+        schedule?: string;
+        context?: string;
+        categoryId?: string | null;
+        outputFormat?: string;
+        constraints?: string;
+      };
+      const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
+      if (!missionIdFinal)
+        return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
-
-    if (payload.action === "delete") {
-
-      const { missionId } = payload;
-
-      const mission = loadMission(missionId);
-
-      if (!mission) {
+      const existing = getMission(missionIdFinal);
+      if (!existing) {
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
       }
 
-
-      if (mission.cronJobId) {
-
-        const w = await withJobsFileLock(
-
-          CRON_PATH,
-
-          JOBS_BACKUP_DIR,
-
-          (jobs) => {
-
-            const idx = jobs.findIndex((j) => j.id === mission.cronJobId);
-
-            if (idx === -1) {
-
-              return {
-
-                action: "write" as const,
-
-                jobs,
-
-                value: undefined,
-
-              };
-
-            }
-
-            const next = jobs.filter((j) => j.id !== mission.cronJobId);
-
-            return { action: "write" as const, jobs: next, value: undefined };
-
-          }
-
-        );
-
-        if (!w.ok) {
-
-          return NextResponse.json({ error: w.error }, { status: 503 });
-
-        }
-
+      const categoryParsed = parseCategoryId(categoryIdRaw);
+      if (!categoryParsed.ok) {
+        return NextResponse.json({ error: categoryParsed.error }, { status: 400 });
       }
 
+      let prompt: string | undefined;
+      const shouldRebuildPrompt =
+        instruction !== undefined ||
+        context !== undefined ||
+        localDirs !== undefined ||
+        references !== undefined ||
+        skills !== undefined ||
+        goals !== undefined ||
+        missionTimeMinutes !== undefined ||
+        timeoutMinutes !== undefined ||
+        outputFormat !== undefined ||
+        constraints !== undefined;
 
-
-      const safe = sanitizeMissionId(missionId);
-
-      const path = getMissionsDataDir() + "/" + safe + ".json";
-
-      if (existsSync(path)) {
-
-        unlinkSync(path);
-
-        appendAuditLine({
-
-          action: "mission.delete",
-
-          resource: String(missionId),
-
-          ok: true,
-
+      if (shouldRebuildPrompt) {
+        const parsed = parseMissionPrompt(existing.prompt);
+        prompt = buildMissionPrompt({
+          instruction:
+            instruction !== undefined ? instruction.trim() : parsed.instruction,
+          context: context !== undefined ? context : parsed.context,
+          localDirs:
+            localDirs !== undefined
+              ? normalizeLocalDirsInput(localDirs)
+              : existing.localDirs,
+          references: references !== undefined ? references : existing.references,
+          skills: skills !== undefined ? skills : existing.skills,
+          goals: goals !== undefined ? goals : existing.goals,
+          missionTimeMinutes:
+            missionTimeMinutes !== undefined
+              ? missionTimeMinutes
+              : existing.missionTimeMinutes,
+          timeoutMinutes:
+            timeoutMinutes !== undefined
+              ? timeoutMinutes
+              : existing.timeoutMinutes,
+          outputFormat:
+            outputFormat !== undefined
+              ? outputFormat
+              : existing.outputFormat ?? parsed.outputFormat,
+          constraints:
+            constraints !== undefined
+              ? constraints
+              : existing.constraints ?? parsed.constraints,
         });
-
-        return NextResponse.json({ data: { deleted: true } });
-
       }
 
-      return NextResponse.json({ error: "Mission not found" }, { status: 404 });
+      const updates: {
+        status?: MissionStatus;
+        result?: string;
+        prompt?: string;
+        localDirs?: LocalDirEntry[];
+        references?: string[];
+        skills?: string[];
+        goals?: string[];
+        modelId?: string | null;
+        provider?: string | null;
+        profileName?: string | null;
+        missionTimeMinutes?: number | null;
+        timeoutMinutes?: number | null;
+        schedule?: string | null;
+        categoryId?: string | null;
+        outputFormat?: string | null;
+        constraints?: string | null;
+      } = {};
+      if (status) updates.status = status as MissionStatus;
+      if (result !== undefined) updates.result = result;
+      if (prompt !== undefined) updates.prompt = prompt;
+      if (outputFormat !== undefined) {
+        updates.outputFormat = outputFormat.trim() || null;
+      }
+      if (constraints !== undefined) {
+        updates.constraints = constraints.trim() || null;
+      }
+      if (localDirs !== undefined) updates.localDirs = normalizeLocalDirsInput(localDirs);
+      if (references !== undefined) updates.references = references;
+      if (skills !== undefined) updates.skills = skills;
+      if (goals !== undefined) updates.goals = goals;
+      if (modelId !== undefined) updates.modelId = modelId;
+      if (provider !== undefined) updates.provider = provider;
+      if (profileName !== undefined) updates.profileName = profileName;
+      if (missionTimeMinutes !== undefined) updates.missionTimeMinutes = missionTimeMinutes;
+      if (timeoutMinutes !== undefined) updates.timeoutMinutes = timeoutMinutes;
+      if (schedule !== undefined) updates.schedule = schedule;
+      if (categoryParsed.value !== undefined) updates.categoryId = categoryParsed.value;
 
-    }
-
-
-
-    if (payload.action === "cancel") {
-
-      const { missionId } = payload;
-
-      const mission = loadMission(missionId);
-
-      if (!mission) {
-
+      const mission = updateMission(missionIdFinal, updates);
+      if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
+      if (mission.cronJobId && shouldRebuildPrompt) {
+        syncMissionToCronJob(missionIdFinal);
+      } else if (mission.cronJobId && schedule !== undefined) {
+        syncMissionToCronJob(missionIdFinal);
       }
 
-
-
-      if (mission.cronJobId) {
-
-        const w = await withJobsFileLock(
-
-          CRON_PATH,
-
-          JOBS_BACKUP_DIR,
-
-          (jobs) => {
-
-            const next = jobs.map((j) => ({ ...j }));
-
-            const idx = next.findIndex((j) => j.id === mission.cronJobId);
-
-            if (idx === -1) {
-
-              return { action: "write" as const, jobs: next, value: undefined };
-
-            }
-
-            next[idx].enabled = false;
-
-            next[idx].state = "paused";
-
-            return { action: "write" as const, jobs: next, value: undefined };
-
-          }
-
-        );
-
-        if (!w.ok) {
-
-          return NextResponse.json({ error: w.error }, { status: 503 });
-
+      if (prompt !== undefined) {
+        try {
+          await agentBackend.syncMission(missionIdFinal, { prompt: mission.prompt });
+        } catch (err) {
+          logApiError("POST /api/missions", "syncMission disk", err);
         }
-
       }
 
-
-
-      mission.status = "failed";
-
-      mission.error = "Cancelled by user";
-
-      mission.updatedAt = new Date().toISOString();
-
-      saveMission(mission);
-
-      appendAuditLine({
-
-        action: "mission.cancel",
-
-        resource: missionId,
-
-        ok: true,
-
+      appendAuditLine({ action: "mission.update", resource: missionIdFinal, ok: true });
+      return NextResponse.json({
+        data: { mission: enrichMissionCron(getMission(missionIdFinal)!) },
       });
-
-      return NextResponse.json({ data: mission });
-
     }
 
+    // ── Cancel Mission ─────────────────────────────────────────
+    // The unified V1 status enum has no `cancelled` state — cancellations
+    // are recorded as `failed` with an explicit "Cancelled by user" result.
+    if (action === "cancel") {
+      const cancelId = resolveMissionId(body as Record<string, unknown>);
+      if (!cancelId)
+        return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
-
-    if (payload.action === "update") {
-
-      const { missionId } = payload;
-
-      const mission = loadMission(missionId);
-
-      if (!mission) {
-
+      const existingMission = getMission(cancelId);
+      if (!existingMission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      }
-
-
-
-      // Update mission fields
-
-      if (payload.name !== undefined) mission.name = payload.name;
-
-      if (payload.prompt !== undefined) mission.prompt = payload.prompt;
-
-      if (payload.goals !== undefined) mission.goals = payload.goals;
-
-      if (payload.skills !== undefined) mission.skills = payload.skills;
-
-      if (payload.profile !== undefined) mission.profile = payload.profile;
-
-      if (payload.missionTimeMinutes !== undefined) {
-
-        mission.missionTimeMinutes = Math.max(5, Math.min(120, payload.missionTimeMinutes));
-
-      }
-
-      if (payload.timeoutMinutes !== undefined) {
-
-        mission.timeoutMinutes = Math.max(1, Math.min(120, payload.timeoutMinutes));
-
-      }
-
-      if (payload.schedule !== undefined) {
-
-        if (mission.dispatchMode === "cron") {
-
-          const pr = parseSchedule(payload.schedule);
-
-          if (pr.kind === "invalid") {
-
-            return NextResponse.json({ error: pr.message }, { status: 400 });
-
-          }
-
-        }
-
-        mission.schedule = payload.schedule;
-
-      }
-
-      mission.updatedAt = new Date().toISOString();
-
-      saveMission(mission);
-
-
-
-      if (mission.cronJobId) {
-
-        const w = await withJobsFileLock(
-
-          CRON_PATH,
-
-          JOBS_BACKUP_DIR,
-
-          (jobs) => {
-
-            const next = jobs.map((j) => ({ ...j }));
-
-            const idx = next.findIndex((j) => j.id === mission.cronJobId);
-
-            if (idx === -1) {
-
-              return { action: "write" as const, jobs: next, value: undefined };
-
-            }
-
-            const job = { ...next[idx] } as CronJobData;
-
-            if (
-
-              payload.prompt !== undefined ||
-
-              payload.goals !== undefined ||
-
-              payload.missionTimeMinutes !== undefined ||
-
-              payload.timeoutMinutes !== undefined
-
-            ) {
-
-              job.prompt = buildMissionPrompt(mission);
-
-              job.timeout = mission.timeoutMinutes * 60;
-
-            }
-
-            if (payload.name !== undefined) {
-
-              job.name = "Mission: " + mission.name;
-
-            }
-
-            if (payload.schedule !== undefined && mission.dispatchMode === "cron") {
-
-              const scheduleResult = parseSchedule(mission.schedule);
-
-              if (scheduleResult.kind !== "invalid") {
-
-                job.schedule = scheduleResult;
-
-                job.schedule_display = scheduleResult.display;
-
-              }
-
-            }
-
-            if (payload.skills !== undefined) {
-
-              job.skills = mission.skills;
-
-            }
-
-            if (payload.profile !== undefined) {
-
-              job.profile = mission.profile || undefined;
-
-            }
-
-            next[idx] = job;
-
-            return { action: "write" as const, jobs: next, value: undefined };
-
-          }
-
-        );
-
-        if (!w.ok) {
-
-          return NextResponse.json({ error: w.error }, { status: 503 });
-
-        }
-
-      }
-
-
-
-      appendAuditLine({
-
-        action: "mission.update",
-
-        resource: missionId,
-
-        ok: true,
-
+      const mission = updateMission(cancelId, {
+        status: "failed",
+        result: "Cancelled by user",
       });
+      if (!mission)
+        return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      return NextResponse.json({ data: mission });
+      if (mission.sessionId) {
+        try {
+          updateSession(mission.sessionId, {
+            status: "failed",
+            endedAt: new Date().toISOString(),
+            error: "Cancelled by user",
+          });
+        } catch (err) {
+          logApiError("POST /api/missions", "cancelMission session update", err);
+        }
+      }
 
+      pauseMissionCron(cancelId);
+
+      const shouldKillProcess =
+        existingMission.status === "dispatched" || existingMission.status === "queued";
+      if (shouldKillProcess) {
+        void agentBackend.cancelMission(cancelId).catch((err: unknown) => {
+          logApiError("POST /api/missions", "cancelMission process kill (background)", err);
+        });
+      }
+
+      appendAuditLine({ action: "mission.cancel", resource: cancelId, ok: true });
+      return NextResponse.json({
+        data: {
+          mission: enrichMissionCron(mission),
+          cancel: {
+            accepted: true,
+            processKillPending: shouldKillProcess,
+          },
+        },
+      });
     }
 
+    // ── Delete Mission ─────────────────────────────────────────
+    if (action === "delete") {
+      const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
+      if (!missionIdFinal)
+        return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
+      const existing = getMission(missionIdFinal);
+      if (!existing) {
+        return NextResponse.json({ error: "Mission not found" }, { status: 404 });
+      }
 
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+      deleteMissionCron(missionIdFinal);
 
-  } catch (err) {
+      const ok = deleteMission(missionIdFinal);
+      if (!ok)
+        return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-    logApiError("POST /api/missions", "processing request", err);
+      appendAuditLine({ action: "mission.delete", resource: missionIdFinal, ok: true });
+      return NextResponse.json({ data: { deleted: missionIdFinal } });
+    }
 
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
+    // ── Get Status ────────────────────────────────────────────
+    if (action === "status") {
+      const { id } = body as { id?: string };
+      if (!id)
+        return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
 
+      const status = await agentBackend.getMissionStatus(id);
+      return NextResponse.json({ data: { status } });
+    }
+
+    return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+  } catch (error) {
+    logApiError("POST /api/missions", "processing request", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
 }
-

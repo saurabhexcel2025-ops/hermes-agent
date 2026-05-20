@@ -4,13 +4,38 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
-import { parseTemplatePackManifestV1 } from "@agent-control-hub/schema";
+import { parseTemplatePackManifestV1 } from "@/lib/schema";
 import { zodErrorResponse } from "@/lib/api-schemas";
 import { logApiError } from "@/lib/api-logger";
-import { PATHS } from "@/lib/hermes";
-import { requireMcApiKey, requireNotReadOnly } from "@/lib/api-auth";
+import { ensureDb } from "@/lib/db";
+import { PATHS } from "@/lib/paths";
+import { requireAuth } from "@/lib/api-auth";
+import { listCatalogTemplates } from "@/lib/catalog-template-repository";
+import { resolveTemplateCategoryId } from "@/lib/mission-category-repository";
+import type { LocalDirEntry } from "@/types/hermes";
+import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 
 const DATA_DIR = PATHS.templates;
+
+// ── Simple in-memory cache (30s TTL) ───────────────────────
+let templatesCache: { data: unknown; timestamp: number } | null = null;
+const CACHE_TTL_MS = 30_000;
+
+function getTemplatesCached() {
+  const now = Date.now();
+  if (templatesCache && now - templatesCache.timestamp < CACHE_TTL_MS) {
+    return templatesCache.data;
+  }
+  return null;
+}
+
+function setTemplatesCache(data: unknown) {
+  templatesCache = { data, timestamp: Date.now() };
+}
+
+function invalidateTemplatesCache() {
+  templatesCache = null;
+}
 
 function sanitizeTemplateId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -28,6 +53,7 @@ interface CustomTemplate {
   icon: string;
   color: string;
   category: string;
+  categoryId?: string;
   profile: string;
   description: string;
   instruction: string;
@@ -36,15 +62,71 @@ interface CustomTemplate {
   suggestedSkills: string[];
   dispatchMode: "save" | "now" | "cron";
   schedule: string;
+  /** Hermes CLI model id, e.g. anthropic/claude-sonnet-4 */
+  defaultModel?: string;
+  /** Hermes CLI --provider */
+  defaultProvider?: string;
+  localDirs?: LocalDirEntry[];
+  references?: string[];
+  outputFormat?: string;
+  constraints?: string;
+  timeoutMinutes?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+function mergeSuggestedSkillsFromRaw(raw: Record<string, unknown>): string[] {
+  const sug = raw.suggestedSkills;
+  if (Array.isArray(sug) && sug.length > 0) {
+    return (sug as unknown[]).map((x) => String(x));
+  }
+  const leg = raw.skills;
+  if (Array.isArray(leg)) {
+    return (leg as unknown[]).map((x) => String(x));
+  }
+  return [];
+}
+
+/** Response shape for clients: normalise legacy `skills` → `suggestedSkills`. */
+function enrichCustomTemplateFromDisk(
+  raw: Record<string, unknown>
+): CustomTemplate & { isCustom: true } {
+  const suggestedSkills = mergeSuggestedSkillsFromRaw(raw);
+  const localDirs = normalizeLocalDirsInput(raw.localDirs);
+  const references = Array.isArray(raw.references)
+    ? (raw.references as unknown[]).map((x) => String(x))
+    : [];
+  const timeoutMinutes =
+    typeof raw.timeoutMinutes === "number" && Number.isFinite(raw.timeoutMinutes)
+      ? raw.timeoutMinutes
+      : undefined;
+
+  const categoryId =
+    typeof raw.categoryId === "string"
+      ? raw.categoryId
+      : resolveTemplateCategoryId(
+          typeof raw.category === "string" ? raw.category : undefined,
+        );
+  const out = {
+    ...raw,
+    suggestedSkills,
+    localDirs,
+    references,
+    timeoutMinutes,
+    categoryId: categoryId ?? "general",
+    category:
+      typeof raw.category === "string" ? raw.category : "Custom",
+    isCustom: true as const,
+  } as CustomTemplate & { isCustom: true };
+  delete (out as unknown as Record<string, unknown>).skills;
+  return out;
 }
 
 function loadTemplate(id: string): CustomTemplate | null {
   const path = DATA_DIR + "/" + id + ".json";
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, "utf-8"));
+    return JSON.parse(readFileSync(path, "utf-8")) as CustomTemplate;
   } catch {
     return null;
   }
@@ -53,25 +135,72 @@ function loadTemplate(id: string): CustomTemplate | null {
 function saveTemplate(template: CustomTemplate) {
   ensureDir();
   const path = DATA_DIR + "/" + template.id + ".json";
-  writeFileSync(path, JSON.stringify(template, null, 2));
+  const forDisk = { ...template } as Record<string, unknown>;
+  delete forDisk.skills;
+  writeFileSync(path, JSON.stringify(forDisk, null, 2));
 }
 
 export async function GET() {
   try {
+    ensureDb();
+    // Return cached result if fresh
+    const cached = getTemplatesCached();
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     ensureDir();
     const files = readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
-    const templates: CustomTemplate[] = [];
+    const customTemplates: (CustomTemplate & { isCustom: true })[] = [];
 
     for (const file of files) {
       try {
         const content = readFileSync(DATA_DIR + "/" + file, "utf-8");
-        templates.push(JSON.parse(content));
-      } catch {}
+        const raw = JSON.parse(content) as Record<string, unknown>;
+        customTemplates.push(enrichCustomTemplateFromDisk(raw));
+      } catch {
+        // skip bad file
+      }
     }
 
-    templates.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    customTemplates.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
-    return NextResponse.json({ data: { templates, total: templates.length } });
+    const builtInTemplates = listCatalogTemplates().map((t) => ({
+      id: t.id,
+      name: t.name,
+      icon: t.icon,
+      color: t.color,
+      category: t.categoryId ?? "general",
+      categoryId: t.categoryId ?? resolveTemplateCategoryId(undefined) ?? "general",
+      profile: t.profileSlug,
+      description: t.description,
+      instruction: t.instruction,
+      context: t.context,
+      goals: t.goals,
+      suggestedSkills: t.suggestedSkills,
+      outputFormat: t.outputFormat,
+      constraints: t.constraints,
+      localDirs: t.localDirs,
+      references: t.references,
+      missionTimeMinutes: t.missionTimeMinutes,
+      timeoutMinutes: t.timeoutMinutes,
+      dispatchMode: "now" as const,
+      schedule: "every 5m",
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      isCustom: false as const,
+      seedKey: t.seedKey,
+    }));
+
+    const templates = [...customTemplates, ...builtInTemplates];
+    const response = { data: { templates, total: templates.length } };
+
+    // Cache the response
+    setTemplatesCache(response);
+
+    return NextResponse.json(response);
   } catch (err) {
     logApiError("GET /api/templates", "listing templates", err);
     return NextResponse.json({ error: "Failed to list templates" }, { status: 500 });
@@ -79,9 +208,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const ro = requireNotReadOnly();
-  if (ro) return ro;
-  const auth = requireMcApiKey(request);
+  const auth = requireAuth(request);
   if (auth) return auth;
 
   try {
@@ -92,26 +219,59 @@ export async function POST(request: NextRequest) {
       const id = "ct_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
       const now = new Date().toISOString();
 
+      const suggestedSkills =
+        Array.isArray(body.suggestedSkills) && body.suggestedSkills.length > 0
+          ? body.suggestedSkills
+          : Array.isArray(body.skills)
+            ? body.skills
+            : [];
+
       const template: CustomTemplate = {
         id,
         name: body.name || "Untitled Template",
         icon: body.icon || "Zap",
         color: body.color || "cyan",
-        category: body.category || "Custom",
-        profile: body.profile || "",
+        category:
+          typeof body.category === "string" ? body.category : "Custom",
+        categoryId:
+          typeof body.categoryId === "string" && body.categoryId
+            ? body.categoryId
+            : resolveTemplateCategoryId(body.category) ?? "general",
+        profile: typeof body.profile === "string" ? body.profile : "",
         description: body.description || "",
         instruction: body.instruction || "",
         context: body.context || "",
         goals: body.goals || [],
-        suggestedSkills: body.suggestedSkills || [],
+        suggestedSkills,
         dispatchMode: body.dispatchMode || "now",
         schedule: body.schedule || "every 5m",
+        defaultModel:
+          typeof body.defaultModel === "string" && body.defaultModel.trim() !== ""
+            ? body.defaultModel.trim()
+            : undefined,
+        defaultProvider:
+          typeof body.defaultProvider === "string" && body.defaultProvider.trim() !== ""
+            ? body.defaultProvider.trim()
+            : undefined,
+        localDirs: normalizeLocalDirsInput(body.localDirs ?? []),
+        references: Array.isArray(body.references)
+          ? (body.references as unknown[]).map((x) => String(x))
+          : [],
+        outputFormat:
+          typeof body.outputFormat === "string" ? body.outputFormat : undefined,
+        constraints:
+          typeof body.constraints === "string" ? body.constraints : undefined,
+        timeoutMinutes:
+          typeof body.timeoutMinutes === "number" && Number.isFinite(body.timeoutMinutes)
+            ? body.timeoutMinutes
+            : undefined,
         createdAt: now,
         updatedAt: now,
       };
 
       saveTemplate(template);
-      return NextResponse.json({ data: template });
+      invalidateTemplatesCache();
+      return NextResponse.json({ data: enrichCustomTemplateFromDisk(template as unknown as Record<string, unknown>) });
     }
 
     if (action === "update") {
@@ -126,18 +286,62 @@ export async function POST(request: NextRequest) {
       if (body.icon !== undefined) template.icon = body.icon;
       if (body.color !== undefined) template.color = body.color;
       if (body.category !== undefined) template.category = body.category;
+      if (body.categoryId !== undefined) {
+        template.categoryId =
+          typeof body.categoryId === "string" ? body.categoryId : undefined;
+      }
       if (body.profile !== undefined) template.profile = body.profile;
       if (body.description !== undefined) template.description = body.description;
       if (body.instruction !== undefined) template.instruction = body.instruction;
       if (body.context !== undefined) template.context = body.context;
       if (body.goals !== undefined) template.goals = body.goals;
       if (body.suggestedSkills !== undefined) template.suggestedSkills = body.suggestedSkills;
+      else if (body.skills !== undefined && Array.isArray(body.skills)) {
+        template.suggestedSkills = body.skills;
+      }
       if (body.dispatchMode !== undefined) template.dispatchMode = body.dispatchMode;
       if (body.schedule !== undefined) template.schedule = body.schedule;
+      if (body.defaultModel !== undefined) {
+        template.defaultModel =
+          typeof body.defaultModel === "string" && body.defaultModel.trim() !== ""
+            ? body.defaultModel.trim()
+            : undefined;
+      }
+      if (body.defaultProvider !== undefined) {
+        template.defaultProvider =
+          typeof body.defaultProvider === "string" && body.defaultProvider.trim() !== ""
+            ? body.defaultProvider.trim()
+            : undefined;
+      }
+      if (body.localDirs !== undefined) {
+        template.localDirs = normalizeLocalDirsInput(body.localDirs);
+      }
+      if (body.references !== undefined) {
+        template.references = Array.isArray(body.references)
+          ? (body.references as unknown[]).map((x) => String(x))
+          : [];
+      }
+      if (body.outputFormat !== undefined) {
+        template.outputFormat =
+          typeof body.outputFormat === "string" ? body.outputFormat : undefined;
+      }
+      if (body.constraints !== undefined) {
+        template.constraints =
+          typeof body.constraints === "string" ? body.constraints : undefined;
+      }
+      if (body.timeoutMinutes !== undefined) {
+        template.timeoutMinutes =
+          typeof body.timeoutMinutes === "number" && Number.isFinite(body.timeoutMinutes)
+            ? body.timeoutMinutes
+            : undefined;
+      }
       template.updatedAt = new Date().toISOString();
 
       saveTemplate(template);
-      return NextResponse.json({ data: template });
+      invalidateTemplatesCache();
+      return NextResponse.json({
+        data: enrichCustomTemplateFromDisk(template as unknown as Record<string, unknown>),
+      });
     }
 
     if (action === "importPack") {
@@ -164,10 +368,16 @@ export async function POST(request: NextRequest) {
           suggestedSkills: t.suggestedSkills,
           dispatchMode: "now",
           schedule: "every 5m",
+          defaultModel: t.defaultModel,
+          defaultProvider: t.defaultProvider,
+          localDirs: [],
+          references: [],
+          timeoutMinutes: t.timeoutMinutes,
           createdAt: now,
           updatedAt: now,
         };
         saveTemplate(template);
+        invalidateTemplatesCache();
         created.push(template);
       }
       return NextResponse.json({
@@ -184,6 +394,7 @@ export async function POST(request: NextRequest) {
       const path = DATA_DIR + "/" + sanitizedId + ".json";
       if (existsSync(path)) {
         unlinkSync(path);
+        invalidateTemplatesCache();
         return NextResponse.json({ data: { deleted: true } });
       }
       return NextResponse.json({ error: "Template not found" }, { status: 404 });

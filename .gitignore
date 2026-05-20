@@ -10,21 +10,26 @@ node_modules/
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+__pycache__/
 
 # Testing
 coverage/
 **/coverage/
+coverage-report/
 playwright-report/
 test-results/
 
 # Next.js
 .next/
 **/.next/
+.swc/
 out/
 build/
 
-# Data (default ~/control-hub/data/ or CH_DATA_DIR; not in repo)
-/data/
+# Runtime data (CH_DATA_DIR mirror under repo root; not in repo)
+/data/*
+!/data/seed/
+!/data/seed/**
 
 # Environment
 .env
