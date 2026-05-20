@@ -1,6 +1,6 @@
 # Missions
 
-Control Hub missions are stored in SQLite (`missions` table) with optional JSON overlays under `CH_DATA_DIR/missions/`.
+How missions are stored, dispatched, and cancelled. Missions live in SQLite (`missions` table) with optional JSON overlays under `CH_DATA_DIR/missions/`.
 
 ## Prompt model
 

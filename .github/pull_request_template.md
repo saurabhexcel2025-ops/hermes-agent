@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What does this PR change and why? -->
+<!-- What does this PR change and why? Keep it concrete—I merge from dev when CI is green and the diff matches the description. -->
 
 ## Base branch
 

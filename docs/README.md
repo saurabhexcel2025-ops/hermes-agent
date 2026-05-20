@@ -1,5 +1,7 @@
 # Documentation index
 
+Technical reference for Control Hub. Tone elsewhere in this folder is deliberately plain—I maintain the project solo and would rather you get accurate answers than corporate filler.
+
 | Document | Description |
 |----------|-------------|
 | [CONTROL_HUB.md](CONTROL_HUB.md) | What this repo is and where to read next |
@@ -12,7 +14,7 @@
 | [SYSTEM-CRON.md](SYSTEM-CRON.md) | System cron presets (`scripts/hardware/`), including Hindsight backup |
 | [SUPPORT.md](SUPPORT.md) | Where to get help; upstream vs this repo |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | How collaboration works here (people-wise) |
 | [MIGRATION.md](MIGRATION.md) | Data directory and migrations |
 | [HERMES_CONFIG_INTEGRATION.md](HERMES_CONFIG_INTEGRATION.md) | Hermes `config.yaml` integration |
 | [PLATFORM_VISION.md](PLATFORM_VISION.md) | Architecture and product direction |

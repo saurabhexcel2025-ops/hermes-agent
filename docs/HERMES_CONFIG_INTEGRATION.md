@@ -1,6 +1,6 @@
 # Hermes config integration
 
-The separate **`hermes-config`** repository (operator-specific automation and dotfiles) is **not vendored inside Control Hub**. When that repo is present on a machine, use this checklist so paths stay consistent with Control Hub and Hermes.
+If you also use a separate **`hermes-config`** repo (dotfiles, extra scripts), it is **not** bundled here. This checklist keeps paths consistent with Control Hub and Hermes when both exist on a machine.
 
 ## How Control Hub resolves paths
 

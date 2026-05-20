@@ -1,6 +1,6 @@
 # Control Hub — this repository
 
-Control Hub is a **Next.js web application**: a command-centre UI for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It ships as a single codebase—dashboard, missions, cron, sessions, memory tools, and REST APIs under `src/app/api/`.
+Control Hub is the **Next.js app** in this repo: a command-centre UI for [Hermes Agent](https://github.com/NousResearch/hermes-agent). One codebase—dashboard, missions, cron, sessions, memory tools, and REST APIs under `src/app/api/`. If you want screenshots and "what do I click?", start with [USER_WALKTHROUGH_GUIDE.md](USER_WALKTHROUGH_GUIDE.md); this page is the map of technical docs.
 
 ## Where to read next
 

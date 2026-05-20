@@ -1,6 +1,6 @@
 # Control Hub platform vision
 
-Control Hub is the **Next.js control plane** for [Hermes Agent](https://github.com/NousResearch/hermes-agent): missions, cron, configuration, sessions, memory, and day-to-day operator workflows. Execution remains in **Hermes** (gateway, scheduler). This app edits Hermes and Control Hub JSON through audited REST routes.
+This is the architecture story—not a roadmap slide deck. Control Hub is the **Next.js control plane** I ship for [Hermes Agent](https://github.com/NousResearch/hermes-agent): missions, cron, configuration, sessions, memory, and day-to-day operator workflows. Execution stays in **Hermes** (gateway, scheduler). This app edits Hermes and Control Hub state through audited REST routes.
 
 ## Architecture (layers)
 

@@ -1,6 +1,6 @@
 # Professional catalog seeds (shipped with Control Hub)
 
-This directory is **version-controlled**. Runtime SQLite lives under `CH_DATA_DIR` (typically `~/control-hub/data`), not here.
+Source files for the catalog that `seed-catalog.ts` loads into SQLite. This directory is **version-controlled**; your live database lives under `CH_DATA_DIR` (typically `~/control-hub/data`), not here.
 
 | Path | Purpose |
 |------|---------|

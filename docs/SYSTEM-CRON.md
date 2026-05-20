@@ -1,6 +1,6 @@
 # System cron presets
 
-Control Hub ships POSIX shell stubs under [`scripts/hardware/`](../scripts/hardware/). During [`scripts/bootstrap/setup.sh`](../scripts/bootstrap/setup.sh), any missing `*.sh` files are copied into **`CH_DATA_DIR/scripts`** (see [`getChScriptsDir()`](../src/lib/paths.ts)). The **Cron** page → **System** tab registers jobs in the **system crontab**; each line must invoke a script under that directory (validated by [`POST /api/cron/hardware`](../src/app/api/cron/hardware/route.ts)).
+POSIX shell stubs under [`scripts/hardware/`](../scripts/hardware/) for host-level jobs (backups, watchdog placeholders, and similar). Control Hub copies missing scripts into your data dir on setup and registers them from the Cron → System tab. During [`scripts/bootstrap/setup.sh`](../scripts/bootstrap/setup.sh), any missing `*.sh` files are copied into **`CH_DATA_DIR/scripts`** (see [`getChScriptsDir()`](../src/lib/paths.ts)). The **Cron** page → **System** tab registers jobs in the **system crontab**; each line must invoke a script under that directory (validated by [`POST /api/cron/hardware`](../src/app/api/cron/hardware/route.ts)).
 
 Preset labels and filenames are defined in [`src/lib/hardware-cron.ts`](../src/lib/hardware-cron.ts) (`HARDWARE_CRON_UI_PRESETS`). Log output defaults to **`CH_HARDWARE_LOG_DIR`** (`CH_DATA_DIR/logs`).
 

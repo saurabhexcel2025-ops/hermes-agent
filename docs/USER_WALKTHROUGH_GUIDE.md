@@ -1,6 +1,6 @@
 # Control Hub — User walkthrough
 
-This guide describes what each area of Control Hub does and how to use it day to day. It is written for **operators** who have already installed Hermes Agent and Control Hub (see [README](../README.md)). For API details and deployment, use the [documentation index](README.md).
+This guide describes what each area of Control Hub does and how to use it day to day. It is for **operators** who already installed Hermes and Control Hub (see [README](../README.md)). For API details and deployment, use the [documentation index](README.md). I wrote it so you do not have to read the whole codebase to find the mission board.
 
 ---
 

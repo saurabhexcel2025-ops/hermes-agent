@@ -1,5 +1,7 @@
 # Control Hub Migrations
 
+Breaking or structural data changes, documented so upgrades are not guesswork. If something here does not match what you see on disk, open an issue with your paths and `CH_DATA_DIR`.
+
 ## 2026-04 — Default Mission Data Directory
 
 **Change:** Control Hub now stores missions, templates, operations, stories, and Rec Room data under **`$HOME/control-hub/data/`** by default (unless **`CH_DATA_DIR`** or **`CONTROL_HUB_DATA_DIR`** is set). The previous default was **`$HERMES_HOME/control-hub/data/`** (typically `~/.hermes/control-hub/data/`).

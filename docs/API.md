@@ -1,5 +1,7 @@
 # API Reference
 
+Dry reference for REST routes—envelope shape, inventory, auth notes. For behaviour in plain language, see [USER_WALKTHROUGH_GUIDE.md](USER_WALKTHROUGH_GUIDE.md) or the feature docs linked from [README.md](README.md).
+
 All API routes return the envelope:
 
 ```typescript

@@ -1,6 +1,6 @@
 # Catalog and professional profiles
 
-Control Hub ships a **professional catalog** (six agent profiles, twelve mission templates, mission categories) under version control in **`data/seed/`**. At runtime the catalog lives in **SQLite** (`CH_DATA_DIR/control-hub.db`); Hermes receives profile **trees on disk** via push sync.
+The professional catalog (six agent profiles, twelve mission templates, mission categories) ships in **`data/seed/`**. At runtime it lives in **SQLite** (`CH_DATA_DIR/control-hub.db`); Hermes gets profile **trees on disk** when you push sync.
 
 ## Data flow
 

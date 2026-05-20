@@ -1,6 +1,6 @@
 # Shell integration tests (Hermes profile helpers)
 
-Runs in **bash** with a fake `HERMES_HOME` under `/tmp` — does **not** touch `~/.hermes` or run `git pull`.
+Bash checks for install/deploy helpers—fake `HERMES_HOME` under `/tmp`, so your real `~/.hermes` is untouched. I run these in CI on every push.
 
 ```bash
 # From repo root (Linux / macOS / WSL / Git Bash), or:

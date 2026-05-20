@@ -1,5 +1,7 @@
 # Deploying Control Hub
 
+How I run this in production and on a home LAN—ports, scripts, Docker, and the deploy buttons in the sidebar. Read [CONTRIBUTING.md](CONTRIBUTING.md) if you are changing deploy behaviour itself.
+
 ## Host and port
 
 Next.js reads **`PORT`**. After **`bash scripts/bootstrap/setup.sh`**, `.env.local` contains **`PORT`** (first free in **42069–42100** by default, or your chosen port) and **`CH_ALLOWED_DEV_ORIGINS`** for LAN development.
