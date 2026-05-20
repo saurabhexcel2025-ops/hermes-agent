@@ -222,6 +222,15 @@ ch_deploy_do_restart_body() {
   fi
   export CH_ENABLE_DEPLOY_API="${CH_ENABLE_DEPLOY_API:-true}"
 
+  if [ ! -f "node_modules/next/dist/bin/next" ]; then
+    ch_deploy_log_restart "next binary not found at node_modules/next/dist/bin/next — running install to restore dependencies…"
+    if ! "$NPM_BIN" install --prefer-offline >>"$CH_RESTART_LOG" 2>&1; then
+      ch_deploy_log_restart "ERROR: npm install failed — cannot start server"
+      return 1
+    fi
+    ch_deploy_log_restart "Dependencies restored via npm install"
+  fi
+
   ch_deploy_log_restart "Starting next-server on $HOST:$deploy_port…"
   rm -f "$PID_FILE"
   ch_deploy_release_lock
