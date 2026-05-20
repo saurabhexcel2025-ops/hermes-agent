@@ -23,4 +23,4 @@ Do **not** open public issues for suspected vulnerabilities. See [SECURITY.md](S
 
 ## Code of conduct
 
-Participation follows [How this repo works (people-wise)](CODE_OF_CONDUCT.md)—short version: ideas and results matter; do not be a menace.
+Participation follows [How this repo works (people-wise)](CODE_OF_CONDUCT.md)—short version: ideas and results matter; do not be a menace please.

@@ -1,6 +1,6 @@
 # Control Hub (Hermes)
 
-Control Hub is the web command centre I built for [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation). Hermes runs your agents on the machine; Control Hub gives you a dashboard to see what is running, dispatch missions, manage cron, browse sessions, and edit config—without living in the terminal.
+Control Hub is a web command centre built for [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation). Hermes runs your agents on the machine; Control Hub gives you a dashboard to see what is running, dispatch missions, manage cron, browse sessions, and edit config—without living in the terminal.
 
 ![Control Hub dashboard](docs/images/dashboard.png)
 
@@ -92,6 +92,7 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for Docker, TLS, and environment variables.
 | **Hermes not found / missions fail** | Install Hermes; set `HERMES_HOME` in `.env.local`; confirm `hermes` is on `PATH`. |
 | **Catalog seed warning during setup** | Run `npx tsx scripts/tooling/seed-catalog.ts --merge` or use Config → Seed. |
 | **Cancel did not stop agent** | See [Missions → Cancellation](docs/MISSIONS.md); check server logs. Kill targets Linux/macOS only. |
+| **Optional LAN relay (`CH_SOCAT_RELAY`)** | On macOS install socat if needed: `brew install socat`. See [DEPLOY.md](docs/DEPLOY.md). |
 
 ---
 

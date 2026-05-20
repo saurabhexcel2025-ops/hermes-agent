@@ -1,6 +1,8 @@
 # Security
 
-Found something that could let an attacker run code, steal keys, or trash someone's install? **Tell me privately first.** I am not going to shame you for reporting it—I will thank you.
+Found something that could let an attacker run code, steal keys, or trash someone's install? **Tell me privately first.**, pretty please! 
+
+It would be very much appreciated if you allowed me time to apply a fix, before raising a public issue for any critical exploits or vulnerabilites.
 
 ## How to report
 
@@ -14,8 +16,6 @@ Include whatever helps me reproduce fast:
 - Steps to reproduce (commands, routes, config snippets—**redact real keys**)
 - What you think the impact is
 - Your environment (OS, Node version, how Control Hub is exposed) if it matters
-
-**This path is for security only.** Harassment or community drama goes through [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), not here.
 
 ## What happens next
 

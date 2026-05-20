@@ -1,6 +1,6 @@
-# How this repo works (people-wise)
+# How this repo works
 
-I maintain Control Hub solo. This is not a corporate handbook—it is how I want collaboration to feel.
+I maintain Control Hub solo. This is not a corporate handbook—it is how I want collaboration to feel. I welcome all feedback, please reach out to me any any time.
 
 ## The short version
 
@@ -20,7 +20,7 @@ You can swear. You can be blunt. You can disagree loudly—as long as you are ta
 - Performative niceness while blocking progress.
 - Tone-policing someone who is frustrated but still on-topic.
 
-## Hard lines (still hard lines)
+## Hard lines
 
 These are not "professionalism" rules—they are **do not be a menace** rules:
 

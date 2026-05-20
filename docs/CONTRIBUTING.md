@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for pitching in. Read [How this repo works (people-wise)](CODE_OF_CONDUCT.md) first—it is short and explains the vibe (ideas and results over ceremony).
+If you've got this far thank you for considering to pitch in.
 
 ## Quick path to a merged PR
 
