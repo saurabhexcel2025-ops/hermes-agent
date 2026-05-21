@@ -7,10 +7,16 @@ import { join } from "path";
 
 import { ensureDb } from "../db";
 import { upsertProfile, getProfileBySeedKey } from "../profiles-repository";
+import {
+  configYamlToColumnValues,
+  isEmptyPlatformToolsets,
+  platformToolsetsFromJson,
+} from "../profile-config-builder";
 import { upsertCatalogTemplate, getCatalogTemplate } from "../catalog-template-repository";
 import { db } from "../db";
 import { CH_DATA_DIR } from "../paths";
-import { pushProfileToHermes, pushAllProfiles } from "../hermes-profile-sync";
+import { pushProfileToHermes, pushAllProfiles, pushRootToHermes } from "../hermes-profile-sync";
+import { getAgentRoot, updateAgentRoot } from "../agent-root-repository";
 import { writeFileSync, mkdirSync } from "fs";
 
 function resolveRepoRoot(): string {
@@ -36,7 +42,7 @@ const TEMPLATE_PACK = join(
 export type SeedMode = "merge" | "replace";
 
 export interface SeedTarget {
-  target: "all" | "profiles" | "templates" | "categories";
+  target: "all" | "root" | "profiles" | "templates" | "categories";
   slug?: string;
   templateId?: string;
   mode: SeedMode;
@@ -44,6 +50,7 @@ export interface SeedTarget {
 
 export interface SeedResult {
   profiles: number;
+  root: number;
   templates: number;
   categories: number;
   pushed: number;
@@ -77,6 +84,7 @@ interface TemplatePackEntry {
   outputFormat: string;
   constraints: string;
   suggestedSkills?: string[];
+  suggestedToolsets?: string[];
   localDirs?: string[];
   references?: string[];
   missionTimeMinutes?: number;
@@ -101,8 +109,72 @@ function readProfileFiles(slug: string): { soulMd: string; agentsMd: string; con
     agentsMd: existsSync(agentsPath) ? readFileSync(agentsPath, "utf-8") : "",
     configYaml: existsSync(configPath)
       ? readFileSync(configPath, "utf-8")
-      : `agent:\n  personality: technical\nskills:\n  enabled: []\n`,
+      : "skills:\n  disabled: []\nagent:\n  max_turns: 60\n",
   };
+}
+
+function readRootSeedFiles(): {
+  soulMd: string;
+  agentsMd: string;
+  hermesMd: string;
+  userMd: string;
+  memoryMd: string;
+  configYaml: string;
+} {
+  const base = join(REPO_ROOT, "data/seed/agent-root");
+  const read = (path: string): string => existsSync(path) ? readFileSync(path, "utf-8") : "";
+  return {
+    soulMd: read(base + "/SOUL.md"),
+    agentsMd: read(base + "/AGENTS.md"),
+    hermesMd: read(base + "/HERMES.md"),
+    userMd: read(base + "/memories/USER.md"),
+    memoryMd: read(base + "/memories/MEMORY.md"),
+    configYaml: read(base + "/config.yaml"),
+  };
+}
+
+function seedRoot(mode: SeedMode): number {
+  const root = getAgentRoot();
+  const files = readRootSeedFiles();
+  const cols = configYamlToColumnValues(files.configYaml);
+  const hasExistingContent = Boolean(
+    root.soulMd.trim() ||
+      root.agentsMd.trim() ||
+      root.hermesMd.trim() ||
+      root.configYaml.trim() ||
+      root.userMd.trim() ||
+      root.memoryMd.trim(),
+  );
+  if (mode === "merge" && hasExistingContent) {
+    const currentToolsets = platformToolsetsFromJson(root.platformToolsetsJson);
+    const seedToolsets = platformToolsetsFromJson(cols.platformToolsetsJson);
+    if (
+      isEmptyPlatformToolsets(currentToolsets) &&
+      !isEmptyPlatformToolsets(seedToolsets)
+    ) {
+      updateAgentRoot({
+        platformToolsetsJson: cols.platformToolsetsJson,
+        configYaml: cols.configYaml,
+      });
+      return 1;
+    }
+    return 0;
+  }
+
+  updateAgentRoot({
+    displayName: "Bob",
+    description: "Local Hermes default agent at HERMES_HOME",
+    personality: "technical",
+    configYaml: cols.configYaml,
+    soulMd: files.soulMd,
+    agentsMd: files.agentsMd,
+    hermesMd: files.hermesMd,
+    userMd: files.userMd,
+    memoryMd: files.memoryMd,
+    disabledSkillsJson: cols.disabledSkillsJson,
+    platformToolsetsJson: cols.platformToolsetsJson,
+  });
+  return 1;
 }
 
 function seedCategories(mode: SeedMode): number {
@@ -130,17 +202,43 @@ function seedProfiles(mode: SeedMode, slugFilter?: string): number {
   let count = 0;
   for (const entry of manifest.profiles) {
     if (slugFilter && entry.slug !== slugFilter) continue;
-    if (mode === "merge" && getProfileBySeedKey(entry.seedKey)) continue;
-
     const files = readProfileFiles(entry.slug);
+    const cols = configYamlToColumnValues(files.configYaml);
+    const existing = getProfileBySeedKey(entry.seedKey);
+    if (mode === "merge" && existing) {
+      const currentToolsets = platformToolsetsFromJson(existing.platformToolsetsJson);
+      const seedToolsets = platformToolsetsFromJson(cols.platformToolsetsJson);
+      if (
+        isEmptyPlatformToolsets(currentToolsets) &&
+        !isEmptyPlatformToolsets(seedToolsets)
+      ) {
+        upsertProfile({
+          slug: entry.slug,
+          displayName: entry.displayName,
+          description: entry.description,
+          personality: cols.personality || entry.personality,
+          configYaml: cols.configYaml,
+          soulMd: existing.soulMd || files.soulMd,
+          agentsMd: existing.agentsMd || files.agentsMd,
+          disabledSkillsJson: cols.disabledSkillsJson,
+          platformToolsetsJson: cols.platformToolsetsJson,
+          seedKey: entry.seedKey,
+        });
+        count += 1;
+      }
+      continue;
+    }
+
     upsertProfile({
       slug: entry.slug,
       displayName: entry.displayName,
       description: entry.description,
-      personality: entry.personality,
-      configYaml: files.configYaml,
+      personality: cols.personality || entry.personality,
+      configYaml: cols.configYaml,
       soulMd: files.soulMd,
       agentsMd: files.agentsMd,
+      disabledSkillsJson: cols.disabledSkillsJson,
+      platformToolsetsJson: cols.platformToolsetsJson,
       seedKey: entry.seedKey,
     });
     count += 1;
@@ -160,7 +258,18 @@ function seedTemplates(mode: SeedMode, idFilter?: string): number {
     const seedKey = t.seedKey ?? `ch.tpl.${t.id}`;
     if (mode === "merge") {
       const existing = getCatalogTemplate(t.id);
-      if (existing?.seedKey) continue;
+      if (existing?.seedKey) {
+        const seedToolsets = t.suggestedToolsets ?? [];
+        const currentToolsets = existing.suggestedToolsets ?? [];
+        if (currentToolsets.length === 0 && seedToolsets.length > 0) {
+          upsertCatalogTemplate({
+            ...existing,
+            suggestedToolsets: seedToolsets,
+          });
+          count += 1;
+        }
+        continue;
+      }
     }
 
     upsertCatalogTemplate({
@@ -178,6 +287,7 @@ function seedTemplates(mode: SeedMode, idFilter?: string): number {
       outputFormat: t.outputFormat,
       constraints: t.constraints,
       suggestedSkills: t.suggestedSkills ?? [],
+      suggestedToolsets: t.suggestedToolsets ?? [],
       localDirs: t.localDirs ?? [],
       references: t.references ?? [],
       missionTimeMinutes: t.missionTimeMinutes ?? null,
@@ -205,9 +315,13 @@ export function runCatalogSeed(options: SeedTarget): SeedResult {
   ensureDb();
   const mode = options.mode;
   let profiles = 0;
+  let root = 0;
   let templates = 0;
   let categories = 0;
 
+  if (options.target === "all" || options.target === "root") {
+    root = seedRoot(mode);
+  }
   if (options.target === "all" || options.target === "categories") {
     categories = seedCategories(mode);
   }
@@ -219,18 +333,22 @@ export function runCatalogSeed(options: SeedTarget): SeedResult {
   }
 
   let pushed = 0;
+  if (root > 0 && mode === "replace") {
+    const r = pushRootToHermes();
+    if (r.success) pushed += 1;
+  }
   if (options.target === "all" || options.target === "profiles") {
     const pushResults =
       options.slug != null
         ? [pushProfileToHermes(options.slug)]
         : pushAllProfiles({ onlyMissing: mode === "merge", onlyOutOfSync: false });
-    pushed = pushResults.filter((r) => r.success).length;
+    pushed += pushResults.filter((r) => r.success).length;
   } else if (options.slug) {
     const r = pushProfileToHermes(options.slug);
     if (r.success) pushed = 1;
   }
 
-  const result: SeedResult = { profiles, templates, categories, pushed };
+  const result: SeedResult = { root, profiles, templates, categories, pushed };
   writeSeedState(result);
   return result;
 }

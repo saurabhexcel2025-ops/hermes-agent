@@ -1,4 +1,18 @@
-agent:
-  personality: technical
 skills:
-  enabled: []
+  disabled:
+    - creative/popular-web-designs
+platform_toolsets:
+  cli:
+    - hermes-cli
+    - terminal
+    - file
+    - web
+    - skills
+    - code_execution
+    - memory
+  discord:
+    - hermes-discord
+agent:
+  max_turns: 70
+terminal:
+  cwd: "."

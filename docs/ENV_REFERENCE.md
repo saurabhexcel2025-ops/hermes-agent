@@ -24,7 +24,7 @@ Quick lookup for Control Hub and Hermes paths. Set values in `.env.local` (creat
 
 | Location | When written | Notes |
 |----------|--------------|-------|
-| `{repo}/data/control-hub.db` | `npm run prebuild` (before `next build`) | Dev/CI convenience; recreated when `schema_version !== 2` |
+| `{repo}/data/control-hub.db` | `npm run prebuild` (before `next build`) | Dev/CI convenience; recreated when `schema_version !== 3` |
 | `{CH_DATA_DIR}/control-hub.db` | Runtime API + `npm run db:migrate` | **Production source of truth** on the host |
 
 `ch-deploy update` runs `npm run build` (prebuild on repo DB) then `db:migrate` on `CH_DATA_DIR`. Use the same `CH_DATA_DIR` as the running server when troubleshooting.
@@ -60,5 +60,5 @@ After setup or `ch-deploy update`, `scripts/tooling/discover-agents.mjs` writes 
 ## Related docs
 
 - [DEPLOY.md](DEPLOY.md) — `ch-deploy`, Docker, TLS
-- [MIGRATION.md](MIGRATION.md) — data directory moves, schema v2
+- [MIGRATION.md](MIGRATION.md) — data directory moves, schema v3
 - [HERMES_CONFIG_INTEGRATION.md](HERMES_CONFIG_INTEGRATION.md) — Hermes + Control Hub path checklist

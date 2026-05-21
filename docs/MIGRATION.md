@@ -26,9 +26,11 @@ Breaking or structural data changes, documented so upgrades are not guesswork. I
 
 **Backups:** Include `CH_DATA_DIR` and your Hermes install root (`HERMES_HOME`). See [CONTROL_HUB.md](CONTROL_HUB.md) and [DEPLOY.md](DEPLOY.md).
 
-## 2026-05 — SQLite baseline schema (v2)
+## 2026-05 — SQLite schema v3 (profiles, toolsets, missions)
 
-**Change:** The historical migration chain (`001`–`032`) is replaced by a single **[`001_baseline.sql`](../src/lib/db/migrations/001_baseline.sql)**. Runtime schema version is **`meta.schema_version = 2`** (`BASELINE_SCHEMA_VERSION` in `src/lib/db/upgrade.ts`).
+**Change:** Fresh installs use **[`001_baseline.sql`](../src/lib/db/migrations/001_baseline.sql)** at **`schema_version = 3`** (no `tool_plugins`). Upgrades from **`main`** (v2 baseline) apply a single incremental migration **[`002_profiles_tools_parity.sql`](../src/lib/db/migrations/002_profiles_tools_parity.sql)** — profile SoT columns, `agent_root`, `skills` catalog, `missions.suggested_toolsets`, and **`DROP TABLE tool_plugins`**.
+
+**Automatic upgrade (legacy pre-baseline DBs):** On first open after updating, Control Hub may still run the baseline rebuild path (backup → recreate → re-import). See preserved table list below.
 
 **Automatic upgrade:** On first open after updating, Control Hub:
 
@@ -53,11 +55,20 @@ Breaking or structural data changes, documented so upgrades are not guesswork. I
 | `stories` | Yes |
 | `sync_registry` | Yes |
 | `gateway_platforms` | Yes |
-| `tool_plugins` | Yes |
+| `tool_plugins` | No (dropped in v3; unused) |
 
 **Fresh installs / `main` branch users:** No prior SQLite DB exists; baseline is applied on first `npm run prebuild` or first API access.
 
-**Prebuild DB:** `npm run prebuild` writes `{repo}/data/control-hub.db` using the same baseline. Runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). If `{repo}/data/control-hub.db` has `schema_version !== 2`, prebuild deletes and recreates it (CI/dev convenience only).
+**Upgrade from `main` (schema v2 → v3):**
+
+```bash
+npm run db:migrate
+npm run db:seed    # import-hermes-state + seed-catalog --merge when HERMES_HOME exists
+```
+
+Then in the UI: **Operations → Tools** — Pull/Push per profile as needed. Legacy `tool_plugins` rows are not migrated (table dropped).
+
+**Prebuild DB:** `npm run prebuild` writes `{repo}/data/control-hub.db` using the same baseline. Runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). If `{repo}/data/control-hub.db` has `schema_version !== 3`, prebuild deletes and recreates it (CI/dev convenience only).
 
 **Removed tables:** Teams, custom kanban, and persistent goals tables are not recreated (features removed from the UI).
 

@@ -8,6 +8,7 @@ import { spawnSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { importHermesRegistry } from "./hermes-registry-import.mjs";
+import { ensureProfilesToolsParity } from "./db-schema-ensure.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -48,10 +49,10 @@ function setSchemaVersion(database, version) {
   setMeta(database, "schema_version", String(version));
 }
 
-const BASELINE_VERSION = 2;
+const BASELINE_VERSION = 3;
 
 const currentVersion = getSchemaVersion(db);
-if (currentVersion !== BASELINE_VERSION) {
+if (currentVersion < BASELINE_VERSION) {
   db.close();
   if (existsSync(DB_PATH)) {
     unlinkSync(DB_PATH);
@@ -77,6 +78,24 @@ if (currentVersion !== BASELINE_VERSION) {
 
 db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
+
+function runIncrementalMigrations(database) {
+  const version = getSchemaVersion(database);
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
+    const num = parseInt(file.split("_")[0], 10);
+    if (isNaN(num) || num <= version) continue;
+    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
+    database.exec(sql);
+    setSchemaVersion(database, num);
+    console.log(`✓ Migration ${file} applied`);
+  }
+}
+
+runIncrementalMigrations(db);
+ensureProfilesToolsParity(db);
 
 if (!existsSync(SEEDS_DIR)) {
   console.log("✓ No seeds directory — skipping");

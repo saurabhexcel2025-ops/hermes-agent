@@ -101,8 +101,30 @@ export default function SkillsPage() {
 
   // Optimistic toggle state — key: skillName, value: the effective (pending) enabled state
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
+  const [importing, setImporting] = useState(false);
 
   const { showToast, toastElement } = useToast();
+
+  const importSkillsFromHermes = async () => {
+    setImporting(true);
+    try {
+      const res = await fetch("/api/agent/profiles/sync/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ importSkills: true }),
+      });
+      const body = (await res.json()) as { error?: string; data?: { success?: boolean } };
+      if (!res.ok || body.data?.success === false) {
+        throw new Error(body.error ?? "Import failed");
+      }
+      showToast("Skills catalog imported from Hermes disk", "success");
+      await loadSkills();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Import failed", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const loadSkills = useCallback(async () => {
     setLoading(true);
@@ -267,7 +289,7 @@ export default function SkillsPage() {
       <PageHeader
         icon={FileText}
         title="Skills Manager"
-        subtitle={`${total} skill${total !== 1 ? "s" : ""} across ${data?.categoryCount ?? 0} categor${data?.categoryCount !== 1 ? "ies" : "y"}`}
+        subtitle={`${total} skill${total !== 1 ? "s" : ""} — active = catalog minus skills.disabled for ${selectedProfile}`}
         color="green"
         actions={
           <ProfileSelector
@@ -279,13 +301,28 @@ export default function SkillsPage() {
       />
 
       <div className="px-6 py-4">
+        <p className="text-xs text-white/40 font-mono mb-4 max-w-3xl">
+          Hermes uses a <strong className="text-white/60">denylist</strong> (
+          <code className="text-white/50">skills.disabled</code> in config.yaml). Disabling a skill
+          here adds it to that list for the selected profile (or Bob at default).
+        </p>
         {loading ? (
           <LoadingSpinner text="Loading skills..." />
         ) : total === 0 ? (
           <EmptyState
             icon={FileText}
-            title="No skills found"
-            description="No skill files were found in the configured skills directory."
+            title="No skills in catalog"
+            description="Import the global skills tree from ~/.hermes/skills into Control Hub SQLite, then push to sync disk."
+            action={
+              <Button
+                variant="primary"
+                color="green"
+                onClick={() => void importSkillsFromHermes()}
+                disabled={importing}
+              >
+                {importing ? "Importing…" : "Import skills from Hermes"}
+              </Button>
+            }
           />
         ) : (
           <div className="flex flex-col gap-6">

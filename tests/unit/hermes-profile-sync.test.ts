@@ -104,4 +104,39 @@ describe("hermes-profile-sync", () => {
     expect(results).toHaveLength(0);
     expect(readFileSync(soulPath, "utf-8")).toBe("# User edit on disk");
   });
+
+  it("pull normalizes granular cli toolsets into compact hermes-cli", () => {
+    const { upsertProfile, getProfile } = require("@/lib/profiles-repository") as typeof import("@/lib/profiles-repository");
+    const { pullProfileFromHermes } = require("@/lib/hermes-profile-sync") as typeof import("@/lib/hermes-profile-sync");
+
+    const profileDir = join(hermesRoot, "profiles", "bob");
+    mkdirSync(profileDir, { recursive: true });
+    writeFileSync(
+      join(profileDir, "config.yaml"),
+      [
+        "skills:",
+        "  disabled: []",
+        "platform_toolsets:",
+        "  cli:",
+        "    - hermes-cli",
+        "    - browser",
+        "    - web",
+        "    - terminal",
+      ].join("\n") + "\n",
+    );
+
+    upsertProfile({
+      slug: "bob",
+      displayName: "Bob",
+      soulMd: "# Bob",
+      agentsMd: "# Agents",
+      configYaml: "agent:\n  personality: technical\n",
+    });
+
+    const pull = pullProfileFromHermes("bob");
+    expect(pull.success).toBe(true);
+    const row = getProfile("bob");
+    const json = JSON.parse(row?.platformToolsetsJson ?? "{}") as Record<string, string[]>;
+    expect(json.cli).toEqual(["hermes-cli"]);
+  });
 });

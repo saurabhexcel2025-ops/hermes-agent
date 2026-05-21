@@ -10,6 +10,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
+import { ensureProfilesToolsParity } from "./db-schema-ensure.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -87,6 +88,20 @@ db.exec(`
 let currentVersion = getSchemaVersion(db);
 console.log(`schema_version before: ${currentVersion}`);
 
+const hasCoreSchema = Boolean(
+  db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('missions', 'agent_profiles') LIMIT 1")
+    .get(),
+);
+
+if (currentVersion === 0 && !hasCoreSchema) {
+  const baselinePath = join(MIGRATIONS_DIR, "001_baseline.sql");
+  db.exec(readFileSync(baselinePath, "utf-8"));
+  setSchemaVersion(db, 3);
+  currentVersion = 3;
+  console.log("Applied baseline schema -> schema_version 3");
+}
+
 const files = readdirSync(MIGRATIONS_DIR)
   .filter((f) => f.endsWith(".sql"))
   .sort();
@@ -101,6 +116,8 @@ for (const file of files) {
   currentVersion = num;
   console.log(`  -> schema_version ${num}`);
 }
+
+ensureProfilesToolsParity(db);
 
 const catTable = db
   .prepare(

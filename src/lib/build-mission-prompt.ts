@@ -14,6 +14,7 @@ export interface BuildPromptOptions {
   localDirs?: LocalDirEntry[] | string[];
   references?: string[];
   skills?: string[];
+  toolsets?: string[];
   context?: string;
   goals?: string[];
   missionTimeMinutes?: number;
@@ -157,6 +158,9 @@ export function buildMissionPrompt(opts: BuildPromptOptions): string {
   const skills = formatList(opts.skills);
   if (skills) sections.push(xmlTag("recommended_skills", skills));
 
+  const toolsets = formatList(opts.toolsets);
+  if (toolsets) sections.push(xmlTag("recommended_toolsets", toolsets));
+
   if (opts.context?.trim()) {
     sections.push(
       xmlTagCdata("additional_context", opts.context.trim()),
@@ -236,6 +240,11 @@ export function buildMissionPromptHuman(opts: BuildPromptOptions): string {
   const skills = formatList(opts.skills);
   if (skills) {
     parts.push(`## Recommended skills\n\n${skills}`);
+  }
+
+  const toolsets = formatList(opts.toolsets);
+  if (toolsets) {
+    parts.push(`## Recommended toolsets\n\n${toolsets}`);
   }
 
   const scope = formatMissionScope(opts.missionTimeMinutes);

@@ -13,6 +13,7 @@ import CategoryCombobox, {
 } from "@/components/missions/CategoryCombobox";
 import MissionPromptPreview from "@/components/missions/MissionPromptPreview";
 import SkillSelector from "@/components/ui/SkillSelector";
+import ToolsetSelector from "@/components/ui/ToolsetSelector";
 import {
   ComposerAccordion,
   ComposerFieldLabel,
@@ -40,6 +41,7 @@ export interface MissionFormState {
   newReferences: string[];
   referenceInput: string;
   newSkills: string[];
+  newToolsets: string[];
 }
 
 export interface MissionCreateFormProps {
@@ -409,6 +411,16 @@ export default function MissionCreateForm({
         </div>
 
         <div>
+          <ComposerFieldLabel>Recommend Hermes toolsets</ComposerFieldLabel>
+          <ToolsetSelector
+            value={formState.newToolsets}
+            onChange={(toolsets) => setFormField("newToolsets", toolsets)}
+            profileId={formState.newProfile}
+            max={10}
+          />
+        </div>
+
+        <div>
           <ComposerFieldLabel>Additional context</ComposerFieldLabel>
           <AutoTextarea
             value={formState.newContext}
@@ -483,6 +495,7 @@ export default function MissionCreateForm({
           localDirs={formState.newLocalDirs}
           references={formState.newReferences}
           skills={formState.newSkills}
+          toolsets={formState.newToolsets}
           missionTimeMinutes={formState.newMissionTime}
           timeoutMinutes={formState.newTimeout}
         />

@@ -1,337 +1,425 @@
 // ═══════════════════════════════════════════════════════════════
-// Tools Manager — Tool Plugin Registry
-// Shows all tools from the SQLite registry (core, platform, custom, MCP).
-// Enables/disables tools and registers new MCP/custom tools.
+// Hermes Toolsets — per-profile platform_toolsets (SQLite → config.yaml)
 // ═══════════════════════════════════════════════════════════════
 
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Wrench, Check, ChevronDown, ChevronRight,
-  Info, ToggleLeft, ToggleRight, Plus,
+  Wrench,
+  ChevronDown,
+  ChevronRight,
+  Info,
+  RefreshCw,
+  Upload,
+  Download,
 } from "lucide-react";
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
-import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import type { ToolDefinition } from "@/lib/agent-backend/types";
+import ProfileSelector from "@/components/ui/ProfileSelector";
+import type { PlatformToolsets } from "@/lib/profile-config-builder";
+import type { AgentProfile } from "@/types/hermes";
+import {
+  HERMES_CONFIGURABLE_TOOLSETS,
+  HERMES_PLATFORMS,
+  toolsetCatalogLabel,
+} from "@/lib/hermes-toolset-catalog";
 
-const CATEGORY_META: Record<string, { label: string; color: "cyan" | "purple" | "orange" | "pink" | "green" | "gray"; badgeLabel?: string; badgeColor?: "cyan" | "purple" | "pink" | "gray" }> = {
-  core: { label: "Core Tools", color: "cyan", badgeLabel: "Core", badgeColor: "cyan" },
-  platform: { label: "Platform Tools", color: "purple", badgeLabel: "Platform", badgeColor: "purple" },
-  custom: { label: "Custom Tools", color: "orange" },
-  mcp: { label: "MCP Tools", color: "pink", badgeLabel: "MCP", badgeColor: "pink" },
-};
+function PlatformToolsetsSummary({ toolsets }: { toolsets: PlatformToolsets }) {
+  const platforms = Object.keys(toolsets).sort();
+  if (platforms.length === 0) {
+    return (
+      <p className="text-xs text-white/35 font-mono">
+        No platform toolsets configured. Pull from Hermes or enable toolsets below.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {platforms.map((platform) => (
+        <div
+          key={platform}
+          className="rounded-lg border border-neon-orange/25 bg-dark-950/60 px-2.5 py-1.5"
+        >
+          <span className="text-[10px] font-mono uppercase text-neon-orange/80">{platform}</span>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {toolsets[platform].map((toolset) => (
+              <span
+                key={`${platform}-${toolset}`}
+                className="text-[10px] font-mono text-white/55 bg-white/5 rounded px-1.5 py-0.5"
+                title={toolset}
+              >
+                {toolsetCatalogLabel(toolset)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function ToolsPage() {
-  const [tools, setTools] = useState<ToolDefinition[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [pendingToggles, setPendingToggles] = useState<Record<string, boolean>>({});
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    core: true, platform: true, custom: true, mcp: true,
+  const [selectedProfile, setSelectedProfile] = useState("default");
+  const [platformToolsets, setPlatformToolsets] = useState<PlatformToolsets>({});
+  const [toolsetsJson, setToolsetsJson] = useState("{}");
+  const [toolsetsSource, setToolsetsSource] = useState<string | null>(null);
+  const [loadingToolsets, setLoadingToolsets] = useState(true);
+  const [savingToolsets, setSavingToolsets] = useState(false);
+  const [syncing, setSyncing] = useState<"pull" | "push" | null>(null);
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, boolean>>({
+    cli: true,
   });
-  const [showRegister, setShowRegister] = useState(false);
-  const [registering, setRegistering] = useState(false);
-  const [registerForm, setRegisterForm] = useState({
-    name: "", label: "", description: "", category: "custom",
-  });
+  const [profileSyncStatus, setProfileSyncStatus] = useState<AgentProfile["syncStatus"] | null>(null);
   const { showToast, toastElement } = useToast();
 
-  const loadTools = useCallback(async () => {
-    setLoading(true);
+  const loadProfileSyncStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/tools");
-      const d = await res.json();
-      setTools(d.data?.tools ?? []);
-      setPendingToggles({});
+      const res = await fetch("/api/agent/profiles");
+      const data = await res.json();
+      if (!res.ok) return;
+      const profiles = (data.data?.profiles ?? []) as AgentProfile[];
+      const match = profiles.find((p) => p.id === selectedProfile);
+      setProfileSyncStatus(match?.syncStatus ?? null);
     } catch {
-      showToast("Failed to load tools", "error");
-    } finally {
-      setLoading(false);
+      setProfileSyncStatus(null);
     }
-  }, [showToast]);
+  }, [selectedProfile]);
 
-  useEffect(() => { loadTools(); }, [loadTools]);
-
-  const isEnabled = (tool: ToolDefinition) => {
-    if (tool.id in pendingToggles) return pendingToggles[tool.id];
-    return tool.enabled;
-  };
-
-  const toggleTool = async (tool: ToolDefinition) => {
-    const newEnabled = !isEnabled(tool);
-    setPendingToggles((prev) => ({ ...prev, [tool.id]: newEnabled }));
-  };
-
-  const saveChanges = async () => {
-    setSaving(true);
+  const loadToolsets = useCallback(async () => {
+    setLoadingToolsets(true);
     try {
-      for (const [id, enabled] of Object.entries(pendingToggles)) {
-        await fetch("/api/tools", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "configure", id, enabled }),
-        });
+      const res = await fetch(`/api/agent/profiles/${selectedProfile}/toolsets`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load toolsets");
+      const loaded = (data.data?.platformToolsets ?? {}) as PlatformToolsets;
+      setPlatformToolsets(loaded);
+      setToolsetsJson(JSON.stringify(loaded, null, 2));
+      setToolsetsSource(data.data?.source ?? null);
+    } catch (err) {
+      setPlatformToolsets({});
+      setToolsetsJson("{}");
+      setToolsetsSource(null);
+      showToast(err instanceof Error ? err.message : "Failed to load toolsets", "error");
+    } finally {
+      setLoadingToolsets(false);
+    }
+  }, [selectedProfile, showToast]);
+
+  useEffect(() => {
+    void loadToolsets();
+    void loadProfileSyncStatus();
+  }, [loadToolsets, loadProfileSyncStatus]);
+
+  const toggleToolset = (platformId: string, toolsetId: string) => {
+    setPlatformToolsets((prev) => {
+      const current = [...(prev[platformId] ?? [])];
+      const idx = current.indexOf(toolsetId);
+      if (idx >= 0) {
+        current.splice(idx, 1);
+      } else {
+        current.push(toolsetId);
       }
-      showToast("Tools updated", "success");
-      setPendingToggles({});
-      loadTools();
-    } catch {
-      showToast("Failed to save changes", "error");
+      const next = { ...prev, [platformId]: current.sort() };
+      if (current.length === 0) {
+        const copy = { ...next };
+        delete copy[platformId];
+        setToolsetsJson(JSON.stringify(copy, null, 2));
+        return copy;
+      }
+      setToolsetsJson(JSON.stringify(next, null, 2));
+      return next;
+    });
+  };
+
+  const isToolsetEnabled = (platformId: string, toolsetId: string): boolean => {
+    return (platformToolsets[platformId] ?? []).includes(toolsetId);
+  };
+
+  const saveToolsets = async () => {
+    setSavingToolsets(true);
+    try {
+      let payload: PlatformToolsets = platformToolsets;
+      if (showAdvancedJson) {
+        const parsed = JSON.parse(toolsetsJson) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("Invalid JSON object");
+        }
+        payload = parsed as PlatformToolsets;
+      }
+      const res = await fetch(`/api/agent/profiles/${selectedProfile}/toolsets`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platformToolsets: payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save toolsets");
+      showToast("Toolsets saved and pushed to Hermes", "success");
+      await loadToolsets();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save toolsets", "error");
     } finally {
-      setSaving(false);
+      setSavingToolsets(false);
     }
   };
 
-  const handleRegister = async () => {
-    if (!registerForm.name.trim() || !registerForm.label.trim()) return;
-    setRegistering(true);
+  const pullFromHermes = async () => {
+    setSyncing("pull");
     try {
-      const res = await fetch("/api/tools", {
+      const body =
+        selectedProfile === "default"
+          ? { root: true }
+          : { slug: selectedProfile };
+      const res = await fetch("/api/agent/profiles/sync/pull", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "register",
-          name: registerForm.name.trim(),
-          label: registerForm.label.trim(),
-          description: registerForm.description.trim(),
-          category: registerForm.category,
-        }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Registration failed");
-      showToast(`Tool "${registerForm.label}" registered`, "success");
-      setShowRegister(false);
-      setRegisterForm({ name: "", label: "", description: "", category: "custom" });
-      loadTools();
-    } catch {
-      showToast("Failed to register tool", "error");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Pull failed");
+      showToast("Pulled toolsets from Hermes", "success");
+      await loadToolsets();
+      await loadProfileSyncStatus();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Pull failed", "error");
     } finally {
-      setRegistering(false);
+      setSyncing(null);
     }
   };
 
-  // Group tools by category
-  const toolsByCategory: Record<string, ToolDefinition[]> = {};
-  for (const tool of tools) {
-    const cat = tool.category || "custom";
-    if (!toolsByCategory[cat]) toolsByCategory[cat] = [];
-    toolsByCategory[cat].push(tool);
-  }
+  const pushToHermes = async () => {
+    setSyncing("push");
+    try {
+      const body =
+        selectedProfile === "default"
+          ? { root: true }
+          : { slug: selectedProfile };
+      const res = await fetch("/api/agent/profiles/sync/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Push failed");
+      showToast("Pushed profile to Hermes", "success");
+      await loadProfileSyncStatus();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Push failed", "error");
+    } finally {
+      setSyncing(null);
+    }
+  };
 
-  const hasPending = Object.keys(pendingToggles).length > 0;
+  const platformCount = Object.keys(platformToolsets).length;
+  const toolsetCount = Object.values(platformToolsets).reduce((n, list) => n + list.length, 0);
 
   return (
     <AppPageShell>
       {toastElement}
       <PageHeader
         icon={Wrench}
-        title="Tool Registry"
-        subtitle={`${tools.length} tools registered — ${tools.filter(t => t.enabled).length} enabled`}
+        title="Hermes Toolsets"
+        subtitle={
+          loadingToolsets
+            ? "Loading profile toolsets…"
+            : `${platformCount} platform(s), ${toolsetCount} toolset(s) for selected profile`
+        }
         color="orange"
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Button
               variant="ghost"
               size="sm"
               color="orange"
-              icon={Plus}
-              onClick={() => setShowRegister(true)}
+              icon={syncing === "pull" ? undefined : Download}
+              onClick={() => void pullFromHermes()}
+              disabled={syncing !== null}
             >
-              Register Tool
+              {syncing === "pull" ? "Pulling…" : "Pull from Hermes"}
             </Button>
-            {hasPending && (
-              <Button
-                variant="primary"
-                color="orange"
-                size="sm"
-                icon={saving ? undefined : Check}
-                onClick={saveChanges}
-                disabled={saving}
-              >
-                {saving ? "Saving..." : "Save Changes"}
-              </Button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="px-6 py-6">
-        {loading ? (
-          <LoadingSpinner text="Loading tools..." />
-        ) : tools.length === 0 ? (
-          <EmptyState
-            icon={Wrench}
-            title="No tools registered"
-            description="Register custom tools or enable Hermes platform tools"
-          />
-        ) : (
-          <div className="space-y-4">
-            {["core", "platform", "custom", "mcp"].map((category) => {
-              const meta = CATEGORY_META[category];
-              if (!meta) return null;
-              const categoryTools = toolsByCategory[category] ?? [];
-              if (categoryTools.length === 0) return null;
-              const isExpanded = expandedCategories[category] ?? true;
-              const enabledCount = categoryTools.filter(t => isEnabled(t)).length;
-
-              return (
-                <div key={category} className="rounded-xl border border-white/10 bg-dark-900/50">
-                  {/* Category Header */}
-                  <button
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 rounded-t-xl transition-colors"
-                    onClick={() =>
-                      setExpandedCategories((prev) => ({ ...prev, [category]: !isExpanded }))
-                    }
-                  >
-                    <div className="flex items-center gap-2">
-                      {isExpanded
-                        ? <ChevronDown className="w-4 h-4 text-white/30" />
-                        : <ChevronRight className="w-4 h-4 text-white/30" />}
-                      <span className="text-sm font-semibold text-white/70">
-                        {meta.label}
-                      </span>
-                      <Badge color={meta.color} size="sm">
-                        {enabledCount}/{categoryTools.length}
-                      </Badge>
-                    </div>
-                  </button>
-
-                  {/* Tools List */}
-                  {isExpanded && (
-                    <div className="border-t border-white/5">
-                      {categoryTools.map((tool) => {
-                        const enabled = isEnabled(tool);
-                        const toolMeta = CATEGORY_META[tool.category];
-                        return (
-                          <div
-                            key={tool.id}
-                            className={`flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors ${!enabled ? "opacity-50" : ""}`}
-                          >
-                            {/* Toggle */}
-                            <button
-                              onClick={() => toggleTool(tool)}
-                              className="flex-shrink-0"
-                              title={enabled ? "Disable" : "Enable"}
-                            >
-                              {enabled
-                                ? <ToggleRight className="w-6 h-6 text-neon-orange" />
-                                : <ToggleLeft className="w-6 h-6 text-white/20" />}
-                            </button>
-
-                            {/* Tool Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-mono text-white/80">{tool.label}</span>
-                                {toolMeta?.badgeLabel && (
-                                  <Badge
-                                    color={toolMeta.badgeColor ?? "gray"}
-                                    size="sm"
-                                  >
-                                    {toolMeta.badgeLabel}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-white/30 mt-0.5">{tool.description}</p>
-                              <p className="text-xs text-white/15 mt-0.5 font-mono">{tool.name}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Info Banner */}
-        <div className="mt-6 p-3 rounded-lg bg-dark-900/50 border border-white/5 flex items-start gap-2">
-          <Info className="w-4 h-4 text-white/30 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-white/30">
-            Tools are registered in the Control Hub SQLite database.
-            Enable or disable tools to control what this agent can do.
-            Hermes platform tools appear here once registered.
-            MCP tools can be registered for custom integrations.
-          </p>
-        </div>
-      </div>
-
-      {/* Register Tool Modal */}
-      <Modal
-        open={showRegister}
-        onClose={() => setShowRegister(false)}
-        title="Register Tool"
-        icon={Plus}
-        iconColor="text-neon-orange"
-        size="md"
-        footer={
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setShowRegister(false)}>Cancel</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              color="orange"
+              icon={syncing === "push" ? undefined : Upload}
+              onClick={() => void pushToHermes()}
+              disabled={syncing !== null}
+            >
+              {syncing === "push" ? "Pushing…" : "Push to Hermes"}
+            </Button>
             <Button
               variant="primary"
               color="orange"
               size="sm"
-              icon={Plus}
-              onClick={handleRegister}
-              disabled={!registerForm.name.trim() || !registerForm.label.trim() || registering}
+              icon={savingToolsets ? undefined : RefreshCw}
+              onClick={() => void saveToolsets()}
+              disabled={savingToolsets || loadingToolsets}
             >
-              {registering ? "Registering..." : "Register"}
+              {savingToolsets ? "Saving…" : "Save & push toolsets"}
             </Button>
-          </>
+          </div>
         }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-white/50 mb-1">Tool Name (unique identifier)</label>
-            <input
-              type="text"
-              value={registerForm.name}
-              onChange={(e) => setRegisterForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. my-custom-tool"
-              className="w-full bg-dark-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange-500/50 focus:outline-none font-mono"
-            />
+      />
+
+      <div className="px-6 py-6 max-w-5xl">
+        {profileSyncStatus === "drift" && (
+          <div className="mb-4 p-3 rounded-lg bg-semantic-warning/10 border border-semantic-warning/30 flex items-start gap-2">
+            <Info className="w-4 h-4 text-semantic-warning flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-semantic-warning/90">
+              Disk and SQLite differ for this profile. Use <strong>Pull from Hermes</strong> to
+              import disk changes, or <strong>Save & push toolsets</strong> / <strong>Push</strong>{" "}
+              to write Control Hub state to <code className="text-white/50">~/.hermes</code>.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm text-white/50 mb-1">Display Label</label>
-            <input
-              type="text"
-              value={registerForm.label}
-              onChange={(e) => setRegisterForm(f => ({ ...f, label: e.target.value }))}
-              placeholder="e.g. My Custom Tool"
-              className="w-full bg-dark-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange-500/50 focus:outline-none"
-            />
+        )}
+        {profileSyncStatus === "error" && (
+          <div className="mb-4 p-3 rounded-lg bg-semantic-error/10 border border-semantic-error/30">
+            <p className="text-xs text-semantic-error">
+              Last sync failed. Check gateway logs, then retry Pull or Push.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm text-white/50 mb-1">Description</label>
-            <textarea
-              value={registerForm.description}
-              onChange={(e) => setRegisterForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="What does this tool do?"
-              rows={3}
-              className="w-full bg-dark-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange-500/50 focus:outline-none resize-none"
-            />
+        )}
+        <div className="mb-4 p-3 rounded-lg bg-dark-900/50 border border-white/5 flex items-start gap-2">
+          <Info className="w-4 h-4 text-white/30 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-white/30">
+            Runtime tool access is defined per profile in Hermes{" "}
+            <code className="text-white/40">platform_toolsets</code>. Control Hub stores
+            toolsets in SQLite and mirrors them to <code className="text-white/40">config.yaml</code>{" "}
+            on save or push. Use <strong className="text-white/50">Pull</strong> after editing with{" "}
+            <code className="text-white/40">hermes tools</code> on disk.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-neon-orange/20 bg-neon-orange/5 p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="sm:w-72 flex-shrink-0">
+              <h2 className="text-sm font-mono text-neon-orange mb-2">Profile</h2>
+              <ProfileSelector
+                value={selectedProfile}
+                onChange={setSelectedProfile}
+                subtitle="tooltip"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              {toolsetsSource && toolsetsSource !== "database" && (
+                <p className="text-[10px] font-mono text-neon-orange/70 mb-2">
+                  Hydrated from{" "}
+                  {toolsetsSource === "config_yaml" ? "config.yaml" : "seed pack"} into SQLite.
+                </p>
+              )}
+              {loadingToolsets ? (
+                <LoadingSpinner text="Loading toolsets…" />
+              ) : (
+                <>
+                  <PlatformToolsetsSummary toolsets={platformToolsets} />
+                  <div className="mt-4 space-y-2">
+                    {HERMES_PLATFORMS.map((platform) => {
+                      const expanded = expandedPlatforms[platform.id] ?? false;
+                      return (
+                        <div
+                          key={platform.id}
+                          className="rounded-lg border border-white/10 bg-dark-950/40"
+                        >
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 rounded-lg"
+                            onClick={() =>
+                              setExpandedPlatforms((prev) => ({
+                                ...prev,
+                                [platform.id]: !expanded,
+                              }))
+                            }
+                          >
+                            <span className="text-xs font-mono text-white/70 uppercase">
+                              {platform.label}
+                            </span>
+                            {expanded ? (
+                              <ChevronDown className="w-4 h-4 text-white/30" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-white/30" />
+                            )}
+                          </button>
+                          {expanded && (
+                            <div className="px-3 pb-3 flex flex-wrap gap-2 border-t border-white/5 pt-2">
+                              {HERMES_CONFIGURABLE_TOOLSETS.map((toolset) => {
+                                const on = isToolsetEnabled(platform.id, toolset.id);
+                                return (
+                                  <button
+                                    key={`${platform.id}-${toolset.id}`}
+                                    type="button"
+                                    title={toolset.description}
+                                    onClick={() => toggleToolset(platform.id, toolset.id)}
+                                    className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${
+                                      on
+                                        ? "border-neon-orange/50 bg-neon-orange/15 text-neon-orange"
+                                        : "border-white/10 bg-white/5 text-white/40 hover:border-white/20"
+                                    }`}
+                                  >
+                                    {toolset.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-          <div>
-            <label className="block text-sm text-white/50 mb-1">Category</label>
-            <select
-              value={registerForm.category}
-              onChange={(e) => setRegisterForm(f => ({ ...f, category: e.target.value }))}
-              className="w-full bg-dark-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-orange-500/50 focus:outline-none"
+
+          <div className="border-t border-white/10 pt-3">
+            <button
+              type="button"
+              className="text-[10px] font-mono text-white/40 hover:text-white/60"
+              onClick={() => setShowAdvancedJson((v) => !v)}
             >
-              <option value="core">Core</option>
-              <option value="platform">Platform</option>
-              <option value="custom">Custom</option>
-              <option value="mcp">MCP</option>
-            </select>
+              {showAdvancedJson ? "Hide" : "Show"} advanced JSON
+            </button>
+            {showAdvancedJson && (
+              <textarea
+                value={toolsetsJson}
+                onChange={(event) => {
+                  setToolsetsJson(event.target.value);
+                  try {
+                    const parsed = JSON.parse(event.target.value) as PlatformToolsets;
+                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                      setPlatformToolsets(parsed);
+                    }
+                  } catch {
+                    /* invalid while typing */
+                  }
+                }}
+                className="mt-2 w-full min-h-32 rounded-lg bg-dark-950/80 border border-white/10 p-3 text-xs font-mono text-white/80 outline-none focus:border-neon-orange/50"
+                spellCheck={false}
+              />
+            )}
           </div>
         </div>
-      </Modal>
+
+        <div className="mt-6 rounded-xl border border-white/10 bg-dark-900/30 p-4">
+          <h3 className="text-xs font-mono text-white/50 uppercase tracking-widest mb-2">
+            Reference — Hermes toolset IDs
+          </h3>
+          <p className="text-[10px] text-white/30 mb-3">
+            Catalog for labels only. Enabling toolsets above updates the selected profile config.
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-2 text-[10px] font-mono text-white/40">
+            {HERMES_CONFIGURABLE_TOOLSETS.map((entry) => (
+              <li key={entry.id}>
+                <span className="text-white/55">{entry.id}</span>
+                <span className="text-white/25"> — {entry.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </AppPageShell>
   );
 }

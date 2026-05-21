@@ -19,6 +19,7 @@ export interface MissionPromptPreviewProps {
   localDirs: LocalDirEntry[];
   references: string[];
   skills: string[];
+  toolsets: string[];
   missionTimeMinutes: number;
   timeoutMinutes: number;
 }
@@ -36,6 +37,7 @@ function buildOptions(props: MissionPromptPreviewProps) {
     localDirs: props.localDirs,
     references: props.references,
     skills: props.skills,
+    toolsets: props.toolsets,
     missionTimeMinutes: props.missionTimeMinutes,
     timeoutMinutes: props.timeoutMinutes,
   };

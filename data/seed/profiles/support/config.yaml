@@ -1,4 +1,20 @@
-agent:
-  personality: friendly
 skills:
-  enabled: []
+  disabled:
+    - devops/kubernetes
+    - mlops/rl-training
+platform_toolsets:
+  cli:
+    - hermes-cli
+    - web
+    - skills
+    - memory
+  discord:
+    - hermes-discord
+  telegram:
+    - hermes-telegram
+  slack:
+    - hermes-slack
+agent:
+  max_turns: 45
+terminal:
+  cwd: "."

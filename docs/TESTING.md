@@ -40,7 +40,7 @@ Config: [`jest.config.js`](../jest.config.js) at repo root. Coverage thresholds 
 - [`tests/unit/db-baseline.test.ts`](../tests/unit/db-baseline.test.ts) — in-memory schema smoke.
 - [`tests/unit/db-upgrade.integration.test.ts`](../tests/unit/db-upgrade.integration.test.ts) — on-disk legacy DB → `rebuildToBaseline` preserves credentials, models, cron, sessions.
 
-**Dual DB paths:** `npm run prebuild` writes `{repo}/data/control-hub.db`; runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). Prebuild rebuilds the repo DB when `schema_version` is not the current baseline (**v2**).
+**Dual DB paths:** `npm run prebuild` writes `{repo}/data/control-hub.db`; runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). Prebuild rebuilds the repo DB when `schema_version` is not the current baseline (**v3**).
 
 ### Bootstrap test gate
 

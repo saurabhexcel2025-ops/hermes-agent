@@ -3,6 +3,19 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { db, inTransaction, now } from "./db";
+import {
+  buildConfigYaml,
+  disabledSkillsFromJson,
+  parseConfigYaml,
+  resolvePlatformToolsets,
+  serializeJsonArray,
+  serializeJsonToolsets,
+  type PlatformToolsets,
+  type PlatformToolsetsSource,
+} from "./profile-config-builder";
+import { loadSeedPlatformToolsets } from "./seed-profile-toolsets";
+import { normalizePlatformToolsets } from "./hermes-toolset-normalize";
+import { getAgentRoot, updateAgentRoot } from "./agent-root-repository";
 
 export interface AgentProfileRow {
   slug: string;
@@ -12,6 +25,10 @@ export interface AgentProfileRow {
   configYaml: string;
   soulMd: string;
   agentsMd: string;
+  userMd: string;
+  memoryMd: string;
+  disabledSkillsJson: string;
+  platformToolsetsJson: string;
   seedKey: string | null;
   syncedAt: string | null;
   syncError: string | null;
@@ -27,6 +44,10 @@ interface DbRow {
   config_yaml: string;
   soul_md: string;
   agents_md: string;
+  user_md: string;
+  memory_md: string;
+  disabled_skills: string;
+  platform_toolsets: string;
   seed_key: string | null;
   synced_at: string | null;
   sync_error: string | null;
@@ -43,6 +64,10 @@ function rowToProfile(row: DbRow): AgentProfileRow {
     configYaml: row.config_yaml,
     soulMd: row.soul_md,
     agentsMd: row.agents_md,
+    userMd: row.user_md,
+    memoryMd: row.memory_md,
+    disabledSkillsJson: row.disabled_skills,
+    platformToolsetsJson: row.platform_toolsets,
     seedKey: row.seed_key,
     syncedAt: row.synced_at,
     syncError: row.sync_error,
@@ -53,7 +78,8 @@ function rowToProfile(row: DbRow): AgentProfileRow {
 
 const SELECT_COLS = `
   slug, display_name, description, personality, config_yaml,
-  soul_md, agents_md, seed_key, synced_at, sync_error, created_at, updated_at
+  soul_md, agents_md, user_md, memory_md, disabled_skills, platform_toolsets,
+  seed_key, synced_at, sync_error, created_at, updated_at
 `;
 
 export function listProfiles(): AgentProfileRow[] {
@@ -77,6 +103,60 @@ export function getProfileBySeedKey(seedKey: string): AgentProfileRow | null {
   return row ? rowToProfile(row) : null;
 }
 
+export function getDisabledSkills(slug: string): string[] {
+  const row = getProfile(slug);
+  if (!row) return [];
+  return disabledSkillsFromJson(row.disabledSkillsJson);
+}
+
+export interface HydratedPlatformToolsets {
+  toolsets: PlatformToolsets;
+  source: PlatformToolsetsSource;
+  platformToolsetsJson: string;
+}
+
+export function hydratePlatformToolsetsForSlug(
+  slug: string,
+  options?: { persist?: boolean },
+): HydratedPlatformToolsets | null {
+  const seedFallback = loadSeedPlatformToolsets(slug === "default" ? "default" : slug);
+
+  if (slug === "default") {
+    const row = getAgentRoot();
+    const resolved = resolvePlatformToolsets(
+      row.platformToolsetsJson,
+      row.configYaml,
+      seedFallback,
+    );
+    const toolsets = normalizePlatformToolsets(resolved.toolsets);
+    const platformToolsetsJson = serializeJsonToolsets(toolsets);
+    if (
+      options?.persist &&
+      (resolved.source !== "database" || platformToolsetsJson !== row.platformToolsetsJson)
+    ) {
+      updateAgentRoot({ platformToolsetsJson });
+    }
+    return { toolsets, source: resolved.source, platformToolsetsJson };
+  }
+
+  const row = getProfile(slug);
+  if (!row) return null;
+  const resolved = resolvePlatformToolsets(
+    row.platformToolsetsJson,
+    row.configYaml,
+    seedFallback,
+  );
+  const toolsets = normalizePlatformToolsets(resolved.toolsets);
+  const platformToolsetsJson = serializeJsonToolsets(toolsets);
+  if (
+    options?.persist &&
+    (resolved.source !== "database" || platformToolsetsJson !== row.platformToolsetsJson)
+  ) {
+    updateProfileContent(slug, { platformToolsetsJson });
+  }
+  return { toolsets, source: resolved.source, platformToolsetsJson };
+}
+
 export interface UpsertProfileInput {
   slug: string;
   displayName: string;
@@ -85,18 +165,62 @@ export interface UpsertProfileInput {
   configYaml?: string;
   soulMd?: string;
   agentsMd?: string;
+  userMd?: string;
+  memoryMd?: string;
+  disabledSkillsJson?: string;
+  platformToolsetsJson?: string;
   seedKey?: string | null;
+}
+
+export function resolvedPlatformToolsetsForProfile(row: AgentProfileRow): PlatformToolsets {
+  return resolvePlatformToolsets(
+    row.platformToolsetsJson,
+    row.configYaml,
+    loadSeedPlatformToolsets(row.slug),
+  ).toolsets;
+}
+
+export function assembleConfigYamlForProfile(row: AgentProfileRow): string {
+  const parts = parseConfigYaml(row.configYaml);
+  return buildConfigYaml({
+    personality: row.personality || parts.personality,
+    disabledSkills: disabledSkillsFromJson(row.disabledSkillsJson),
+    platformDisabledSkills: parts.platformDisabledSkills,
+    platformToolsets: resolvedPlatformToolsetsForProfile(row),
+    extraYamlLines: parts.extraYamlLines,
+  });
 }
 
 export function upsertProfile(input: UpsertProfileInput): AgentProfileRow {
   const ts = now();
   const existing = getProfile(input.slug);
+  const personality = input.personality ?? existing?.personality ?? "technical";
+  let configYaml = input.configYaml ?? existing?.configYaml ?? defaultConfigYaml(personality);
+  if (input.disabledSkillsJson !== undefined || input.platformToolsetsJson !== undefined || input.personality !== undefined) {
+    const disabled = input.disabledSkillsJson !== undefined
+      ? disabledSkillsFromJson(input.disabledSkillsJson)
+      : disabledSkillsFromJson(existing?.disabledSkillsJson ?? "[]");
+    const toolsetsJson = input.platformToolsetsJson ?? existing?.platformToolsetsJson ?? "{}";
+    const toolsets = resolvePlatformToolsets(
+      toolsetsJson,
+      configYaml,
+      loadSeedPlatformToolsets(input.slug),
+    ).toolsets;
+    configYaml = buildConfigYaml({
+      personality,
+      disabledSkills: disabled,
+      platformDisabledSkills: parseConfigYaml(configYaml).platformDisabledSkills,
+      platformToolsets: toolsets,
+      extraYamlLines: parseConfigYaml(configYaml).extraYamlLines,
+    });
+  }
   db()
     .prepare(
       `INSERT INTO agent_profiles (
         slug, display_name, description, personality, config_yaml,
-        soul_md, agents_md, seed_key, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        soul_md, agents_md, user_md, memory_md, disabled_skills, platform_toolsets,
+        seed_key, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(slug) DO UPDATE SET
         display_name = excluded.display_name,
         description = excluded.description,
@@ -104,6 +228,10 @@ export function upsertProfile(input: UpsertProfileInput): AgentProfileRow {
         config_yaml = excluded.config_yaml,
         soul_md = excluded.soul_md,
         agents_md = excluded.agents_md,
+        user_md = excluded.user_md,
+        memory_md = excluded.memory_md,
+        disabled_skills = excluded.disabled_skills,
+        platform_toolsets = excluded.platform_toolsets,
         seed_key = COALESCE(excluded.seed_key, agent_profiles.seed_key),
         updated_at = excluded.updated_at`,
     )
@@ -111,10 +239,14 @@ export function upsertProfile(input: UpsertProfileInput): AgentProfileRow {
       input.slug,
       input.displayName,
       input.description ?? existing?.description ?? "",
-      input.personality ?? existing?.personality ?? "technical",
-      input.configYaml ?? existing?.configYaml ?? defaultConfigYaml(input.personality ?? "technical"),
+      personality,
+      configYaml,
       input.soulMd ?? existing?.soulMd ?? "",
       input.agentsMd ?? existing?.agentsMd ?? "",
+      input.userMd ?? existing?.userMd ?? "",
+      input.memoryMd ?? existing?.memoryMd ?? "",
+      input.disabledSkillsJson ?? existing?.disabledSkillsJson ?? "[]",
+      input.platformToolsetsJson ?? existing?.platformToolsetsJson ?? "{}",
       input.seedKey ?? existing?.seedKey ?? null,
       existing?.createdAt ?? ts,
       ts,
@@ -124,7 +256,21 @@ export function upsertProfile(input: UpsertProfileInput): AgentProfileRow {
 
 export function updateProfileContent(
   slug: string,
-  patch: Partial<Pick<UpsertProfileInput, "displayName" | "description" | "personality" | "configYaml" | "soulMd" | "agentsMd">>,
+  patch: Partial<
+    Pick<
+      UpsertProfileInput,
+      | "displayName"
+      | "description"
+      | "personality"
+      | "configYaml"
+      | "soulMd"
+      | "agentsMd"
+      | "userMd"
+      | "memoryMd"
+      | "disabledSkillsJson"
+      | "platformToolsetsJson"
+    >
+  >,
 ): AgentProfileRow | null {
   const existing = getProfile(slug);
   if (!existing) return null;
@@ -136,7 +282,17 @@ export function updateProfileContent(
     configYaml: patch.configYaml ?? existing.configYaml,
     soulMd: patch.soulMd ?? existing.soulMd,
     agentsMd: patch.agentsMd ?? existing.agentsMd,
+    userMd: patch.userMd ?? existing.userMd,
+    memoryMd: patch.memoryMd ?? existing.memoryMd,
+    disabledSkillsJson: patch.disabledSkillsJson ?? existing.disabledSkillsJson,
+    platformToolsetsJson: patch.platformToolsetsJson ?? existing.platformToolsetsJson,
     seedKey: existing.seedKey,
+  });
+}
+
+export function setProfileDisabledSkills(slug: string, disabled: string[]): AgentProfileRow | null {
+  return updateProfileContent(slug, {
+    disabledSkillsJson: serializeJsonArray(disabled),
   });
 }
 
@@ -150,9 +306,11 @@ export function renameProfileSlug(oldSlug: string, newSlug: string): AgentProfil
       .prepare(
         `INSERT INTO agent_profiles (
           slug, display_name, description, personality, config_yaml,
-          soul_md, agents_md, seed_key, synced_at, sync_error, created_at, updated_at
+          soul_md, agents_md, user_md, memory_md, disabled_skills, platform_toolsets,
+          seed_key, synced_at, sync_error, created_at, updated_at
         ) SELECT ?, display_name, description, personality, config_yaml,
-          soul_md, agents_md, seed_key, NULL, NULL, created_at, ?
+          soul_md, agents_md, user_md, memory_md, disabled_skills, platform_toolsets,
+          seed_key, NULL, NULL, created_at, ?
         FROM agent_profiles WHERE slug = ?`,
       )
       .run(newSlug, now(), oldSlug);
@@ -187,9 +345,11 @@ export function listSeededProfiles(): AgentProfileRow[] {
 }
 
 export function defaultConfigYaml(personality: string): string {
-  return `agent:
-  personality: ${personality}
-skills:
-  enabled: []
-`;
+  return buildConfigYaml({
+    personality,
+    disabledSkills: [],
+    platformDisabledSkills: {},
+    platformToolsets: {},
+    extraYamlLines: [],
+  });
 }

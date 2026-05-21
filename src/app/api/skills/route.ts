@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, readdirSync, existsSync, statSync } from "fs";
 
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
-import {
-  parseSkillsEnabledFromYaml,
-  configPathForProfile,
-  skillsRootForProfile,
-  type ParsedSkillsEnabled,
-} from "@/lib/skills-enabled-config";
+import { ensureDb } from "@/lib/db";
+import { getAgentRoot } from "@/lib/agent-root-repository";
+import { getDisabledSkills, getProfile } from "@/lib/profiles-repository";
+import { listSkills } from "@/lib/skills-repository";
+import { skillsRootForProfile } from "@/lib/skills-config";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
+import { resolveSafeProfileName } from "@/lib/path-security";
+import { scanDiskSkillsCatalog } from "@/lib/hermes-profile-sync";
+import { existsSync, statSync } from "fs";
 
 interface Skill {
   name: string;
@@ -20,82 +21,90 @@ interface Skill {
   lastModified: string;
 }
 
-function scanSkills(dir: string, category: string, parsed: ParsedSkillsEnabled): Skill[] {
-  const skills: Skill[] = [];
-  if (!existsSync(dir)) return skills;
-
-  try {
-    const items = readdirSync(dir, { withFileTypes: true });
-    for (const item of items) {
-      if (item.name.startsWith(".")) continue;
-      const fullPath = dir + "/" + item.name;
-
-      if (item.isDirectory()) {
-        const skillPath = fullPath + "/SKILL.md";
-        if (existsSync(skillPath)) {
-          try {
-            const content = readFileSync(skillPath, "utf-8");
-            const stats = statSync(skillPath);
-            let description = "";
-            const descMatch = content.match(/description:\s*["'](.+?)["']/);
-            if (descMatch) description = descMatch[1];
-            else {
-              const lines = content.split("\n");
-              for (const line of lines) {
-                const t = line.trim();
-                if (t && !t.startsWith("#") && !t.startsWith("---") && !t.startsWith("```")) {
-                  description = t.substring(0, 120);
-                  break;
-                }
-              }
-            }
-
-            const enabled =
-              parsed.mode === "inherit_all" || parsed.enabledNames.has(item.name);
-
-            skills.push({
-              name: item.name,
-              category: category || "uncategorized",
-              path: skillPath,
-              description,
-              enabled,
-              size: stats.size,
-              lastModified: stats.mtime.toISOString(),
-            });
-          } catch (error) {
-            logApiError("GET /api/skills", `reading skill ${skillPath}`, error);
-          }
-        }
-
-        skills.push(...scanSkills(fullPath, item.name, parsed));
-      }
+function disabledSetForProfile(profile: string): Set<string> {
+  if (profile === "default") {
+    const row = getAgentRoot();
+    try {
+      return new Set(JSON.parse(row.disabledSkillsJson || "[]") as string[]);
     }
-  } catch (error) {
-    logApiError("GET /api/skills", `reading skills directory ${dir}`, error);
+    catch {
+      return new Set();
+    }
   }
-  return skills;
+  return new Set(getDisabledSkills(profile));
 }
 
 export async function GET(request: NextRequest) {
-  const profile = request.nextUrl.searchParams.get("profile") || "default";
+  const profileParam = request.nextUrl.searchParams.get("profile") || "default";
+  const prof = resolveSafeProfileName(profileParam);
+  if (!prof.ok) {
+    return NextResponse.json({ error: prof.error }, { status: 400 });
+  }
+  const profile = prof.profile;
 
   try {
+    ensureDb();
     const home = getActiveHermesHome();
-    const configPath = configPathForProfile(home, profile);
     const skillsDir = skillsRootForProfile(home, profile);
+    const disabled = disabledSetForProfile(profile);
 
-    const rawConfig = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
-    const parsed = rawConfig
-      ? parseSkillsEnabledFromYaml(rawConfig)
-      : { mode: "inherit_all" as const };
+    const dbSkills = listSkills();
+    const dbKeys = new Set(dbSkills.map((s) => s.skillKey));
+    const skills: Skill[] = dbSkills.map((row) => {
+      const path = skillsDir + "/" + row.skillKey + "/SKILL.md";
+      let size = row.content.length;
+      let lastModified = row.updatedAt;
+      if (existsSync(path)) {
+        try {
+          const st = statSync(path);
+          size = st.size;
+          lastModified = st.mtime.toISOString();
+        }
+        catch {
+          // use db metadata
+        }
+      }
+      const category = row.category || row.skillKey.split("/")[0] || "uncategorized";
+      return {
+        name: row.skillKey,
+        category,
+        path,
+        description: row.description,
+        enabled: !disabled.has(row.skillKey),
+        size,
+        lastModified,
+      };
+    });
 
-    const skills = scanSkills(skillsDir, "", parsed);
+    for (const { skillKey, path } of scanDiskSkillsCatalog()) {
+      if (dbKeys.has(skillKey)) continue;
+      try {
+        const st = statSync(path);
+        const category = skillKey.split("/")[0] || "uncategorized";
+        skills.push({
+          name: skillKey,
+          category,
+          path,
+          description: "",
+          enabled: !disabled.has(skillKey),
+          size: st.size,
+          lastModified: st.mtime.toISOString(),
+        });
+      }
+      catch {
+        // skip
+      }
+    }
 
     const categories: Record<string, Skill[]> = {};
     for (const skill of skills) {
       const cat = skill.category || "uncategorized";
       if (!categories[cat]) categories[cat] = [];
       categories[cat].push(skill);
+    }
+
+    if (profile !== "default" && !getProfile(profile)) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -107,7 +116,8 @@ export async function GET(request: NextRequest) {
         profile,
       },
     });
-  } catch (error) {
+  }
+  catch (error) {
     logApiError("GET /api/skills", "listing skills", error);
     return NextResponse.json({ error: "Failed to list skills" }, { status: 500 });
   }

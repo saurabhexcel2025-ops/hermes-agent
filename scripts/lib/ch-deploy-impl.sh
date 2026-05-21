@@ -328,6 +328,11 @@ ch_deploy_cmd_rebuild() {
   ch_deploy_log_restart "Running database migrations…"
   "$NPM_BIN" run db:migrate >>"$CH_BUILD_LOG" 2>&1 || ch_deploy_log_restart "WARNING: db:migrate failed"
   if command -v npx &>/dev/null; then
+    local HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+    if [ -f "$HERMES_HOME/config.yaml" ]; then
+      npx tsx "$CH_SCRIPTS_ROOT/tooling/import-hermes-state.ts" >>"$CH_BUILD_LOG" 2>&1 ||
+        ch_deploy_log_restart "WARNING: import-hermes-state failed"
+    fi
     npx tsx "$CH_SCRIPTS_ROOT/tooling/seed-catalog.ts" --merge >>"$CH_BUILD_LOG" 2>&1 ||
       ch_deploy_log_restart "WARNING: seed-catalog failed"
   fi
@@ -395,6 +400,14 @@ ch_deploy_run_update() {
     ch_deploy_log_update "Running database migrations…"
     if ! "$NPM_BIN" run db:migrate >>"$LOG_FILE" 2>&1; then
       ch_deploy_log_update "WARNING: db:migrate failed — see ch-update.log"
+    fi
+
+    local HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+    if command -v npx &>/dev/null && [ -f "$HERMES_HOME/config.yaml" ]; then
+      ch_deploy_log_update "Importing Hermes state before seed…"
+      if ! npx tsx "$SCRIPT_DIR/tooling/import-hermes-state.ts" >>"$LOG_FILE" 2>&1; then
+        ch_deploy_log_update "WARNING: import-hermes-state failed — see ch-update.log"
+      fi
     fi
 
     ch_deploy_log_update "Seeding professional catalog (merge)…"

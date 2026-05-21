@@ -113,7 +113,9 @@ export interface ProfileFile {
 }
 
 export interface AgentProfile {
+  /** Filesystem / CLI slug (lowercase). Same as `id` for named profiles; `default` for Bob. */
   id: string;
+  /** Display label in UI (may differ from slug casing). */
   name: string;
   description: string;
   personality: string;
@@ -292,6 +294,7 @@ export interface Mission {
   localDirs?: LocalDirEntry[];
   references?: string[];
   skills?: string[];
+  suggestedToolsets?: string[];
   goals?: string[];
   modelId?: string;
   provider?: string;

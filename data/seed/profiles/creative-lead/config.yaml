@@ -1,4 +1,19 @@
-agent:
-  personality: creative
 skills:
-  enabled: []
+  disabled:
+    - devops/kubernetes
+    - mlops/rl-training
+platform_toolsets:
+  cli:
+    - hermes-cli
+    - web
+    - skills
+    - image_gen
+    - vision
+  discord:
+    - hermes-discord
+  telegram:
+    - hermes-telegram
+agent:
+  max_turns: 45
+terminal:
+  cwd: "."

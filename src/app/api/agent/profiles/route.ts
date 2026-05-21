@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, statSync } from "fs";
 
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { resolveSafeProfileName } from "@/lib/path-security";
 import { requireAuth } from "@/lib/api-auth";
@@ -13,38 +12,37 @@ import {
   getProfile,
   defaultConfigYaml,
 } from "@/lib/profiles-repository";
+import { getAgentRoot } from "@/lib/agent-root-repository";
 import {
   pushProfileToHermes,
   detectProfileDrift,
+  detectRootDrift,
   countProfileSkills,
+  countProfileToolsets,
 } from "@/lib/hermes-profile-sync";
+import { slugifyDisplayName } from "@/lib/profile-slug";
 import { buildProfileHermesPathBundle } from "@/lib/hermes-profile-paths";
 import type { ApiResponse, AgentProfile, ProfileFile } from "@/types/hermes";
 
-function loadYamlPersonality(content: string): string {
-  const lines = content.split("\n");
-  let inAgent = false;
-  for (const line of lines) {
-    if (line.trim().startsWith("agent:")) {
-      inAgent = true;
-      continue;
-    }
-    if (inAgent && !line.startsWith(" ") && line.trim()) break;
-    if (inAgent && line.includes("personality:")) {
-      return line.split("personality:")[1].trim().replace(/['"]/g, "") || "technical";
-    }
-  }
-  return "technical";
-}
-
 function getProfileFilesForSlug(slug: string): ProfileFile[] {
   const bundle = buildProfileHermesPathBundle(slug);
-  const fileDefs = [
-    { key: "soul", name: "SOUL.md", path: bundle.soul },
-    { key: "agent", name: "AGENTS.md", path: bundle.agents },
-    { key: "user", name: "USER.md", path: bundle.userMemory },
-    { key: "memory", name: "MEMORY.md", path: bundle.agentMemory },
-  ];
+  const fileDefs =
+    slug === "default"
+      ? [
+          { key: "soul", name: "SOUL.md", path: bundle.soul },
+          { key: "agent", name: "AGENTS.md", path: bundle.agents },
+          { key: "hermes", name: "HERMES.md", path: bundle.hermes },
+          { key: "user", name: "USER.md", path: bundle.userMemory },
+          { key: "memory", name: "MEMORY.md", path: bundle.agentMemory },
+          { key: "config", name: "config.yaml", path: bundle.config },
+        ]
+      : [
+          { key: "soul", name: "SOUL.md", path: bundle.soul },
+          { key: "agent", name: "AGENTS.md", path: bundle.agents },
+          { key: "user", name: "USER.md", path: bundle.userMemory },
+          { key: "memory", name: "MEMORY.md", path: bundle.agentMemory },
+          { key: "config", name: "config.yaml", path: bundle.config },
+        ];
   return fileDefs.map((def) => {
     const exists = existsSync(def.path);
     let size = 0;
@@ -71,22 +69,27 @@ function getProfileFilesForSlug(slug: string): ProfileFile[] {
 
 function rowToApiProfile(slug: string): AgentProfile | null {
   if (slug === "default") {
-    const home = getActiveHermesHome();
-    const configPath = home + "/config.yaml";
-    const personality = existsSync(configPath)
-      ? loadYamlPersonality(readFileSync(configPath, "utf-8"))
-      : "technical";
+    const root = getAgentRoot();
+    const drift = detectRootDrift();
+    let syncStatus: AgentProfile["syncStatus"] = "synced";
+    if (root.syncError) syncStatus = "error";
+    else if (drift.drifted) syncStatus = "drift";
+
     return {
       id: "default",
-      name: "Bob",
-      description: "Main agent — full access to all tools and skills",
-      personality,
+      name: root.displayName === "Bob" ? "Bob (local default)" : root.displayName,
+      description:
+        root.description ||
+        "Local Hermes root agent at HERMES_HOME — import from disk wins over seed on merge",
+      personality: root.personality,
       isDefault: true,
       isBundled: false,
       skillsCount: countProfileSkills("default"),
-      toolsCount: 0,
+      toolsCount: countProfileToolsets("default"),
       files: getProfileFilesForSlug("default"),
-      syncStatus: "synced",
+      syncStatus,
+      syncedAt: root.syncedAt,
+      syncError: root.syncError,
     };
   }
 
@@ -106,7 +109,7 @@ function rowToApiProfile(slug: string): AgentProfile | null {
     isDefault: false,
     isBundled: Boolean(row.seedKey),
     skillsCount: countProfileSkills(slug),
-    toolsCount: 0,
+    toolsCount: countProfileToolsets(slug),
     files: getProfileFilesForSlug(slug),
     syncStatus,
     syncedAt: row.syncedAt,
@@ -155,11 +158,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const slug = name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+    const slug = slugifyDisplayName(name);
 
     const prof = resolveSafeProfileName(slug);
     if (!prof.ok) {

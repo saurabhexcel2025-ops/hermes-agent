@@ -15,7 +15,8 @@ import {
 import { dirname, join } from "path";
 import { PATHS } from "../paths";
 
-export const BASELINE_SCHEMA_VERSION = 2;
+/** Squashed baseline schema, including profile/root/skills source-of-truth tables. */
+export const BASELINE_SCHEMA_VERSION = 3;
 
 const SCHEMA_VERSION_KEY = "schema_version";
 
@@ -60,7 +61,9 @@ const PRESERVE_TABLES = [
   "stories",
   "sync_registry",
   "gateway_platforms",
-  "tool_plugins",
+  "agent_profiles",
+  "agent_root",
+  "skills",
 ] as const;
 
 function tableExists(database: Database.Database, name: string): boolean {
@@ -279,7 +282,8 @@ export function exportLegacySnapshot(database: Database.Database): BaselineExpor
  * Returns true when the open database is not on the squashed baseline schema.
  */
 export function needsBaselineRebuild(database: Database.Database): boolean {
-  return getSchemaVersion(database) !== BASELINE_SCHEMA_VERSION;
+  const version = getSchemaVersion(database);
+  return version > BASELINE_SCHEMA_VERSION + 100;
 }
 
 /**

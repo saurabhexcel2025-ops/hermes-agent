@@ -86,4 +86,32 @@ describe("profiles-repository", () => {
     deleteProfile("devops");
     expect(getProfile("devops")).toBeNull();
   });
+
+  it("assembleConfigYamlForProfile keeps toolsets when platform_toolsets json is empty", () => {
+    const { upsertProfile, getProfile, assembleConfigYamlForProfile } =
+      require("@/lib/profiles-repository") as typeof import("@/lib/profiles-repository");
+    const { buildConfigYaml } =
+      require("@/lib/profile-config-builder") as typeof import("@/lib/profile-config-builder");
+
+    const configYaml = buildConfigYaml({
+      personality: "technical",
+      disabledSkills: [],
+      platformDisabledSkills: {},
+      platformToolsets: { cli: ["hermes-cli"], discord: ["hermes-discord"] },
+      extraYamlLines: [],
+    });
+
+    upsertProfile({
+      slug: "qa",
+      displayName: "QA",
+      configYaml,
+      platformToolsetsJson: "{}",
+      seedKey: "ch.prof.qa",
+    });
+
+    const assembled = assembleConfigYamlForProfile(getProfile("qa")!);
+    expect(assembled).toContain("platform_toolsets:");
+    expect(assembled).toContain("hermes-cli");
+    expect(assembled).toContain("hermes-discord");
+  });
 });

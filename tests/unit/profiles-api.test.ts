@@ -104,6 +104,26 @@ jest.mock("@/lib/db", () => ({
   ensureDb: jest.fn(),
 }));
 
+jest.mock("@/lib/agent-root-repository", () => ({
+  getAgentRoot: jest.fn(() => ({
+    id: 1,
+    displayName: "Bob",
+    description: "Main agent",
+    personality: "technical",
+    configYaml: "skills:\n  disabled: []\n",
+    soulMd: "",
+    agentsMd: "",
+    hermesMd: "",
+    userMd: "",
+    memoryMd: "",
+    disabledSkillsJson: "[]",
+    platformToolsetsJson: "{}",
+    syncedAt: null,
+    syncError: null,
+    updatedAt: "",
+  })),
+}));
+
 jest.mock("@/lib/profiles-repository", () => ({
   listProfiles: jest.fn(() =>
     [...store.values()].map((r) => ({
@@ -164,13 +184,16 @@ jest.mock("@/lib/profiles-repository", () => ({
 jest.mock("@/lib/hermes-profile-sync", () => ({
   pushProfileToHermes: jest.fn(() => ({ success: true, slug: "", backupPath: null, error: null })),
   detectProfileDrift: jest.fn(() => ({ slug: "", drifted: false, fields: [], syncError: null })),
+  detectRootDrift: jest.fn(() => ({ drifted: false, fields: [], syncError: null })),
   countProfileSkills: jest.fn(() => 0),
+  countProfileToolsets: jest.fn(() => 0),
 }));
 
 jest.mock("@/lib/hermes-profile-paths", () => ({
   buildProfileHermesPathBundle: jest.fn((slug: string) => ({
     soul: `/tmp/test-hermes/profiles/${slug}/SOUL.md`,
     agents: `/tmp/test-hermes/profiles/${slug}/AGENTS.md`,
+    hermes: `/tmp/test-hermes/profiles/${slug}/HERMES.md`,
     userMemory: `/tmp/test-hermes/profiles/${slug}/memories/USER.md`,
     agentMemory: `/tmp/test-hermes/profiles/${slug}/memories/MEMORY.md`,
     config: `/tmp/test-hermes/profiles/${slug}/config.yaml`,
@@ -209,7 +232,7 @@ describe("GET /api/agent/profiles", () => {
     expect(res.status).toBe(200);
     expect(data.data.profiles).toHaveLength(1);
     expect(data.data.profiles[0].id).toBe("default");
-    expect(data.data.profiles[0].name).toBe("Bob");
+    expect(data.data.profiles[0].name).toBe("Bob (local default)");
     expect(data.data.profiles[0].isDefault).toBe(true);
     expect(data.data.profiles[0].isBundled).toBe(false);
   });

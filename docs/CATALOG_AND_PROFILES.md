@@ -1,57 +1,93 @@
 # Catalog and professional profiles
 
-The professional catalog (six agent profiles, twelve mission templates, mission categories) ships in **`data/seed/`**. At runtime it lives in **SQLite** (`CH_DATA_DIR/control-hub.db`); Hermes gets profile **trees on disk** when you push sync.
+Control Hub SQLite is the **source of truth** for agent profiles (including Bob), the global skills catalog, and per-profile policy (`disabled_skills`, `platform_toolsets`). Hermes disk is a **runtime mirror** updated via push/pull sync (same contract as Config → Models).
 
 ## Data flow
 
 ```text
-data/seed/  ──►  npm run db:seed / POST /api/seed / ch-deploy update (seed-catalog --merge)
-                      │
-                      ▼
-              agent_profiles, catalog_templates, mission_categories
-                      │
-                      ▼
-              POST /api/agent/profiles/sync/push  (or inline on create/save/seed)
-                      │
-                      ▼
-              HERMES_HOME/profiles/<slug>/   (SOUL.md, AGENTS.md, config.yaml, …)
+UI / API writes  ──►  SQLite (agent_profiles, agent_root, skills)
+                           │
+                           ▼
+              POST /api/agent/profiles/sync/push  (profile | root | skills)
+                           │
+                           ▼
+              ~/.hermes/                          Bob: root SOUL, AGENTS, config, memories
+              ~/.hermes/profiles/<slug>/          Named: behaviour files only (no skills/ subtree)
+              ~/.hermes/skills/<category>/<name>/  Global skills catalog (SKILL.md)
 ```
 
-Hermes missions and cron use the active install’s `HERMES_HOME` and `profiles/<slug>/` when `profile_id` is set.
+**Pull** is explicit: absorb local Hermes edits into SQLite (`POST .../sync/pull`). **Discover/import** creates DB rows for profiles on disk that are not yet in `agent_profiles`.
 
-## Slugs
+## Slug vs display name
 
-Professional profiles use short slugs aligned with the seed manifest (`qa`, `swe`, `devops`, …)—not legacy names like `qa-engineer`. The default **Bob** persona remains the Hermes **root** install (`HERMES_HOME` itself), not a row in `agent_profiles`.
+| Field | Rule | Example |
+|-------|------|---------|
+| `slug` | Lowercase `[a-z0-9][a-z0-9_-]{0,63}$`, filesystem + CLI | `devops`, `qa`, `swe` |
+| `display_name` | UI label only | `DevOps`, `QA` |
+
+Invalid PascalCase profile paths (`profiles/DevOps/`) must not be committed; canonical trees use lowercase slugs only.
+
+## Bob (default agent)
+
+Bob is stored in the **`agent_root`** singleton (`id = 1`), not `agent_profiles`. Sync uses `root: true` on push/pull. The default profile row in the UI has `id: "default"`.
+
+## Skills
+
+- **Content:** `skills` table → pushed to `~/.hermes/skills/`
+- **Denylist:** `disabled_skills` JSON on each profile / `agent_root` → merged into `config.yaml` as `skills.disabled` (Hermes native mode)
+- **Platform denylist:** `skills.platform_disabled` is preserved when found in config YAML
+- **No per-profile mirrors:** `profiles/<slug>/skills/` is not populated by Control Hub or profile create
+
+## Personality / identity
+
+Hermes identity is `SOUL.md`. Control Hub stores root/profile SOUL content in SQLite and pushes it to the Hermes mirror. Do not write identity text to `agent.personality` or `agent.personalities` in `config.yaml`; config is for runtime policy such as `skills.disabled`, `platform_toolsets`, and `agent.max_turns`.
+
+## Tools
+
+Hermes runtime toolsets are profile-scoped `platform_toolsets` in SQLite (`agent_root` / `agent_profiles`), pushed into Hermes `config.yaml`. Edit on **Operations → Tools**; sync with **Pull** / **Push** (same contract as Agents). Pull normalizes duplicate or CLI-expanded toolset lists.
+
+The `/api/tools` route exposes a **read-only catalog** of known Hermes toolset IDs — it does not enable/disable runtime tools. See [TOOLS_AND_MISSIONS.md](TOOLS_AND_MISSIONS.md).
 
 ## Seed operations
 
 | Action | How |
 |--------|-----|
 | **Merge** (default) | Upsert missing seed rows; skip profiles/templates that already exist by `seed_key`. |
-| **Replace** | Re-apply seed SQL/content for the selected target (profiles, templates, categories, or all). |
-| **CLI** | `npm run db:seed` → `scripts/tooling/seed-catalog.ts --merge` |
-| **UI** | Config → Seed (`/config/seed`) |
-| **Deploy** | `ch-deploy update` runs `seed-catalog.ts --merge` after build |
+| **Replace** | Re-apply seed SQL/content for the selected target. |
+| **CLI** | `npm run db:seed` → `scripts/tooling/import-hermes-state.ts` (when Hermes exists), then `scripts/tooling/seed-catalog.ts --merge` |
+| **Import disk** | `npx tsx scripts/tooling/import-hermes-state.ts` |
+| **Deploy** | `ch-deploy update` runs migrations, imports Hermes state when `HERMES_HOME/config.yaml` exists, then runs `seed-catalog.ts --merge` |
 
-Seed state is written to `CH_DATA_DIR/seed-state.json`.
+Seed state: `CH_DATA_DIR/seed-state.json`.
 
-## Sync (push / pull / drift)
+## Sync API
 
-| Surface | Purpose |
-|---------|---------|
-| **Operations → Agents** | Drift banner, Push all / Pull all, per-profile push/pull when a row is selected |
-| **Config → Models** | Same pattern for LLM model registry (separate tables) |
-| **Dashboard** | **Sync now** → `POST /api/sync` (background `SyncScheduler`) |
+| Route | Purpose |
+|-------|---------|
+| `GET /api/agent/profiles/sync/drift` | Full drift report (root, profiles, skills) |
+| `POST /api/agent/profiles/sync/push` | `{ slug?, all?, root?, skills?, skillKey? }` |
+| `POST /api/agent/profiles/sync/pull` | `{ slug?, all?, root?, skills?, importDiscovered? }` |
+| `GET /api/agent/profiles/sync/import` | List discovered local profiles |
+| `POST /api/agent/profiles/sync/import` | Import profile or skills catalog into SQLite |
+| `GET /api/agent/profiles` | List profiles + per-row `syncStatus` |
 
-**Profiles:** `POST /api/agent/profiles/sync/push` and `POST /api/agent/profiles/sync/pull`. Drift is reported inline on each row from `GET /api/agent/profiles` (`syncStatus`: `synced` \| `drift` \| `error`) — there is no separate `/api/agent/profiles/sync/drift` route.
+**Operations → Agents:** drift banner, push/pull all, per-profile push/pull (including Bob).
 
-**Models:** `GET /api/models/sync/drift`, `POST /api/models/sync/pull`, `POST /api/models/sync/push` (per-model `[id]/push|pull` routes were removed).
+**Models:** separate `GET/POST /api/models/sync/*` routes.
 
-## Install-only Hermes copy
+## Bootstrap / update order
 
-Non-interactive **`scripts/bootstrap/install.sh`** may copy missing profile files from `data/seed/profiles/` when `INSTALL_HERMES_PROFILE_TEMPLATES=yes` (see `scripts/lib/ch-hermes-profile-templates.sh`). Ongoing updates rely on **seed-catalog → SQLite → push**, not bash profile sync on `ch-deploy update`.
+1. Resolve `HERMES_HOME` from the environment, defaulting to `~/.hermes`.
+2. Run `npm run db:migrate`.
+3. Import disk state with `npx tsx scripts/tooling/import-hermes-state.ts`.
+4. Seed missing defaults with `npx tsx scripts/tooling/seed-catalog.ts --merge`.
+5. Push only when the operator explicitly requests sync, or when replace-mode seed is used.
+
+## Schema
+
+`001_baseline.sql` is the squashed fresh-install schema (v3). Upgrades from `main` apply **`002_profiles_tools_parity.sql`** once. Runtime `schema_version` is **3**.
 
 ## Authoring
 
 - Pack layout: [`data/seed/README.md`](../data/seed/README.md)
-- Validate or scaffold: `node scripts/tooling/generate-seed-pack.mjs` (optional `--scaffold <slug>`)
+- Validate or scaffold: `node scripts/tooling/generate-seed-pack.mjs`

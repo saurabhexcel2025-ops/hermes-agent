@@ -14,7 +14,7 @@
 
     "db:migrate": "node scripts/tooling/migrate-db.mjs",
 
-    "db:seed": "npx tsx scripts/tooling/seed-catalog.ts --merge",
+    "db:seed": "npx tsx scripts/tooling/import-hermes-state.ts && npx tsx scripts/tooling/seed-catalog.ts --merge",
 
     "build": "next build",
 

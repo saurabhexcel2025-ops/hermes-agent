@@ -60,6 +60,7 @@ interface CustomTemplate {
   context: string;
   goals: string[];
   suggestedSkills: string[];
+  suggestedToolsets?: string[];
   dispatchMode: "save" | "now" | "cron";
   schedule: string;
   /** Hermes CLI model id, e.g. anthropic/claude-sonnet-4 */
@@ -180,6 +181,7 @@ export async function GET() {
       context: t.context,
       goals: t.goals,
       suggestedSkills: t.suggestedSkills,
+      suggestedToolsets: t.suggestedToolsets ?? [],
       outputFormat: t.outputFormat,
       constraints: t.constraints,
       localDirs: t.localDirs,
@@ -243,6 +245,9 @@ export async function POST(request: NextRequest) {
         context: body.context || "",
         goals: body.goals || [],
         suggestedSkills,
+        suggestedToolsets: Array.isArray(body.suggestedToolsets)
+          ? (body.suggestedToolsets as unknown[]).map((x) => String(x))
+          : [],
         dispatchMode: body.dispatchMode || "now",
         schedule: body.schedule || "every 5m",
         defaultModel:
@@ -298,6 +303,9 @@ export async function POST(request: NextRequest) {
       if (body.suggestedSkills !== undefined) template.suggestedSkills = body.suggestedSkills;
       else if (body.skills !== undefined && Array.isArray(body.skills)) {
         template.suggestedSkills = body.skills;
+      }
+      if (body.suggestedToolsets !== undefined && Array.isArray(body.suggestedToolsets)) {
+        template.suggestedToolsets = (body.suggestedToolsets as unknown[]).map((x) => String(x));
       }
       if (body.dispatchMode !== undefined) template.dispatchMode = body.dispatchMode;
       if (body.schedule !== undefined) template.schedule = body.schedule;

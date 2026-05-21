@@ -186,22 +186,25 @@ Skills are defined under the Hermes install; Control Hub reflects and toggles th
 
 ---
 
-## Tool registry
+## Hermes toolsets (per profile)
 
-![Tool registry](images/tool-registry.png)
-
-**Operations → Tools** registers **tools** the agent can call (core vs platform gateway toolsets).
+**Operations → Tools** edits **`platform_toolsets`** for each agent profile (SQLite source of truth, mirrored to `config.yaml` on save/push).
 
 **What you see**
 
-- **Core tools** — code execution, kanban, memory, web search (often all enabled)
-- **Platform tools** — per-channel Hermes gateway toolsets (enable what you use)
+- **Profile selector** — Bob (default root) or a named profile (QA, Creative Lead, etc.)
+- **Platform sections** — CLI, Discord, Telegram, … with Hermes toolset checkboxes
+- **Pull / Push** — sync disk (`~/.hermes`) with Control Hub when you edit with `hermes tools` on the host
+- **Drift banner** — when disk and SQLite disagree (same semantics as Operations → Agents)
 
 **Typical use**
 
-1. Enable only tools you trust for a given deployment.
-2. Register MCP or custom tools when you add integrations (see in-app note at bottom of page).
-3. Pair with **Models** and **Agent profiles** so each role has appropriate capabilities.
+1. Select the profile that will run your missions.
+2. Enable the Hermes toolsets that profile should use per platform.
+3. **Save & push toolsets** (or Push) after UI edits; **Pull** after CLI/disk edits.
+4. On **Operations → Agents**, use profile push/pull for full behaviour files (SOUL, AGENTS, memories).
+
+See [TOOLS_AND_MISSIONS.md](TOOLS_AND_MISSIONS.md) for how mission “recommended toolsets” relate to runtime tools.
 
 ---
 

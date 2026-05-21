@@ -22,6 +22,7 @@ CREATE TABLE missions (
   local_dirs           TEXT NOT NULL DEFAULT '[]',
   references_          TEXT NOT NULL DEFAULT '[]',
   skills               TEXT NOT NULL DEFAULT '[]',
+  suggested_toolsets   TEXT NOT NULL DEFAULT '[]',
   goals                TEXT NOT NULL DEFAULT '[]',
   model_id             TEXT,
   provider             TEXT,
@@ -179,23 +180,6 @@ CREATE TABLE stories (
 
 CREATE INDEX idx_stories_status ON stories(status);
 
--- ── tool_plugins ────────────────────────────────────────────
-CREATE TABLE tool_plugins (
-  id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL UNIQUE,
-  label       TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  category    TEXT NOT NULL DEFAULT 'custom' CHECK (category IN ('core', 'platform', 'custom', 'mcp')),
-  enabled     INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-  config      TEXT NOT NULL DEFAULT '{}',
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  deleted_at  TEXT
-);
-
-CREATE INDEX idx_tools_category ON tool_plugins(category);
-CREATE INDEX idx_tools_enabled  ON tool_plugins(enabled);
-
 -- ── sync_registry ───────────────────────────────────────────
 CREATE TABLE sync_registry (
   source_name    TEXT PRIMARY KEY,
@@ -252,6 +236,10 @@ CREATE TABLE agent_profiles (
   config_yaml     TEXT NOT NULL DEFAULT '',
   soul_md         TEXT NOT NULL DEFAULT '',
   agents_md       TEXT NOT NULL DEFAULT '',
+  user_md         TEXT NOT NULL DEFAULT '',
+  memory_md       TEXT NOT NULL DEFAULT '',
+  disabled_skills TEXT NOT NULL DEFAULT '[]',
+  platform_toolsets TEXT NOT NULL DEFAULT '{}',
   seed_key        TEXT,
   synced_at       TEXT,
   sync_error      TEXT,
@@ -261,6 +249,48 @@ CREATE TABLE agent_profiles (
 
 CREATE UNIQUE INDEX idx_agent_profiles_seed_key
   ON agent_profiles(seed_key) WHERE seed_key IS NOT NULL;
+
+CREATE UNIQUE INDEX idx_agent_profiles_slug_lower
+  ON agent_profiles(lower(slug));
+
+-- ── agent_root (Bob / default local Hermes agent) ─────────────
+CREATE TABLE agent_root (
+  id                  INTEGER PRIMARY KEY CHECK (id = 1),
+  display_name        TEXT NOT NULL DEFAULT 'Bob',
+  description         TEXT NOT NULL DEFAULT '',
+  personality         TEXT NOT NULL DEFAULT 'technical',
+  config_yaml         TEXT NOT NULL DEFAULT '',
+  soul_md             TEXT NOT NULL DEFAULT '',
+  agents_md           TEXT NOT NULL DEFAULT '',
+  hermes_md           TEXT NOT NULL DEFAULT '',
+  user_md             TEXT NOT NULL DEFAULT '',
+  memory_md           TEXT NOT NULL DEFAULT '',
+  disabled_skills     TEXT NOT NULL DEFAULT '[]',
+  platform_toolsets   TEXT NOT NULL DEFAULT '{}',
+  synced_at           TEXT,
+  sync_error          TEXT,
+  updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO agent_root (id, display_name, description)
+VALUES (1, 'Bob', 'Local Hermes default agent at HERMES_HOME');
+
+-- ── skills (global Hermes skills catalog) ─────────────────────
+CREATE TABLE skills (
+  skill_key       TEXT PRIMARY KEY,
+  display_name    TEXT NOT NULL DEFAULT '',
+  description     TEXT NOT NULL DEFAULT '',
+  category        TEXT NOT NULL DEFAULT '',
+  content         TEXT NOT NULL DEFAULT '',
+  source          TEXT NOT NULL DEFAULT 'custom',
+  synced_at       TEXT,
+  sync_error      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_skills_category ON skills(category);
+CREATE INDEX idx_skills_source ON skills(source);
 
 -- ── catalog_templates (seeded mission templates) ─────────────
 CREATE TABLE catalog_templates (
@@ -278,6 +308,7 @@ CREATE TABLE catalog_templates (
   output_format       TEXT NOT NULL DEFAULT '',
   constraints         TEXT NOT NULL DEFAULT '',
   suggested_skills    TEXT NOT NULL DEFAULT '[]',
+  suggested_toolsets  TEXT NOT NULL DEFAULT '[]',
   local_dirs          TEXT NOT NULL DEFAULT '[]',
   references_json     TEXT NOT NULL DEFAULT '[]',
   mission_time_minutes INTEGER,

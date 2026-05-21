@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
 
 import { resolveProfileHermesHome, buildProfileHermesPathBundle } from "@/lib/hermes-profile-paths";
 import { getBehaviorFiles } from "@/lib/behavior-files";
@@ -8,13 +8,27 @@ import { resolveSafeProfileName } from "@/lib/path-security";
 import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import { ensureDb } from "@/lib/db";
-import { getProfile, updateProfileContent } from "@/lib/profiles-repository";
-import { pushProfileToHermes } from "@/lib/hermes-profile-sync";
+import { getProfile } from "@/lib/profiles-repository";
+import {
+  readManagedFileContent,
+  writeManagedFileContent,
+  type ManagedFileKey,
+} from "@/lib/agent-file-store";
+import { pushProfileToHermes, pushRootToHermes } from "@/lib/hermes-profile-sync";
+import { updateAgentRoot } from "@/lib/agent-root-repository";
+import { updateProfileContent } from "@/lib/profiles-repository";
+import {
+  configYamlToColumnValues,
+  platformToolsetsFromJson,
+  serializeJsonToolsets,
+} from "@/lib/profile-config-builder";
+import { normalizePlatformToolsets } from "@/lib/hermes-toolset-normalize";
 
-/** Resolve file path for a given key and optional profile */
+const MANAGED_KEYS = new Set<string>(["soul", "agent", "user", "memory", "config", "hermes"]);
+
 function resolveFilePath(
   key: string,
-  profileParam: string | null
+  profileParam: string | null,
 ):
   | { path: string; name: string; description: string }
   | { error: string }
@@ -29,9 +43,20 @@ function resolveFilePath(
   const profile = prof.profile;
 
   if (profile === "default") {
-    const entry = getBehaviorFiles()[key];
-    if (!entry) return null;
-    return { path: entry.path, name: entry.name, description: entry.description };
+    const bundle = buildProfileHermesPathBundle("default");
+    const pathMap: Record<string, string> = {
+      soul: bundle.soul,
+      agent: bundle.agents,
+      user: bundle.userMemory,
+      memory: bundle.agentMemory,
+      config: bundle.config,
+      hermes: bundle.hermes,
+      env: bundle.env,
+      auth: bundle.auth,
+    };
+    const resolvedPath = pathMap[key];
+    if (!resolvedPath) return null;
+    return { path: resolvedPath, name: fileConfig.name, description: fileConfig.description };
   }
 
   const bundle = buildProfileHermesPathBundle(profile);
@@ -40,9 +65,9 @@ function resolveFilePath(
     agent: bundle.agents,
     user: bundle.userMemory,
     memory: bundle.agentMemory,
-    env: bundle.env,
-    hermes: bundle.hermes,
     config: bundle.config,
+    hermes: bundle.hermes,
+    env: bundle.env,
     auth: bundle.auth,
   };
 
@@ -54,40 +79,36 @@ function resolveFilePath(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ key: string }> }
+  { params }: { params: Promise<{ key: string }> },
 ) {
   const { key } = await params;
   const profile = request.nextUrl.searchParams.get("profile");
   const resolved = resolveFilePath(key, profile);
 
   if (!resolved) {
-    return NextResponse.json(
-      { error: `Unknown file key: ${key}` },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: `Unknown file key: ${key}` }, { status: 400 });
   }
   if ("error" in resolved) {
     return NextResponse.json({ error: resolved.error }, { status: 400 });
   }
 
   try {
+    ensureDb();
     const prof = resolveSafeProfileName(profile);
     const profileSlug = prof.ok ? prof.profile : "default";
 
-    if (profileSlug !== "default" && (key === "soul" || key === "agent")) {
-      ensureDb();
-      const row = getProfile(profileSlug);
-      if (row) {
-        const content = key === "soul" ? row.soulMd : row.agentsMd;
+    if (MANAGED_KEYS.has(key)) {
+      const stored = readManagedFileContent(profileSlug, key as ManagedFileKey);
+      if (stored) {
         return NextResponse.json({
           data: {
             key,
-            content,
+            content: stored.content,
             name: resolved.name,
             description: resolved.description,
-            exists: content.length > 0,
-            size: content.length,
-            lastModified: row.updatedAt,
+            exists: stored.content.length > 0,
+            size: stored.content.length,
+            lastModified: stored.updatedAt,
           },
         });
       }
@@ -119,7 +140,8 @@ export async function GET(
         lastModified: stats.mtime.toISOString(),
       },
     });
-  } catch (error) {
+  }
+  catch (error) {
     logApiError("GET /api/agent/files/[key]", `reading ${resolved.path}`, error);
     return NextResponse.json({ error: "Failed to read file" }, { status: 500 });
   }
@@ -127,7 +149,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ key: string }> }
+  { params }: { params: Promise<{ key: string }> },
 ) {
   const auth = requireAuth(request);
   if (auth) return auth;
@@ -144,6 +166,7 @@ export async function PUT(
   }
 
   try {
+    ensureDb();
     const body = await request.json();
     const { content, backup } = body;
 
@@ -151,45 +174,72 @@ export async function PUT(
       return NextResponse.json({ error: "Content is required" }, { status: 400 });
     }
 
-    // Ensure directory exists
+    const prof = resolveSafeProfileName(profile);
+    const profileSlug = prof.ok ? prof.profile : "default";
+
+    if (profileSlug !== "default" && !getProfile(profileSlug) && MANAGED_KEYS.has(key)) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+
     const dir = resolved.path.substring(0, resolved.path.lastIndexOf("/"));
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
 
-    // Optional backup
     if (backup && existsSync(resolved.path)) {
-      const prof = resolveSafeProfileName(profile);
-      const profileHome = prof.ok ? resolveProfileHermesHome(prof.profile) : resolveProfileHermesHome("default");
+      const profileHome = resolveProfileHermesHome(profileSlug);
       const backupDir = profileHome + "/backups";
       if (!existsSync(backupDir)) mkdirSync(backupDir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const backupName = `${key}-${ts}.md`;
       try {
         writeFileSync(backupDir + "/" + backupName, readFileSync(resolved.path, "utf-8"));
-      } catch (err) {
+      }
+      catch (err) {
         logApiError("PUT /api/agent/files/[key]", `backup ${resolved.path}`, err);
       }
     }
 
-    const prof = resolveSafeProfileName(profile);
-    const profileSlug = prof.ok ? prof.profile : "default";
-
-    if (profileSlug !== "default" && (key === "soul" || key === "agent") && getProfile(profileSlug)) {
-      ensureDb();
-      if (key === "soul") {
-        updateProfileContent(profileSlug, { soulMd: content });
-      } else {
-        updateProfileContent(profileSlug, { agentsMd: content });
+    if (MANAGED_KEYS.has(key)) {
+      if (key === "config") {
+        const cols = configYamlToColumnValues(content);
+        const platformToolsetsJson = serializeJsonToolsets(
+          normalizePlatformToolsets(platformToolsetsFromJson(cols.platformToolsetsJson)),
+        );
+        writeManagedFileContent(profileSlug, "config", cols.configYaml);
+        if (profileSlug === "default") {
+          updateAgentRoot({
+            personality: cols.personality,
+            disabledSkillsJson: cols.disabledSkillsJson,
+            platformToolsetsJson,
+            configYaml: cols.configYaml,
+          });
+        }
+        else {
+          updateProfileContent(profileSlug, {
+            personality: cols.personality,
+            disabledSkillsJson: cols.disabledSkillsJson,
+            platformToolsetsJson,
+            configYaml: cols.configYaml,
+          });
+        }
       }
-      const push = pushProfileToHermes(profileSlug);
+      else {
+        writeManagedFileContent(profileSlug, key as ManagedFileKey, content);
+      }
+
+      const push =
+        profileSlug === "default"
+          ? pushRootToHermes()
+          : pushProfileToHermes(profileSlug);
       if (!push.success) {
         return NextResponse.json(
           { error: push.error ?? "Failed to sync profile to Hermes" },
           { status: 500 },
         );
       }
-    } else {
+    }
+    else {
       writeFileSync(resolved.path, content, "utf-8");
     }
 
@@ -200,7 +250,8 @@ export async function PUT(
     });
 
     return NextResponse.json({ data: { success: true, key, path: resolved.path } });
-  } catch (error) {
+  }
+  catch (error) {
     logApiError("PUT /api/agent/files/[key]", `writing ${resolved.path}`, error);
     return NextResponse.json({ error: "Failed to write file" }, { status: 500 });
   }

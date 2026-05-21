@@ -44,6 +44,8 @@ export default function ConfigSectionPage() {
     ? fileContent !== originalFileContent
     : yamlHasChanges;
 
+  const isPlatformToolsetsPreview = sectionId === "platform_toolsets";
+
   const loadConfig = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
@@ -54,6 +56,14 @@ export default function ConfigSectionPage() {
         const content = json.data?.content || "";
         setFileContent(content);
         setOriginalFileContent(content);
+      } else if (isPlatformToolsetsPreview) {
+        const res = await fetch("/api/agent/profiles/default/toolsets", { signal });
+        if (!res.ok) throw new Error("Failed to load root toolsets");
+        const json = await res.json();
+        const platformToolsets =
+          (json.data?.platformToolsets as Record<string, unknown>) ?? {};
+        setValues(platformToolsets);
+        setOriginalValues({ ...platformToolsets });
       } else {
         const res = await fetch("/api/config", { signal });
         if (!res.ok) throw new Error("Failed to load config");
@@ -69,7 +79,7 @@ export default function ConfigSectionPage() {
     } finally {
       setLoading(false);
     }
-  }, [sectionId, isFileSection, sectionDef]);
+  }, [sectionId, isFileSection, sectionDef, isPlatformToolsetsPreview]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -225,7 +235,8 @@ export default function ConfigSectionPage() {
   };
 
   const SectionIcon = getConfigSectionIcon(sectionDef.icon);
-  const showActions = sectionDef.fields.length > 0 || isFileSection;
+  const showActions =
+    !isPlatformToolsetsPreview && (sectionDef.fields.length > 0 || isFileSection);
 
   return (
     <AppPageShell>
@@ -275,6 +286,17 @@ export default function ConfigSectionPage() {
       />
 
       <div className="max-w-3xl mx-auto px-6 py-6 flex-1 w-full">
+        {sectionId === "platform_toolsets" ? (
+          <p className="text-xs text-white/40 font-mono border border-neon-orange/20 rounded-lg p-3 mb-6 bg-neon-orange/5">
+            This section edits the <strong className="text-white/60">root</strong> Hermes{" "}
+            <code className="text-white/50">config.yaml</code> only. Per-profile toolsets are managed
+            on{" "}
+            <a href="/operations/tools" className="text-neon-orange hover:underline">
+              Operations → Tools
+            </a>{" "}
+            (profile selector + push).
+          </p>
+        ) : null}
         {error && <ErrorBanner message={error} />}
 
         {/* File editor for file-type sections */}
@@ -366,13 +388,22 @@ export default function ConfigSectionPage() {
               })}
             </div>
             <p className="text-xs text-white/20 mt-4 pt-4 border-t border-white/5">
-              Edit complex fields in{" "}
-              <Link
-                href="/config"
-                className="text-neon-cyan hover:underline"
-              >
-                config.yaml raw editor
-              </Link>
+              {isPlatformToolsetsPreview ? (
+                <>
+                  Edit Bob (root) toolsets on{" "}
+                  <Link href="/operations/tools" className="text-neon-orange hover:underline">
+                    Operations → Tools
+                  </Link>{" "}
+                  (profile: Bob / default), then Push to Hermes.
+                </>
+              ) : (
+                <>
+                  Edit complex fields in{" "}
+                  <Link href="/config" className="text-neon-cyan hover:underline">
+                    config.yaml raw editor
+                  </Link>
+                </>
+              )}
             </p>
           </div>
         )}
