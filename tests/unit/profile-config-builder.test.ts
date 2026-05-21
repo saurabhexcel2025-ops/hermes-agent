@@ -15,7 +15,8 @@ describe("profile-config-builder", () => {
       disabledSkills: ["creative/image-gen", "gaming/steam"],
       platformDisabledSkills: { telegram: ["devops/terminal"] },
       platformToolsets: { cli: ["terminal", "file"] },
-      extraYamlLines: ["agent:", "  max_turns: 40", "version: 2"],
+      preservedSections: { agent: { max_turns: 40 } },
+      extraYamlLines: ["version: 2"],
     });
     const parts = parseConfigYaml(yaml);
     expect(parts.personality).toBe("technical");
@@ -23,6 +24,7 @@ describe("profile-config-builder", () => {
     expect(parts.platformDisabledSkills.telegram).toEqual(["devops/terminal"]);
     expect(parts.platformToolsets.cli).toEqual(["terminal", "file"]);
     expect(parts.extraYamlLines).toContain("version: 2");
+    expect(parts.preservedSections.agent).toMatchObject({ max_turns: 40 });
 
     const cols = configYamlToColumnValues(yaml);
     expect(disabledSkillsFromJson(cols.disabledSkillsJson)).toEqual([
@@ -47,11 +49,41 @@ describe("profile-config-builder", () => {
       disabledSkills: parts.disabledSkills,
       platformDisabledSkills: parts.platformDisabledSkills,
       platformToolsets: parts.platformToolsets,
+      preservedSections: parts.preservedSections,
       extraYamlLines: parts.extraYamlLines,
     });
     expect(rebuilt).toContain("version: 9");
     expect(rebuilt).toContain("max_turns: 30");
     expect(rebuilt).toContain("skill-a");
+  });
+
+  it("preserves model and auxiliary sections through parse/build", () => {
+    const input = [
+      "model:",
+      "  default: deepseek/deepseek-v4-flash",
+      "  provider: nous",
+      "auxiliary:",
+      "  vision:",
+      "    model: gpt-4o",
+      "skills:",
+      "  disabled: []",
+    ].join("\n");
+    const parts = parseConfigYaml(input);
+    expect(parts.preservedSections.model).toMatchObject({
+      default: "deepseek/deepseek-v4-flash",
+      provider: "nous",
+    });
+    const rebuilt = buildConfigYaml({
+      personality: parts.personality,
+      disabledSkills: parts.disabledSkills,
+      platformDisabledSkills: parts.platformDisabledSkills,
+      platformToolsets: parts.platformToolsets,
+      preservedSections: parts.preservedSections,
+      extraYamlLines: parts.extraYamlLines,
+    });
+    expect(rebuilt).toContain("default: deepseek/deepseek-v4-flash");
+    expect(rebuilt).toContain("provider: nous");
+    expect(rebuilt).toContain("vision:");
   });
 
   it("resolvePlatformToolsets prefers database json over yaml", () => {
@@ -60,6 +92,7 @@ describe("profile-config-builder", () => {
       disabledSkills: [],
       platformDisabledSkills: {},
       platformToolsets: { cli: ["terminal"] },
+      preservedSections: {},
       extraYamlLines: [],
     });
     const resolved = resolvePlatformToolsets(
@@ -76,6 +109,7 @@ describe("profile-config-builder", () => {
       disabledSkills: [],
       platformDisabledSkills: {},
       platformToolsets: { discord: ["hermes-discord"] },
+      preservedSections: {},
       extraYamlLines: [],
     });
     const resolved = resolvePlatformToolsets("{}", yaml);

@@ -47,8 +47,15 @@ export class ConfigSync implements SyncSource {
           ? String((mem as Record<string, unknown>).provider ?? "")
           : "";
 
-      // Default model (from 'model' key or fallback blocks)
-      const defaultModel = typeof cfg.model === "string" ? cfg.model : "";
+      // Default model (model.default when model is an object, or string shorthand)
+      let defaultModel = "";
+      const modelCfg = cfg.model;
+      if (typeof modelCfg === "string") {
+        defaultModel = modelCfg;
+      } else if (modelCfg && typeof modelCfg === "object" && !Array.isArray(modelCfg)) {
+        const m = modelCfg as Record<string, unknown>;
+        defaultModel = String(m.default ?? m.model ?? "");
+      }
 
       // Soul present
       const soulPresent = existsSync(H.soul) ? "true" : "false";

@@ -30,6 +30,7 @@ import {
   type HermesProvider,
   type TaskType,
 } from "./hermes-providers";
+import { updateAgentRoot } from "./agent-root-repository";
 import { getModelDefaults, getModel } from "./models-repository";
 
 // ── Internal helpers ───────────────────────────────────────────
@@ -271,6 +272,31 @@ export function syncDefaultsToHermesConfig(): { backupPath: string | null } {
   atomicWriteFile(configPath, serialized);
 
   return { backupPath };
+}
+
+export interface FinalizeRootConfigResult {
+  /** Whether `model_defaults.agent` was applied to disk. */
+  appliedModelDefaults: boolean;
+  backupPath: string | null;
+}
+
+/**
+ * After profile push writes skills/toolsets, re-apply Models registry defaults
+ * to `model` / `auxiliary` on disk and refresh `agent_root.config_yaml` so the
+ * next push does not strip the model section.
+ */
+export function finalizeRootConfigOnDisk(): FinalizeRootConfigResult {
+  const defaults = getModelDefaults();
+  const appliedModelDefaults = Boolean(defaults.agent);
+  const { backupPath } = syncDefaultsToHermesConfig();
+
+  const paths = getActiveHermesPaths();
+  if (existsSync(paths.config)) {
+    const fullYaml = readFileSync(paths.config, "utf-8");
+    updateAgentRoot({ configYaml: fullYaml });
+  }
+
+  return { appliedModelDefaults, backupPath };
 }
 
 // ── Combined helper used by API routes ─────────────────────────

@@ -187,6 +187,7 @@ export function assembleConfigYamlForProfile(row: AgentProfileRow): string {
     disabledSkills: disabledSkillsFromJson(row.disabledSkillsJson),
     platformDisabledSkills: parts.platformDisabledSkills,
     platformToolsets: resolvedPlatformToolsetsForProfile(row),
+    preservedSections: parts.preservedSections,
     extraYamlLines: parts.extraYamlLines,
   });
 }
@@ -206,12 +207,14 @@ export function upsertProfile(input: UpsertProfileInput): AgentProfileRow {
       configYaml,
       loadSeedPlatformToolsets(input.slug),
     ).toolsets;
+    const parsed = parseConfigYaml(configYaml);
     configYaml = buildConfigYaml({
       personality,
       disabledSkills: disabled,
-      platformDisabledSkills: parseConfigYaml(configYaml).platformDisabledSkills,
+      platformDisabledSkills: parsed.platformDisabledSkills,
       platformToolsets: toolsets,
-      extraYamlLines: parseConfigYaml(configYaml).extraYamlLines,
+      preservedSections: parsed.preservedSections,
+      extraYamlLines: parsed.extraYamlLines,
     });
   }
   db()
@@ -350,6 +353,7 @@ export function defaultConfigYaml(personality: string): string {
     disabledSkills: [],
     platformDisabledSkills: {},
     platformToolsets: {},
+    preservedSections: {},
     extraYamlLines: [],
   });
 }

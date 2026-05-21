@@ -300,14 +300,30 @@ export default function ChatPage() {
   useEffect(() => {
     const checkAgentModel = async () => {
       try {
-        const res = await fetch("/api/models/defaults", { signal: AbortSignal.timeout(5000) });
-        if (!res.ok) {
-          setAgentDefaultModelSet(null);
-          return;
+        const [defaultsRes, configRes] = await Promise.all([
+          fetch("/api/models/defaults", { signal: AbortSignal.timeout(5000) }),
+          fetch("/api/config", { signal: AbortSignal.timeout(5000) }),
+        ]);
+        let registryOk = false;
+        if (defaultsRes.ok) {
+          const defaultsJson = (await defaultsRes.json()) as {
+            data?: { defaults?: { agent?: string } };
+          };
+          registryOk = Boolean(defaultsJson.data?.defaults?.agent?.trim());
         }
-        const json = await res.json();
-        const agentId = json.data?.defaults?.agent as string | undefined;
-        setAgentDefaultModelSet(Boolean(agentId && agentId.trim().length > 0));
+        let diskOk = false;
+        if (configRes.ok) {
+          const cfgJson = (await configRes.json()) as {
+            data?: { model?: { default?: string } | string };
+          };
+          const modelCfg = cfgJson.data?.model;
+          if (typeof modelCfg === "string") {
+            diskOk = modelCfg.trim().length > 0;
+          } else if (modelCfg && typeof modelCfg === "object") {
+            diskOk = Boolean(String(modelCfg.default ?? "").trim());
+          }
+        }
+        setAgentDefaultModelSet(registryOk && diskOk);
       } catch {
         setAgentDefaultModelSet(null);
       }
@@ -853,13 +869,13 @@ export default function ChatPage() {
                   <div className="w-full max-w-md mb-6 p-4 bg-neon-orange/10 border border-neon-orange/20 rounded-lg text-left">
                     <div className="flex items-center gap-2 text-neon-orange mb-1">
                       <AlertTriangle className="w-4 h-4" />
-                      <span className="text-sm font-semibold">No agent default model</span>
+                      <span className="text-sm font-semibold">Model not ready for chat</span>
                     </div>
                     <p className="text-xs text-white/60">
-                      Set an agent default under Config → Models and push to Hermes, or run{" "}
-                      <code className="text-neon-cyan">hermes model</code>. Chat uses{" "}
-                      <code className="text-white/50">~/.hermes/config.yaml</code> model.default,
-                      not the dropdown label alone.
+                      Set an agent default under Config → Models, push to Hermes (or Operations →
+                      Agents → Push Bob), or run <code className="text-neon-cyan">hermes model</code>.
+                      The gateway reads <code className="text-white/50">~/.hermes/config.yaml</code>{" "}
+                      model.default — the chat dropdown label alone does not change inference.
                     </p>
                   </div>
                 )}

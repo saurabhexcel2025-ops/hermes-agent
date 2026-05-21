@@ -98,6 +98,7 @@ describe("profiles-repository", () => {
       disabledSkills: [],
       platformDisabledSkills: {},
       platformToolsets: { cli: ["hermes-cli"], discord: ["hermes-discord"] },
+      preservedSections: {},
       extraYamlLines: [],
     });
 

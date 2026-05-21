@@ -8,10 +8,10 @@ Control Hub stores toolsets in SQLite (`agent_profiles.platform_toolsets`, `agen
 
 | Surface | Action |
 |---------|--------|
-| **Operations → Tools** | Edit per-profile toolsets (checkbox UI + optional JSON). **Save & push** writes SQLite and `config.yaml`. |
+| **Operations → Tools** | One **enabled toolsets** grid per profile (fans out to all gateways on save — same idea as `hermes tools` → configure all platforms). Optional **advanced per-platform** overrides and JSON. **Save & push** writes SQLite and `config.yaml`. |
 | **Pull from Hermes** | Import disk `config.yaml` into SQLite (normalizes duplicates / `hermes-cli` expansion). |
 | **Push to Hermes** | Write assembled config from SQLite to `HERMES_HOME` or `profiles/<slug>/`. |
-| **Operations → Agents** | Push/pull all profile content (includes toolsets in full `config.yaml`). |
+| **Operations → Agents** | Push/pull all profile content (includes toolsets in full `config.yaml`). Push Bob re-applies Models registry defaults to root `config.yaml`. |
 
 `tool_plugins` in Control Hub is **not** used for Hermes runtime. `/api/tools` returns a read-only catalog of known toolset IDs.
 

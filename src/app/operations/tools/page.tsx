@@ -27,6 +27,11 @@ import {
   HERMES_PLATFORMS,
   toolsetCatalogLabel,
 } from "@/lib/hermes-toolset-catalog";
+import {
+  expandUnifiedToAllPlatforms,
+  mergeAdvancedOverrides,
+  unionToolsetsFromPlatforms,
+} from "@/lib/hermes-toolset-unify";
 
 function PlatformToolsetsSummary({ toolsets }: { toolsets: PlatformToolsets }) {
   const platforms = Object.keys(toolsets).sort();
@@ -70,9 +75,12 @@ export default function ToolsPage() {
   const [loadingToolsets, setLoadingToolsets] = useState(true);
   const [savingToolsets, setSavingToolsets] = useState(false);
   const [syncing, setSyncing] = useState<"pull" | "push" | null>(null);
+  const [unifiedEnabled, setUnifiedEnabled] = useState<string[]>([]);
+  const [platformsDiverged, setPlatformsDiverged] = useState(false);
+  const [showAdvancedPerPlatform, setShowAdvancedPerPlatform] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
   const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, boolean>>({
-    cli: true,
+    cli: false,
   });
   const [profileSyncStatus, setProfileSyncStatus] = useState<AgentProfile["syncStatus"] | null>(null);
   const { showToast, toastElement } = useToast();
@@ -97,7 +105,11 @@ export default function ToolsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load toolsets");
       const loaded = (data.data?.platformToolsets ?? {}) as PlatformToolsets;
+      const unified = (data.data?.unifiedEnabled as string[] | undefined) ??
+        unionToolsetsFromPlatforms(loaded);
       setPlatformToolsets(loaded);
+      setUnifiedEnabled(unified);
+      setPlatformsDiverged(Boolean(data.data?.platformsDiverged));
       setToolsetsJson(JSON.stringify(loaded, null, 2));
       setToolsetsSource(data.data?.source ?? null);
     } catch (err) {
@@ -114,6 +126,24 @@ export default function ToolsPage() {
     void loadToolsets();
     void loadProfileSyncStatus();
   }, [loadToolsets, loadProfileSyncStatus]);
+
+  const toggleUnifiedToolset = (toolsetId: string) => {
+    setUnifiedEnabled((prev) => {
+      const next = [...prev];
+      const idx = next.indexOf(toolsetId);
+      if (idx >= 0) next.splice(idx, 1);
+      else next.push(toolsetId);
+      const sorted = [...new Set(next)].sort();
+      if (!showAdvancedPerPlatform) {
+        const expanded = expandUnifiedToAllPlatforms(sorted);
+        setPlatformToolsets(expanded);
+        setToolsetsJson(JSON.stringify(expanded, null, 2));
+      }
+      return sorted;
+    });
+  };
+
+  const isUnifiedEnabled = (toolsetId: string): boolean => unifiedEnabled.includes(toolsetId);
 
   const toggleToolset = (platformId: string, toolsetId: string) => {
     setPlatformToolsets((prev) => {
@@ -143,13 +173,17 @@ export default function ToolsPage() {
   const saveToolsets = async () => {
     setSavingToolsets(true);
     try {
-      let payload: PlatformToolsets = platformToolsets;
+      let payload: PlatformToolsets;
       if (showAdvancedJson) {
         const parsed = JSON.parse(toolsetsJson) as unknown;
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           throw new Error("Invalid JSON object");
         }
         payload = parsed as PlatformToolsets;
+      } else if (showAdvancedPerPlatform) {
+        payload = mergeAdvancedOverrides(unifiedEnabled, platformToolsets);
+      } else {
+        payload = expandUnifiedToAllPlatforms(unifiedEnabled);
       }
       const res = await fetch(`/api/agent/profiles/${selectedProfile}/toolsets`, {
         method: "PUT",
@@ -205,7 +239,11 @@ export default function ToolsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Push failed");
-      showToast("Pushed profile to Hermes", "success");
+      const pushMsg =
+        selectedProfile === "default"
+          ? "Pushed profile to Hermes. Model defaults re-applied to config.yaml."
+          : "Pushed profile to Hermes";
+      showToast(pushMsg, "success");
       await loadProfileSyncStatus();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Push failed", "error");
@@ -285,13 +323,23 @@ export default function ToolsPage() {
             </p>
           </div>
         )}
+        {platformsDiverged && !showAdvancedPerPlatform && (
+          <div className="mb-4 p-3 rounded-lg bg-semantic-warning/10 border border-semantic-warning/30 flex items-start gap-2">
+            <Info className="w-4 h-4 text-semantic-warning flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-semantic-warning/90">
+              Platforms have different toolsets on disk. The grid below shows the union.{" "}
+              <strong>Save & push</strong> applies one list to all gateways (like{" "}
+              <code className="text-white/50">hermes tools</code> configure all), or open{" "}
+              <strong>Advanced per-platform</strong> to keep differences.
+            </p>
+          </div>
+        )}
         <div className="mb-4 p-3 rounded-lg bg-dark-900/50 border border-white/5 flex items-start gap-2">
           <Info className="w-4 h-4 text-white/30 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-white/30">
-            Runtime tool access is defined per profile in Hermes{" "}
-            <code className="text-white/40">platform_toolsets</code>. Control Hub stores
-            toolsets in SQLite and mirrors them to <code className="text-white/40">config.yaml</code>{" "}
-            on save or push. Use <strong className="text-white/50">Pull</strong> after editing with{" "}
+            Hermes stores <code className="text-white/40">platform_toolsets</code> per gateway key;
+            Control Hub uses one enabled list per profile and fans it out on save (Nous-aligned with
+            configure all platforms). Use <strong className="text-white/50">Pull</strong> after{" "}
             <code className="text-white/40">hermes tools</code> on disk.
           </p>
         </div>
@@ -318,7 +366,42 @@ export default function ToolsPage() {
               ) : (
                 <>
                   <PlatformToolsetsSummary toolsets={platformToolsets} />
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-4">
+                    <h3 className="text-xs font-mono text-white/50 uppercase tracking-widest mb-2">
+                      Enabled toolsets (all gateways)
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {HERMES_CONFIGURABLE_TOOLSETS.map((toolset) => {
+                        const on = isUnifiedEnabled(toolset.id);
+                        return (
+                          <button
+                            key={`unified-${toolset.id}`}
+                            type="button"
+                            title={toolset.description}
+                            onClick={() => toggleUnifiedToolset(toolset.id)}
+                            className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${
+                              on
+                                ? "border-neon-orange/50 bg-neon-orange/15 text-neon-orange"
+                                : "border-white/10 bg-white/5 text-white/40 hover:border-white/20"
+                            }`}
+                          >
+                            {toolset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-4 border-t border-white/10 pt-3">
+                    <button
+                      type="button"
+                      className="text-[10px] font-mono text-white/40 hover:text-white/60"
+                      onClick={() => setShowAdvancedPerPlatform((v) => !v)}
+                    >
+                      {showAdvancedPerPlatform ? "Hide" : "Show"} advanced per-platform overrides
+                    </button>
+                  </div>
+                  {showAdvancedPerPlatform && (
+                  <div className="mt-3 space-y-2">
                     {HERMES_PLATFORMS.map((platform) => {
                       const expanded = expandedPlatforms[platform.id] ?? false;
                       return (
@@ -371,6 +454,7 @@ export default function ToolsPage() {
                       );
                     })}
                   </div>
+                  )}
                 </>
               )}
             </div>

@@ -75,12 +75,17 @@ export default function BehaviourPage() {
   };
 
   const handlePushAll = () =>
-    void runProfileSync({ all: true }, "All profiles pushed to Hermes");
+    void runProfileSync(
+      { all: true },
+      "All profiles pushed to Hermes. Model defaults re-applied to config.yaml.",
+    );
 
   const handlePushOne = (slug: string) =>
     void runProfileSync(
       slug === "default" ? { root: true } : { slug },
-      `Pushed ${slug} to Hermes`,
+      slug === "default"
+        ? "Pushed Bob to Hermes. Model defaults re-applied to config.yaml."
+        : `Pushed ${slug} to Hermes`,
     );
 
   const handleImportDiscovered = async () => {

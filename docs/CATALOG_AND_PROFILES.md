@@ -73,7 +73,7 @@ Seed state: `CH_DATA_DIR/seed-state.json`.
 
 **Operations → Agents:** drift banner, push/pull all, per-profile push/pull (including Bob).
 
-**Models:** separate `GET/POST /api/models/sync/*` routes.
+**Models:** separate `GET/POST /api/models/sync/*` routes. Seeds do **not** set `model.default`. After **Push Bob** (root), Control Hub runs `finalizeRootConfigOnDisk()` so `model.*` / `auxiliary.*` from the Models registry are re-applied to `~/.hermes/config.yaml` and stored back in `agent_root.config_yaml` (prevents chat wiping the model block).
 
 ## Bootstrap / update order
 
@@ -81,7 +81,8 @@ Seed state: `CH_DATA_DIR/seed-state.json`.
 2. Run `npm run db:migrate`.
 3. Import disk state with `npx tsx scripts/tooling/import-hermes-state.ts`.
 4. Seed missing defaults with `npx tsx scripts/tooling/seed-catalog.ts --merge`.
-5. Push only when the operator explicitly requests sync, or when replace-mode seed is used.
+5. Run `npx tsx scripts/tooling/ensure-hermes-model-sync.ts` when `model_defaults.agent` is set (also runs on `ch-deploy update` / bootstrap `setup.sh`).
+6. Push only when the operator explicitly requests sync, or when replace-mode seed is used.
 
 ## Schema
 
