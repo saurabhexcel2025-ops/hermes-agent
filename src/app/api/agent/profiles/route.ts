@@ -80,7 +80,7 @@ function rowToApiProfile(slug: string): AgentProfile | null {
       name: root.displayName === "Bob" ? "Bob (local default)" : root.displayName,
       description:
         root.description ||
-        "Local Hermes root agent at HERMES_HOME — import from disk wins over seed on merge",
+        "Local Hermes root agent at ~/.hermes — import from disk wins over seed on merge",
       personality: root.personality,
       isDefault: true,
       isBundled: false,
