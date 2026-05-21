@@ -81,4 +81,11 @@ describe("importHermesStateFromDisk", () => {
 
     expect(importAllSkillsFromDisk).toHaveBeenCalled();
   });
+
+  it("throws when agent_root table is missing (migrate required)", async () => {
+    testDb?.exec("DROP TABLE IF EXISTS agent_root");
+    const { importHermesStateFromDisk } = await import("@/lib/hermes-state-import");
+
+    expect(() => importHermesStateFromDisk({ force: true })).toThrow(/npm run db:migrate/);
+  });
 });

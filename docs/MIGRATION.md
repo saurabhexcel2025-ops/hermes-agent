@@ -66,6 +66,10 @@ npm run db:migrate
 npm run db:seed    # import-hermes-state + seed-catalog --merge when HERMES_HOME exists
 ```
 
+After `db:migrate`, `schema_version` must be **3** and tables `agent_root` and `skills` must exist. If migrate prints `schema_version before: 2` and `after: 2`, you are on a build before the v2→v3 migrate fix — pull latest `dev` and run migrate again.
+
+If `db:seed` fails with `no such table: agent_root`, run `npm run db:migrate` first (or upgrade Control Hub to a release that applies `002_profiles_tools_parity.sql` when `schema_version < 3`, not when the migration file prefix equals the stored version).
+
 Then in the UI: **Operations → Tools** — Pull/Push per profile as needed. Legacy `tool_plugins` rows are not migrated (table dropped).
 
 **Prebuild DB:** `npm run prebuild` writes `{repo}/data/control-hub.db` using the same baseline. Runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). If `{repo}/data/control-hub.db` has `schema_version !== 3`, prebuild deletes and recreates it (CI/dev convenience only).

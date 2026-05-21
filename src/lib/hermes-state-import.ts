@@ -6,9 +6,18 @@ import {
   type SyncResult,
 } from "./hermes-profile-sync";
 import { ensureDb, db } from "./db";
+import { isProfilesToolsParityComplete } from "./db/profiles-tools-parity-ensure";
 import { getHermesDefaultRoot } from "./hermes-profile-paths";
 import { getAgentRoot } from "./agent-root-repository";
 import { existsSync } from "fs";
+
+function assertProfilesToolsSchemaReady(): void {
+  if (!isProfilesToolsParityComplete(db())) {
+    throw new Error(
+      "Database schema is not at v3 (missing agent_root or skills). Run: npm run db:migrate",
+    );
+  }
+}
 
 export interface HermesStateImportResult {
   root: SyncResult;
@@ -26,6 +35,7 @@ function isHermesStateAlreadyImported(): boolean {
 
 export function importHermesStateFromDisk(options?: { force?: boolean }): HermesStateImportResult {
   ensureDb();
+  assertProfilesToolsSchemaReady();
 
   const defaultRoot = getHermesDefaultRoot();
   if (!existsSync(defaultRoot + "/config.yaml")) {

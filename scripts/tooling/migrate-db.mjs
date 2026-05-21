@@ -10,7 +10,10 @@ import { readFileSync, readdirSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
-import { ensureProfilesToolsParity } from "./db-schema-ensure.mjs";
+import {
+  applyProfilesToolsParityUpgrade,
+  ensureProfilesToolsParity,
+} from "./db-schema-ensure.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -102,22 +105,12 @@ if (currentVersion === 0 && !hasCoreSchema) {
   console.log("Applied baseline schema -> schema_version 3");
 }
 
-const files = readdirSync(MIGRATIONS_DIR)
-  .filter((f) => f.endsWith(".sql"))
-  .sort();
-
-for (const file of files) {
-  const num = parseInt(file.split("_")[0], 10);
-  if (isNaN(num) || num <= currentVersion) continue;
-  const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-  console.log(`Applying migration ${file}...`);
-  db.exec(sql);
-  setSchemaVersion(db, num);
-  currentVersion = num;
-  console.log(`  -> schema_version ${num}`);
+const afterUpgrade = applyProfilesToolsParityUpgrade(db, MIGRATIONS_DIR);
+if (afterUpgrade > currentVersion) {
+  console.log(`Applied v2 -> v3 parity upgrade -> schema_version ${afterUpgrade}`);
+} else {
+  ensureProfilesToolsParity(db);
 }
-
-ensureProfilesToolsParity(db);
 
 const catTable = db
   .prepare(

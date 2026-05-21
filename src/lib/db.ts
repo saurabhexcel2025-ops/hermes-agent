@@ -5,10 +5,11 @@
 
 import Database, { type Database as _DatabaseType } from "better-sqlite3";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
 import { needsBaselineRebuild, rebuildToBaseline } from "./db/upgrade";
-import { ensureProfilesToolsParity } from "./db/profiles-tools-parity-ensure";
+import { applyProfilesToolsParityUpgrade } from "./db/apply-profiles-tools-upgrade";
+import { isProfilesToolsParityComplete } from "./db/profiles-tools-parity-ensure";
 
 // ── Ensure data directory exists ───────────────────────────────
 
@@ -148,27 +149,7 @@ function runMigrations(database: Database.Database): void {
     return;
   }
 
-  const migrations: Array<{ num: number; sql: string }> = [];
-  try {
-    const files = readdirSync(migrationsDir)
-      .filter((f: string) => f.endsWith(".sql"))
-      .sort();
-    for (const file of files) {
-      const num = parseInt(file.split("_")[0], 10);
-      if (!isNaN(num) && num > currentVersion) {
-        const sql = readFileSync(join(migrationsDir, file), "utf-8");
-        migrations.push({ num, sql });
-      }
-    }
-  } catch {
-    // No migrations dir — schema shipped via pre-baked DB
-  }
-
-  for (const { num, sql } of migrations) {
-    database.exec(sql);
-    setSchemaVersion(database, num);
-  }
-  ensureProfilesToolsParity(database);
+  applyProfilesToolsParityUpgrade(database, migrationsDir);
 }
 
 // ── Bootstrap: ensure DB + schema exist ───────────────────────
