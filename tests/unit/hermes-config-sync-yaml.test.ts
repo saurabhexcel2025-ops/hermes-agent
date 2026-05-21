@@ -185,3 +185,35 @@ describe("syncDefaultsToHermesConfig", () => {
     expect(text).not.toMatch(/^model:/m);
   });
 });
+
+describe("finalizeRootConfigOnDisk", () => {
+  it("refreshes agent_root.config_yaml with model section after sync", () => {
+    const { createModel, setDefaultModel } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");
+    const { finalizeRootConfigOnDisk } = require("@/lib/hermes-config-sync") as typeof import("@/lib/hermes-config-sync");
+    const { getAgentRoot } = require("@/lib/agent-root-repository") as typeof import("@/lib/agent-root-repository");
+
+    writeFileSync(
+      join(fakeRoot, "config.yaml"),
+      "skills:\n  disabled: []\nagent:\n  max_turns: 60\n",
+    );
+
+    const m = createModel({
+      name: "Flash",
+      provider: "nous",
+      modelId: "deepseek/deepseek-v4-flash",
+      baseUrl: "https://inference-api.nousresearch.com/v1",
+    });
+    setDefaultModel("agent", m.id);
+
+    const result = finalizeRootConfigOnDisk();
+    expect(result.appliedModelDefaults).toBe(true);
+
+    const row = getAgentRoot();
+    expect(row.configYaml).toContain("default: deepseek/deepseek-v4-flash");
+
+    const cfg = yaml.load(readFileSync(join(fakeRoot, "config.yaml"), "utf-8")) as {
+      model?: { default?: string };
+    };
+    expect(cfg.model?.default).toBe("deepseek/deepseek-v4-flash");
+  });
+});

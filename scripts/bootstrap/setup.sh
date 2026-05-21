@@ -228,6 +228,15 @@ if [ "$RUN_CATALOG_SEED" = true ]; then
   fi
 fi
 
+if [ -f "$HERMES_HOME/config.yaml" ]; then
+  echo "Syncing model defaults to Hermes config.yaml…"
+  if CH_DATA_DIR="$CH_DATA_ROOT" HERMES_HOME="$HERMES_HOME" npx tsx "$REPO_ROOT/scripts/tooling/ensure-hermes-model-sync.ts"; then
+    echo "✓ Model defaults applied to config.yaml (when agent default is set in registry)"
+  else
+    echo "⚠  Model sync skipped or failed — set agent default under Config → Models"
+  fi
+fi
+
 # ── Summary ───────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"

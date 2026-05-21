@@ -10,6 +10,10 @@ import {
   normalizePlatformToolsetsFromInput,
   serializeJsonToolsets,
 } from "@/lib/profile-config-builder";
+import {
+  platformsDiffer,
+  unionToolsetsFromPlatforms,
+} from "@/lib/hermes-toolset-unify";
 import { resolveSafeProfileName } from "@/lib/path-security";
 
 export async function GET(
@@ -26,11 +30,15 @@ export async function GET(
     if (!hydrated) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
+    const divergence = platformsDiffer(hydrated.toolsets);
     return NextResponse.json({
       data: {
         profile: prof.profile,
         platformToolsets: hydrated.toolsets,
         source: hydrated.source,
+        unifiedEnabled: unionToolsetsFromPlatforms(hydrated.toolsets),
+        platformsDiverged: divergence.diverged,
+        divergedPlatforms: divergence.platforms,
       },
     });
   }

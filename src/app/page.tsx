@@ -229,6 +229,7 @@ export default function Dashboard() {
   const [errorSev, setErrorSev] = useState<"all" | "error" | "warning">("all");
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
   const [syncNowBusy, setSyncNowBusy] = useState(false);
+  const [registryAgentModelLabel, setRegistryAgentModelLabel] = useState<string | null>(null);
   const { showToast, toastElement } = useToast();
   const router = useRouter();
 
@@ -363,6 +364,8 @@ export default function Dashboard() {
         monitorRes,
         processesRes,
         missionsRes,
+        defaultsRes,
+        modelsRes,
       ] = await Promise.all([
           fetch("/api/status", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/config", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
@@ -371,9 +374,23 @@ export default function Dashboard() {
           fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/agents", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/missions", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/models/defaults", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
+          fetch("/api/models", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
         ]);
 
       if (!signal.aborted) {
+        const agentDefaultId = defaultsRes.data?.defaults?.agent as string | undefined;
+        const models = (modelsRes.data?.models ?? []) as Array<{
+          id: string;
+          name: string;
+          modelId: string;
+        }>;
+        const match = agentDefaultId
+          ? models.find((m) => m.id === agentDefaultId)
+          : undefined;
+        setRegistryAgentModelLabel(
+          match ? `${match.name} (${match.modelId})` : agentDefaultId ?? null,
+        );
         setData({
           status: statusRes.data,
           config: configRes.data,
@@ -428,8 +445,13 @@ export default function Dashboard() {
   }, [setData]);
 
   const modelConfig = config?.model as Record<string, unknown> | undefined;
-  const currentModel = (modelConfig?.default as string) || "-";
-  const currentProvider = (modelConfig?.provider as string) || "";
+  const diskModel = (modelConfig?.default as string) || "";
+  const diskProvider = (modelConfig?.provider as string) || "";
+  const modelSubtitle = diskModel
+    ? `${diskModel}${diskProvider ? ` · ${diskProvider}` : ""}`
+    : registryAgentModelLabel
+      ? `${registryAgentModelLabel} · Models registry (push Bob to write config.yaml)`
+      : "-";
   const activeProcesses = useMemo(() => processes.filter((p) => p.status === "running"), [processes]);
   const activeMissions = useMemo(() => missions.filter((m) => m.status === "queued" || m.status === "dispatched"), [missions]);
 
@@ -464,9 +486,7 @@ export default function Dashboard() {
             <span className="text-neon-cyan text-glow-cyan">CONTROL</span>{" "}
             <span className="text-white/70">HUB</span>
           </h1>
-          <p className="text-xs text-white/40 font-mono">
-            {currentModel}{currentProvider ? ` · ${currentProvider}` : ""}
-          </p>
+          <p className="text-xs text-white/40 font-mono">{modelSubtitle}</p>
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">

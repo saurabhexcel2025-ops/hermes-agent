@@ -13,7 +13,7 @@ import {
 } from "fs";
 import { createHash } from "crypto";
 
-import { atomicWriteFile } from "./hermes-config-sync";
+import { atomicWriteFile, finalizeRootConfigOnDisk } from "./hermes-config-sync";
 import { getHermesDefaultRoot } from "./hermes-profile-paths";
 import { resolveProfileHermesHome } from "./hermes-profile-paths";
 import { buildHermesPathBundle } from "./hermes-paths";
@@ -173,6 +173,7 @@ function assembleRootConfig(row: AgentRootRow): string {
     disabledSkills: disabledSkillsFromJson(row.disabledSkillsJson),
     platformDisabledSkills: parts.platformDisabledSkills,
     platformToolsets: toolsets,
+    preservedSections: parts.preservedSections,
     extraYamlLines: parts.extraYamlLines,
   });
 }
@@ -227,7 +228,7 @@ export function pushRootToHermes(): SyncResult {
     writeWithBackup(bundle.userMemory, row.userMd || "# User\n", backupsDir);
     writeWithBackup(bundle.agentMemory, row.memoryMd || "# Memory\n", backupsDir);
 
-    updateAgentRoot({ configYaml });
+    finalizeRootConfigOnDisk();
 
     setAgentRootSyncStatus(now(), null);
     return { success: true, slug: "default", backupPath: backupsDir, error: null };

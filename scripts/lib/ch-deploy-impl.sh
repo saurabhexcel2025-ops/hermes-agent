@@ -335,6 +335,8 @@ ch_deploy_cmd_rebuild() {
     fi
     npx tsx "$CH_SCRIPTS_ROOT/tooling/seed-catalog.ts" --merge >>"$CH_BUILD_LOG" 2>&1 ||
       ch_deploy_log_restart "WARNING: seed-catalog failed"
+    npx tsx "$CH_SCRIPTS_ROOT/tooling/ensure-hermes-model-sync.ts" >>"$CH_BUILD_LOG" 2>&1 ||
+      ch_deploy_log_restart "WARNING: ensure-hermes-model-sync failed"
   fi
 
   ch_deploy_status_write "running" "rebuild" "restart" "Restarting server…" "" "ch-restart.log"
@@ -416,6 +418,11 @@ ch_deploy_run_update() {
         ch_deploy_log_update "WARNING: seed-catalog failed — see ch-update.log"
       else
         ch_deploy_log_update "Catalog seed complete"
+      fi
+      if ! npx tsx "$SCRIPT_DIR/tooling/ensure-hermes-model-sync.ts" >>"$LOG_FILE" 2>&1; then
+        ch_deploy_log_update "WARNING: ensure-hermes-model-sync failed — see ch-update.log"
+      else
+        ch_deploy_log_update "Model defaults synced to config.yaml"
       fi
     fi
   fi
