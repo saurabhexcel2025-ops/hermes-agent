@@ -20,7 +20,7 @@ npm run db:seed -- --replace   # via: npx tsx scripts/tooling/seed-catalog.ts --
 
 Or use **Config → Seed** in the UI (`/config/seed`).
 
-Seed configs use Hermes-native `skills.disabled` and `platform_toolsets`. Seeds do not set `model.default`; model policy is inherited from the live Hermes/Control Hub model registry.
+Seed configs use Hermes-native `skills.disabled` and `platform_toolsets`. Default seeds enable the full Control Hub tool catalog on every gateway (`data/seed/shared/full-toolset-ids.json`; regenerate with `node scripts/tooling/render-seed-platform-toolsets.mjs`). Seeds do not set `model.default`; model policy is inherited from the live Hermes/Control Hub model registry.
 
 Mission templates in `template-packs/` may include optional `suggestedToolsets` (prompt hints only; runtime tools still come from the mission profile's `platform_toolsets`). Merge seed backfills empty profile toolsets and empty template `suggestedToolsets` from the pack.
 
