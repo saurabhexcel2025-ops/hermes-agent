@@ -41,9 +41,10 @@ async function main(): Promise<void> {
 
   const args = process.argv.slice(2);
   const mode = args.includes("--replace") ? "replace" : "merge";
+  const confirmOverride = args.includes("--confirm-override");
 
   const { runCatalogSeed } = await import("../../src/lib/seed/catalog-seed");
-  const result = runCatalogSeed({ target: "all", mode });
+  const result = runCatalogSeed({ target: "all", mode, confirmOverride });
   console.log(JSON.stringify(result, null, 2));
 }
 

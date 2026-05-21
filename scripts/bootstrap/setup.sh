@@ -187,6 +187,27 @@ echo "Building production bundle..."
 npm run build
 echo "✓ Build complete"
 
+# ── Pre-import: wire Hindsight into config.yaml if installed ──
+if [ "$HERMES_CONFIGURED" = true ] && [ -f "$HERMES_HOME/hindsight/config.json" ]; then
+  echo ""
+  echo "Checking Hindsight memory provider binding…"
+  if grep -q "provider: hindsight" "$HERMES_HOME/config.yaml" 2>/dev/null; then
+    echo "✓ Hindsight already wired in config.yaml"
+  else
+    echo "  Hindsight config found but not wired in config.yaml."
+    if [ -f "$REPO_ROOT/scripts/bootstrap/setup-hindsight.sh" ]; then
+      echo "  Running Hindsight config-wiring step before import…"
+      if HERMES_HOME="$HERMES_HOME" bash "$REPO_ROOT/scripts/bootstrap/setup-hindsight.sh" --wire-only; then
+        echo "✓ Hindsight wired into config.yaml"
+      else
+        echo "⚠  Hindsight wire step had issues — memory page may be unavailable"
+      fi
+    else
+      echo "⚠  setup-hindsight.sh not found — cannot wire Hindsight automatically"
+    fi
+  fi
+fi
+
 # ── Database migrate + catalog seed ───────────────────────────
 echo ""
 echo "Applying database migrations…"

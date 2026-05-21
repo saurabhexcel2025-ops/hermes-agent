@@ -20,6 +20,7 @@ export const PRESERVED_TOP_LEVEL_KEYS = [
   "auxiliary",
   "fallback_providers",
   "memory",
+  "plugins",
   "terminal",
   "agent",
 ] as const;
