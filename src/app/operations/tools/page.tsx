@@ -25,47 +25,12 @@ import type { AgentProfile } from "@/types/hermes";
 import {
   HERMES_CONFIGURABLE_TOOLSETS,
   HERMES_PLATFORMS,
-  toolsetCatalogLabel,
 } from "@/lib/hermes-toolset-catalog";
 import {
   expandUnifiedToAllPlatforms,
   mergeAdvancedOverrides,
   unionToolsetsFromPlatforms,
 } from "@/lib/hermes-toolset-unify";
-
-function PlatformToolsetsSummary({ toolsets }: { toolsets: PlatformToolsets }) {
-  const platforms = Object.keys(toolsets).sort();
-  if (platforms.length === 0) {
-    return (
-      <p className="text-xs text-white/35 font-mono">
-        No platform toolsets configured. Pull from Hermes or enable toolsets below.
-      </p>
-    );
-  }
-  return (
-    <div className="flex flex-wrap gap-2">
-      {platforms.map((platform) => (
-        <div
-          key={platform}
-          className="rounded-lg border border-neon-orange/25 bg-dark-950/60 px-2.5 py-1.5"
-        >
-          <span className="text-[10px] font-mono uppercase text-neon-orange/80">{platform}</span>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {toolsets[platform].map((toolset) => (
-              <span
-                key={`${platform}-${toolset}`}
-                className="text-[10px] font-mono text-white/55 bg-white/5 rounded px-1.5 py-0.5"
-                title={toolset}
-              >
-                {toolsetCatalogLabel(toolset)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export default function ToolsPage() {
   const [selectedProfile, setSelectedProfile] = useState("default");
@@ -79,9 +44,7 @@ export default function ToolsPage() {
   const [platformsDiverged, setPlatformsDiverged] = useState(false);
   const [showAdvancedPerPlatform, setShowAdvancedPerPlatform] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
-  const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, boolean>>({
-    cli: false,
-  });
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, boolean>>({});
   const [profileSyncStatus, setProfileSyncStatus] = useState<AgentProfile["syncStatus"] | null>(null);
   const { showToast, toastElement } = useToast();
 
@@ -123,6 +86,8 @@ export default function ToolsPage() {
   }, [selectedProfile, showToast]);
 
   useEffect(() => {
+    setShowAdvancedPerPlatform(false);
+    setExpandedPlatforms({});
     void loadToolsets();
     void loadProfileSyncStatus();
   }, [loadToolsets, loadProfileSyncStatus]);
@@ -252,8 +217,7 @@ export default function ToolsPage() {
     }
   };
 
-  const platformCount = Object.keys(platformToolsets).length;
-  const toolsetCount = Object.values(platformToolsets).reduce((n, list) => n + list.length, 0);
+  const enabledCount = unifiedEnabled.length;
 
   return (
     <AppPageShell>
@@ -264,7 +228,7 @@ export default function ToolsPage() {
         subtitle={
           loadingToolsets
             ? "Loading profile toolsets…"
-            : `${platformCount} platform(s), ${toolsetCount} toolset(s) for selected profile`
+            : `${enabledCount} toolset${enabledCount === 1 ? "" : "s"} enabled for selected profile`
         }
         color="orange"
         actions={
@@ -365,10 +329,9 @@ export default function ToolsPage() {
                 <LoadingSpinner text="Loading toolsets…" />
               ) : (
                 <>
-                  <PlatformToolsetsSummary toolsets={platformToolsets} />
-                  <div className="mt-4">
+                  <div>
                     <h3 className="text-xs font-mono text-white/50 uppercase tracking-widest mb-2">
-                      Enabled toolsets (all gateways)
+                      Enabled toolsets
                     </h3>
                     <div className="flex flex-wrap gap-2">
                       {HERMES_CONFIGURABLE_TOOLSETS.map((toolset) => {
@@ -395,7 +358,15 @@ export default function ToolsPage() {
                     <button
                       type="button"
                       className="text-[10px] font-mono text-white/40 hover:text-white/60"
-                      onClick={() => setShowAdvancedPerPlatform((v) => !v)}
+                      onClick={() => {
+                        setShowAdvancedPerPlatform((v) => {
+                          const next = !v;
+                          if (!next) {
+                            setExpandedPlatforms({});
+                          }
+                          return next;
+                        });
+                      }}
                     >
                       {showAdvancedPerPlatform ? "Hide" : "Show"} advanced per-platform overrides
                     </button>
