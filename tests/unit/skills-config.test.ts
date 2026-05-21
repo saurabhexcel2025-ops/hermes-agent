@@ -3,6 +3,8 @@
 import {
   buildDisabledYamlLines,
   collectSkillDirectoryNames,
+  computeEffectiveDisabledFromYaml,
+  normalizeDisabledSkillKeys,
   parseSkillsDisabledFromYaml,
 } from "@/lib/skills-config";
 
@@ -59,5 +61,39 @@ describe("buildDisabledYamlLines", () => {
 describe("collectSkillDirectoryNames", () => {
   it("returns an empty list for a missing skills root", () => {
     expect(collectSkillDirectoryNames("/nonexistent-skills-root")).toEqual([]);
+  });
+});
+
+describe("normalizeDisabledSkillKeys", () => {
+  const catalog = ["apple/apple-notes", "devops/hermes-infrastructure"];
+
+  it("maps leaf name to full catalog path", () => {
+    expect(normalizeDisabledSkillKeys(["apple-notes"], catalog)).toEqual([
+      "apple/apple-notes",
+    ]);
+  });
+
+  it("keeps full path when already canonical", () => {
+    expect(normalizeDisabledSkillKeys(["devops/hermes-infrastructure"], catalog)).toEqual([
+      "devops/hermes-infrastructure",
+    ]);
+  });
+});
+
+describe("computeEffectiveDisabledFromYaml", () => {
+  const catalog = ["a/one", "a/two", "b/three"];
+
+  it("treats skills.enabled as allowlist (installed minus enabled)", () => {
+    const yaml = ["skills:", "  enabled:", "    - a/one"].join("\n");
+    const disabled = computeEffectiveDisabledFromYaml(yaml, catalog);
+    expect(disabled).toEqual(["a/two", "b/three"]);
+  });
+
+  it("merges explicit disabled with allowlist mode", () => {
+    const yaml = ["skills:", "  enabled:", "    - a/one", "  disabled:", "    - b/three"].join(
+      "\n",
+    );
+    const disabled = computeEffectiveDisabledFromYaml(yaml, catalog);
+    expect(disabled.sort()).toEqual(["a/two", "b/three"]);
   });
 });

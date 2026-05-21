@@ -4,6 +4,7 @@ import { buildProfileHermesPathBundle } from "./hermes-profile-paths";
 
 export interface ParsedSkillsDisabled {
   disabledNames: Set<string>;
+  enabledNames: Set<string>;
   platformDisabled: Record<string, Set<string>>;
 }
 
@@ -86,6 +87,7 @@ export function parseSkillsDisabledFromYaml(content: string): ParsedSkillsDisabl
   const lines = content.split(/\r?\n/);
   const result: ParsedSkillsDisabled = {
     disabledNames: new Set<string>(),
+    enabledNames: new Set<string>(),
     platformDisabled: {},
   };
 
@@ -103,6 +105,12 @@ export function parseSkillsDisabledFromYaml(content: string): ParsedSkillsDisabl
 
   for (let i = skillsLine + 1; i < sectionEnd; i++) {
     const trimmed = lines[i].trim();
+    if (trimmed.startsWith("enabled:")) {
+      const parsed = parseListValue(lines, i, sectionEnd, "enabled");
+      result.enabledNames = parsed.values;
+      i = parsed.endExclusive - 1;
+      continue;
+    }
     if (trimmed.startsWith("disabled:")) {
       const parsed = parseListValue(lines, i, sectionEnd, "disabled");
       result.disabledNames = parsed.values;
@@ -229,4 +237,87 @@ export function findSkillFile(skillName: string, _home: string, profile: string)
   }
 
   return null;
+}
+
+/**
+ * Map denylist entries (leaf or full path) to canonical catalog `category/skill` keys.
+ */
+export function normalizeDisabledSkillKeys(
+  rawEntries: Iterable<string>,
+  catalogKeys: readonly string[],
+): string[] {
+  const catalog = [...catalogKeys];
+  const catalogSet = new Set(catalog);
+  const byLeaf = new Map<string, string[]>();
+  for (const key of catalog) {
+    const leaf = key.includes("/") ? key.split("/").pop() ?? key : key;
+    const list = byLeaf.get(leaf) ?? [];
+    list.push(key);
+    byLeaf.set(leaf, list);
+  }
+
+  const resolved = new Set<string>();
+  for (const raw of rawEntries) {
+    const entry = raw.trim();
+    if (!entry) continue;
+    if (catalogSet.has(entry)) {
+      resolved.add(entry);
+      continue;
+    }
+    const suffixMatches = catalog.filter(
+      (key) => key === entry || key.endsWith(`/${entry}`),
+    );
+    if (suffixMatches.length === 1) {
+      resolved.add(suffixMatches[0]);
+      continue;
+    }
+    if (suffixMatches.length > 1) {
+      for (const match of suffixMatches) resolved.add(match);
+      continue;
+    }
+    const leafMatches = byLeaf.get(entry);
+    if (leafMatches?.length === 1) {
+      resolved.add(leafMatches[0]);
+      continue;
+    }
+    if (leafMatches && leafMatches.length > 1) {
+      for (const match of leafMatches) resolved.add(match);
+      continue;
+    }
+    resolved.add(entry);
+  }
+  return [...resolved].sort();
+}
+
+/**
+ * Effective denylist: explicit disabled + allowlist mode (installed − enabled).
+ */
+export function computeEffectiveDisabledNames(
+  parsed: ParsedSkillsDisabled,
+  catalogKeys: readonly string[],
+): string[] {
+  const catalog = [...catalogKeys];
+  const explicit = normalizeDisabledSkillKeys(parsed.disabledNames, catalog);
+
+  if (parsed.enabledNames.size === 0) {
+    return explicit;
+  }
+
+  const allowed = new Set(
+    normalizeDisabledSkillKeys(parsed.enabledNames, catalog),
+  );
+  const fromAllowlist = catalog.filter((key) => !allowed.has(key));
+  return normalizeDisabledSkillKeys(
+    [...explicit, ...fromAllowlist],
+    catalog,
+  );
+}
+
+/** Parse skills section and compute normalized disabled keys for SQLite / UI. */
+export function computeEffectiveDisabledFromYaml(
+  yamlContent: string,
+  catalogKeys: readonly string[],
+): string[] {
+  const parsed = parseSkillsDisabledFromYaml(yamlContent);
+  return computeEffectiveDisabledNames(parsed, catalogKeys);
 }

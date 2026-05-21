@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
   const skills = body.skills === true;
   const skillKey = typeof body.skillKey === "string" ? body.skillKey : undefined;
   const importDiscovered = body.importDiscovered === true;
+  const reconcileDisk =
+    body.reconcileDisk === true || process.env.CH_PULL_RECONCILE_DISK === "1";
 
   try {
     ensureDb();
@@ -50,9 +52,9 @@ export async function POST(request: NextRequest) {
     if (all || importDiscovered) {
       const profileResults = [];
       for (const p of listProfiles()) {
-        profileResults.push(pullProfileFromHermes(p.slug));
+        profileResults.push(pullProfileFromHermes(p.slug, { reconcileDisk }));
       }
-      const rootResult = pullRootFromHermes();
+      const rootResult = pullRootFromHermes({ reconcileDisk });
       if (importDiscovered) {
         for (const d of discoverLocalProfiles().filter((p) => !p.inDatabase)) {
           profileResults.push(importDiscoveredProfile(d.slug));
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (root || slug === "default") {
-      const result = pullRootFromHermes();
+      const result = pullRootFromHermes({ reconcileDisk });
       return NextResponse.json({ data: { success: result.success, result } });
     }
 
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "slug, all, root, or skills required" }, { status: 400 });
     }
 
-    const result = pullProfileFromHermes(slug);
+    const result = pullProfileFromHermes(slug, { reconcileDisk });
     return NextResponse.json({
       data: {
         success: result.success,

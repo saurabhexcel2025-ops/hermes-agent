@@ -107,10 +107,15 @@ describe("hermes-profile-sync", () => {
 
   it("pull normalizes granular cli toolsets into compact hermes-cli", () => {
     const { upsertProfile, getProfile } = require("@/lib/profiles-repository") as typeof import("@/lib/profiles-repository");
-    const { pullProfileFromHermes } = require("@/lib/hermes-profile-sync") as typeof import("@/lib/hermes-profile-sync");
+    const {
+      pullProfileFromHermes,
+      detectProfileDrift,
+    } = require("@/lib/hermes-profile-sync") as typeof import("@/lib/hermes-profile-sync");
 
     const profileDir = join(hermesRoot, "profiles", "bob");
     mkdirSync(profileDir, { recursive: true });
+    writeFileSync(join(profileDir, "SOUL.md"), "# Bob");
+    writeFileSync(join(profileDir, "AGENTS.md"), "# Agents");
     writeFileSync(
       join(profileDir, "config.yaml"),
       [
@@ -138,5 +143,7 @@ describe("hermes-profile-sync", () => {
     const row = getProfile("bob");
     const json = JSON.parse(row?.platformToolsetsJson ?? "{}") as Record<string, string[]>;
     expect(json.cli).toEqual(["hermes-cli"]);
+    const drift = detectProfileDrift("bob");
+    expect(drift.fields).not.toContain("config.yaml");
   });
 });

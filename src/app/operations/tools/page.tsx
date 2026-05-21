@@ -270,9 +270,11 @@ export default function ToolsPage() {
           <div className="mb-4 p-3 rounded-lg bg-semantic-warning/10 border border-semantic-warning/30 flex items-start gap-2">
             <Info className="w-4 h-4 text-semantic-warning flex-shrink-0 mt-0.5" />
             <p className="text-xs text-semantic-warning/90">
-              Disk and SQLite differ for this profile. Use <strong>Pull from Hermes</strong> to
-              import disk changes, or <strong>Save & push toolsets</strong> / <strong>Push</strong>{" "}
-              to write Control Hub state to <code className="text-white/50">~/.hermes</code>.
+              Toolset policy on disk differs from Control Hub (format or values).{" "}
+              <strong>Pull from Hermes</strong> imports disk into SQLite;{" "}
+              <strong>Save & push toolsets</strong> or <strong>Push</strong> writes canonical{" "}
+              <code className="text-white/50">config.yaml</code> to{" "}
+              <code className="text-white/50">~/.hermes</code>.
             </p>
           </div>
         )}

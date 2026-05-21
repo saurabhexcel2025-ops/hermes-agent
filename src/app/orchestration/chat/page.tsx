@@ -202,6 +202,7 @@ export default function ChatPage() {
 
   // Gateway connectivity check
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
+  const [agentDefaultModelSet, setAgentDefaultModelSet] = useState<boolean | null>(null);
 
   // ── Load persisted sessions from localStorage on mount ─────
   useEffect(() => {
@@ -294,6 +295,24 @@ export default function ChatPage() {
     checkGateway();
     const id = setInterval(checkGateway, 30000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const checkAgentModel = async () => {
+      try {
+        const res = await fetch("/api/models/defaults", { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) {
+          setAgentDefaultModelSet(null);
+          return;
+        }
+        const json = await res.json();
+        const agentId = json.data?.defaults?.agent as string | undefined;
+        setAgentDefaultModelSet(Boolean(agentId && agentId.trim().length > 0));
+      } catch {
+        setAgentDefaultModelSet(null);
+      }
+    };
+    void checkAgentModel();
   }, []);
 
   // Get active session
@@ -541,6 +560,13 @@ export default function ChatPage() {
       return;
     }
 
+    const sessionAtSend = sessions.find((s) => s.id === activeSessionId);
+    const priorMessages = sessionAtSend?.messages ?? [];
+    const apiMessages = [
+      ...priorMessages.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user" as const, content: text },
+    ];
+
     const userMessage: ChatMessage = {
       id: generateId(),
       role: "user",
@@ -573,14 +599,6 @@ export default function ChatPage() {
     setIsStreaming(true);
 
     try {
-      // Build message history for the API
-      const session = sessions.find((s) => s.id === activeSessionId);
-      const currentMessages = session?.messages || [];
-      const apiMessages = [
-        ...currentMessages.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user" as const, content: text },
-      ];
-
       const res = await fetch("/api/orchestration/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -828,6 +846,20 @@ export default function ChatPage() {
                     <p className="text-xs text-white/60">
                       The Hermes Gateway (port 8642) is not responding.
                       Start it with: <code className="text-neon-cyan">hermes gateway start</code>
+                    </p>
+                  </div>
+                )}
+                {gatewayOnline !== false && agentDefaultModelSet === false && (
+                  <div className="w-full max-w-md mb-6 p-4 bg-neon-orange/10 border border-neon-orange/20 rounded-lg text-left">
+                    <div className="flex items-center gap-2 text-neon-orange mb-1">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm font-semibold">No agent default model</span>
+                    </div>
+                    <p className="text-xs text-white/60">
+                      Set an agent default under Config → Models and push to Hermes, or run{" "}
+                      <code className="text-neon-cyan">hermes model</code>. Chat uses{" "}
+                      <code className="text-white/50">~/.hermes/config.yaml</code> model.default,
+                      not the dropdown label alone.
                     </p>
                   </div>
                 )}

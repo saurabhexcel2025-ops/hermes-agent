@@ -4,6 +4,8 @@
 
 import {
   buildDisabledYamlLines,
+  computeEffectiveDisabledFromYaml,
+  normalizeDisabledSkillKeys,
   parseSkillsDisabledFromYaml,
 } from "./skills-config";
 import { normalizePlatformToolsets } from "./hermes-toolset-normalize";
@@ -228,18 +230,26 @@ export function patchDisabledSkillsInYaml(content: string, disabled: string[]): 
 }
 
 /** Pull: parse yaml into column-friendly values. */
-export function configYamlToColumnValues(content: string): {
+export function configYamlToColumnValues(
+  content: string,
+  catalogKeys?: readonly string[],
+): {
   personality: string;
   disabledSkillsJson: string;
   platformToolsetsJson: string;
   configYaml: string;
 } {
   const parts = parseConfigYaml(content);
+  if (catalogKeys && catalogKeys.length > 0) {
+    parts.disabledSkills = computeEffectiveDisabledFromYaml(content, catalogKeys);
+  }
   const rebuilt = buildConfigYaml(parts);
   return {
     personality: parts.personality,
     disabledSkillsJson: serializeJsonArray(parts.disabledSkills),
-    platformToolsetsJson: serializeJsonToolsets(parts.platformToolsets),
+    platformToolsetsJson: serializeJsonToolsets(
+      normalizePlatformToolsets(parts.platformToolsets),
+    ),
     configYaml: rebuilt,
   };
 }
@@ -301,10 +311,54 @@ export function resolvePlatformToolsets(
   return { toolsets: {}, source: "database" };
 }
 
+function partsForSemanticCompare(parts: ProfileConfigParts): string {
+  const platformDisabled: Record<string, string[]> = {};
+  for (const [platform, values] of Object.entries(parts.platformDisabledSkills)) {
+    platformDisabled[platform] = [...values].sort();
+  }
+  const payload = {
+    personality: parts.personality,
+    disabledSkills: [...parts.disabledSkills].sort(),
+    platformDisabledSkills: platformDisabled,
+    platformToolsets: normalizePlatformToolsets(parts.platformToolsets),
+  };
+  return JSON.stringify(payload);
+}
+
+/** Compare config policy (not raw yaml bytes). */
+export function configYamlSemanticallyMatches(
+  diskContent: string,
+  assembledContent: string,
+  catalogKeys?: readonly string[],
+): boolean {
+  const diskParts = parseConfigYaml(diskContent);
+  const assembledParts = parseConfigYaml(assembledContent);
+  if (catalogKeys && catalogKeys.length > 0) {
+    diskParts.disabledSkills = computeEffectiveDisabledFromYaml(diskContent, catalogKeys);
+    assembledParts.disabledSkills = computeEffectiveDisabledFromYaml(
+      assembledContent,
+      catalogKeys,
+    );
+  }
+  return partsForSemanticCompare(diskParts) === partsForSemanticCompare(assembledParts);
+}
+
 /** Compare disabled lists for drift (ignores yaml formatting). */
-export function disabledSkillsMatchJson(yamlContent: string, disabledJson: string): boolean {
-  const fromYaml = parseConfigYaml(yamlContent).disabledSkills;
+export function disabledSkillsMatchJson(
+  yamlContent: string,
+  disabledJson: string,
+  catalogKeys?: readonly string[],
+): boolean {
   const fromDb = disabledSkillsFromJson(disabledJson);
+  let fromYaml = parseConfigYaml(yamlContent).disabledSkills;
+  if (catalogKeys && catalogKeys.length > 0) {
+    fromYaml = computeEffectiveDisabledFromYaml(yamlContent, catalogKeys);
+    const normalizedDb = normalizeDisabledSkillKeys(fromDb, catalogKeys);
+    if (fromYaml.length !== normalizedDb.length) return false;
+    const a = [...fromYaml].sort();
+    const b = [...normalizedDb].sort();
+    return a.every((v, i) => v === b[i]);
+  }
   if (fromYaml.length !== fromDb.length) return false;
   const a = [...fromYaml].sort();
   const b = [...fromDb].sort();

@@ -9,7 +9,6 @@ import { existsSync, mkdirSync, readFileSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
 import { needsBaselineRebuild, rebuildToBaseline } from "./db/upgrade";
 import { applyProfilesToolsParityUpgrade } from "./db/apply-profiles-tools-upgrade";
-import { isProfilesToolsParityComplete } from "./db/profiles-tools-parity-ensure";
 
 // ── Ensure data directory exists ───────────────────────────────
 

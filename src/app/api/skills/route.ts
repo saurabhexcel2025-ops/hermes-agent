@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { logApiError } from "@/lib/api-logger";
 import { ensureDb } from "@/lib/db";
-import { getAgentRoot } from "@/lib/agent-root-repository";
-import { getDisabledSkills, getProfile } from "@/lib/profiles-repository";
+import { resolveEffectiveDisabledSkills } from "@/lib/effective-disabled-skills";
+import { getProfile } from "@/lib/profiles-repository";
 import { listSkills } from "@/lib/skills-repository";
 import { skillsRootForProfile } from "@/lib/skills-config";
 import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
@@ -21,21 +21,9 @@ interface Skill {
   lastModified: string;
 }
 
-function disabledSetForProfile(profile: string): Set<string> {
-  if (profile === "default") {
-    const row = getAgentRoot();
-    try {
-      return new Set(JSON.parse(row.disabledSkillsJson || "[]") as string[]);
-    }
-    catch {
-      return new Set();
-    }
-  }
-  return new Set(getDisabledSkills(profile));
-}
-
 export async function GET(request: NextRequest) {
   const profileParam = request.nextUrl.searchParams.get("profile") || "default";
+  const refreshFromDisk = request.nextUrl.searchParams.get("refresh") === "1";
   const prof = resolveSafeProfileName(profileParam);
   if (!prof.ok) {
     return NextResponse.json({ error: prof.error }, { status: 400 });
@@ -46,7 +34,7 @@ export async function GET(request: NextRequest) {
     ensureDb();
     const home = getActiveHermesHome();
     const skillsDir = skillsRootForProfile(home, profile);
-    const disabled = disabledSetForProfile(profile);
+    const disabled = resolveEffectiveDisabledSkills(profile, { refreshFromDisk });
 
     const dbSkills = listSkills();
     const dbKeys = new Set(dbSkills.map((s) => s.skillKey));

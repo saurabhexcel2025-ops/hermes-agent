@@ -35,11 +35,14 @@ import { flattenProfileToolsets } from "./hermes-toolset-catalog";
 import {
   buildConfigYaml,
   configYamlToColumnValues,
+  configYamlSemanticallyMatches,
   parseConfigYaml,
   disabledSkillsMatchJson,
   disabledSkillsFromJson,
   resolvePlatformToolsets,
 } from "./profile-config-builder";
+import { collectSkillDirectoryNames, skillsRootForProfile } from "./skills-config";
+import { getActiveHermesHome } from "./hermes-agent-runtime";
 import { loadSeedPlatformToolsets } from "./seed-profile-toolsets";
 import {
   getSkill,
@@ -289,7 +292,32 @@ export function pushAllProfiles(options?: {
   return results;
 }
 
-export function pullProfileFromHermes(slug: string): SyncResult {
+function catalogKeysForPull(): string[] {
+  const home = getActiveHermesHome();
+  return collectSkillDirectoryNames(skillsRootForProfile(home, "default"));
+}
+
+function reconcileProfileConfigOnDisk(slug: string): void {
+  const profile = getProfile(slug);
+  if (!profile) return;
+  const root = profileRootForSlug(slug);
+  const bundle = buildHermesPathBundle(root);
+  const assembled = assembleConfigYamlForProfile(profile);
+  writeWithBackup(bundle.config, assembled, bundle.backups);
+}
+
+function reconcileRootConfigOnDisk(): void {
+  const row = getAgentRoot();
+  const defaultRoot = getHermesDefaultRoot();
+  const bundle = buildHermesPathBundle(defaultRoot);
+  const assembled = assembleRootConfig(row);
+  writeWithBackup(bundle.config, assembled, bundle.backups);
+}
+
+export function pullProfileFromHermes(
+  slug: string,
+  options?: { reconcileDisk?: boolean },
+): SyncResult {
   const root = profileRootForSlug(slug);
   const bundle = buildHermesPathBundle(root);
   try {
@@ -297,7 +325,8 @@ export function pullProfileFromHermes(slug: string): SyncResult {
     if (existsSync(bundle.config)) {
       configYaml = readFileSync(bundle.config, "utf-8");
     }
-    const cols = configYamlToColumnValues(configYaml);
+    const catalogKeys = catalogKeysForPull();
+    const cols = configYamlToColumnValues(configYaml, catalogKeys);
     const patch: Parameters<typeof updateProfileContent>[1] = {
       configYaml: cols.configYaml,
       personality: cols.personality,
@@ -318,6 +347,9 @@ export function pullProfileFromHermes(slug: string): SyncResult {
     }
     updateProfileContent(slug, patch);
     hydratePlatformToolsetsForSlug(slug, { persist: true });
+    if (options?.reconcileDisk) {
+      reconcileProfileConfigOnDisk(slug);
+    }
     setProfileSyncStatus(slug, now(), null);
     return { success: true, slug, backupPath: null, error: null };
   }
@@ -327,7 +359,7 @@ export function pullProfileFromHermes(slug: string): SyncResult {
   }
 }
 
-export function pullRootFromHermes(): SyncResult {
+export function pullRootFromHermes(options?: { reconcileDisk?: boolean }): SyncResult {
   const defaultRoot = getHermesDefaultRoot();
   const bundle = buildHermesPathBundle(defaultRoot);
   try {
@@ -335,7 +367,8 @@ export function pullRootFromHermes(): SyncResult {
     if (existsSync(bundle.config)) {
       configYaml = readFileSync(bundle.config, "utf-8");
     }
-    const cols = configYamlToColumnValues(configYaml);
+    const catalogKeys = catalogKeysForPull();
+    const cols = configYamlToColumnValues(configYaml, catalogKeys);
     const patch: Parameters<typeof updateAgentRoot>[0] = {
       configYaml: cols.configYaml,
       personality: cols.personality,
@@ -349,6 +382,9 @@ export function pullRootFromHermes(): SyncResult {
     if (existsSync(bundle.agentMemory)) patch.memoryMd = readFileSync(bundle.agentMemory, "utf-8");
     updateAgentRoot(patch);
     hydratePlatformToolsetsForSlug("default", { persist: true });
+    if (options?.reconcileDisk) {
+      reconcileRootConfigOnDisk();
+    }
     setAgentRootSyncStatus(now(), null);
     return { success: true, slug: "default", backupPath: null, error: null };
   }
@@ -417,8 +453,16 @@ export function detectProfileDrift(slug: string): ProfileDriftEntry {
   const bundle = buildHermesPathBundle(profileRootForSlug(slug));
   const fields: string[] = [];
   const expectedConfig = assembleConfigYamlForProfile(profile);
+  const catalogKeys = catalogKeysForPull();
 
-  if (fileHash(bundle.config) !== contentHash(expectedConfig)) fields.push("config.yaml");
+  if (existsSync(bundle.config)) {
+    const diskConfig = readFileSync(bundle.config, "utf-8");
+    if (!configYamlSemanticallyMatches(diskConfig, expectedConfig, catalogKeys)) {
+      fields.push("config.yaml");
+    }
+  } else if (expectedConfig.trim().length > 0) {
+    fields.push("config.yaml");
+  }
   if (fileHash(bundle.soul) !== contentHash(profile.soulMd)) fields.push("SOUL.md");
   if (fileHash(bundle.agents) !== contentHash(profile.agentsMd)) fields.push("AGENTS.md");
   if (fileHash(bundle.userMemory) !== contentHash(profile.userMd || "# User\n")) fields.push("USER.md");
@@ -427,7 +471,7 @@ export function detectProfileDrift(slug: string): ProfileDriftEntry {
   }
   if (existsSync(bundle.config)) {
     const diskConfig = readFileSync(bundle.config, "utf-8");
-    if (!disabledSkillsMatchJson(diskConfig, profile.disabledSkillsJson)) {
+    if (!disabledSkillsMatchJson(diskConfig, profile.disabledSkillsJson, catalogKeys)) {
       fields.push("skills.disabled");
     }
   }
@@ -445,8 +489,22 @@ export function detectRootDrift(): RootDriftEntry {
   const bundle = buildHermesPathBundle(getHermesDefaultRoot());
   const fields: string[] = [];
   const expectedConfig = assembleRootConfig(row);
+  const catalogKeys = catalogKeysForPull();
 
-  if (fileHash(bundle.config) !== contentHash(expectedConfig)) fields.push("config.yaml");
+  if (existsSync(bundle.config)) {
+    const diskConfig = readFileSync(bundle.config, "utf-8");
+    if (!configYamlSemanticallyMatches(diskConfig, expectedConfig, catalogKeys)) {
+      fields.push("config.yaml");
+    }
+  } else if (expectedConfig.trim().length > 0) {
+    fields.push("config.yaml");
+  }
+  if (existsSync(bundle.config)) {
+    const diskConfig = readFileSync(bundle.config, "utf-8");
+    if (!disabledSkillsMatchJson(diskConfig, row.disabledSkillsJson, catalogKeys)) {
+      fields.push("skills.disabled");
+    }
+  }
   if (fileHash(bundle.soul) !== contentHash(row.soulMd)) fields.push("SOUL.md");
   if (fileHash(bundle.agents) !== contentHash(row.agentsMd)) fields.push("AGENTS.md");
   if (existsSync(bundle.hermes) && fileHash(bundle.hermes) !== contentHash(row.hermesMd)) {

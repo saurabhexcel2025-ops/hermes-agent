@@ -118,6 +118,8 @@ The **New Mission** sheet is the full composer.
 
 Missions use non-interactive `hermes chat -q` with a structured mission prompt; chat uses the gateway completion path. See [MISSIONS.md](MISSIONS.md) for the difference.
 
+**Model:** Inference uses `model.default` in `~/.hermes/config.yaml`, not only the chat dropdown label. Set **Config → Models → Agent default** and push to Hermes (or run `hermes model`) before chatting; otherwise the gateway may return “Model parameter is required”.
+
 ---
 
 ## Cron jobs

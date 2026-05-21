@@ -6,7 +6,7 @@
  */
 
 import Database from "better-sqlite3";
-import { readFileSync, readdirSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
