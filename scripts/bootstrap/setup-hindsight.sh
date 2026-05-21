@@ -7,6 +7,7 @@
 #
 # Usage:
 #   bash scripts/bootstrap/setup-hindsight.sh
+#   bash scripts/bootstrap/setup-hindsight.sh --wire-only   # config + SQLite sync only
 #
 # Requires:
 #   - sudo access (for PostgreSQL installation)

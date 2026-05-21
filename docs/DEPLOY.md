@@ -110,4 +110,44 @@ Shipped seeds: **`data/seed/profiles/`**, **`data/seed/template-packs/control-hu
 
 ## TLS
 
-Use a reverse proxy with automatic certificates (Let’s Encrypt). Do not commit TLS material into the repo.
+Use a reverse proxy with automatic certificates (Let's Encrypt). Do not commit TLS material into the repo.
+
+## Hindsight Memory — Safe Reconnection After Deploy
+
+Deploy updates (`ch-deploy update`, `seed-catalog.ts --replace`, or Config → Seed
+push) can strip Hindsight memory configuration from `~/.hermes/config.yaml` if the
+SQLite `agent_root` row is out of sync with disk — for example, if Hindsight was
+wired after the initial import.
+
+### Prevention (automatic)
+
+- **`setup.sh`** now checks for existing Hindsight config and runs
+  `setup-hindsight.sh --wire-only` before `import-hermes-state.ts`, ensuring the
+  SQLite capture includes the Hindsight wiring.
+- **`setup-hindsight.sh`** now syncs the updated config.yaml to the Control Hub
+  SQLite `agent_root` row after every config modification.
+
+### Recovery (after a deploy stripped the config)
+
+If the Memory page shows 0 facts or "Not Installed" after a deploy:
+
+```bash
+cd /path/to/control-hub
+bash scripts/hardware/reconnect-hindsight.sh
+```
+
+This re-wires `memory:` and `plugins:hindsight:` in config.yaml and syncs the
+result to SQLite so subsequent pushes preserve it.
+
+### Manual verification
+
+```bash
+# Check that Hindsight is wired
+grep "provider: hindsight" ~/.hermes/config.yaml
+
+# Check Hindsight server health
+curl http://localhost:9177/health
+
+# Check memory count via API
+curl http://localhost:9177/v1/default/banks/hermes/memories/list?limit=1
+```
