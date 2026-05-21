@@ -165,7 +165,7 @@ function seedRoot(mode: SeedMode, confirmOverride = false): number {
     // Warn about differing preserved sections
     const currentPreserved = extractPreservedSections(root.configYaml);
     const seedPreserved = extractPreservedSections(cols.configYaml);
-    const differingKeys = Object.keys(seedPreserved).filter(
+    const differingKeys = (Object.keys(seedPreserved) as Array<keyof typeof seedPreserved>).filter(
       (k) => JSON.stringify(seedPreserved[k]) !== JSON.stringify(currentPreserved[k]),
     );
     if (differingKeys.length > 0) {
