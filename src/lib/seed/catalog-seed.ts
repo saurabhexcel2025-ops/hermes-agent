@@ -9,6 +9,7 @@ import { ensureDb } from "../db";
 import { upsertProfile, getProfileBySeedKey } from "../profiles-repository";
 import {
   configYamlToColumnValues,
+  extractPreservedSections,
   isEmptyPlatformToolsets,
   platformToolsetsFromJson,
 } from "../profile-config-builder";
