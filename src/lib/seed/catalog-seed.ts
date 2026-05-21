@@ -9,6 +9,7 @@ import { ensureDb } from "../db";
 import { upsertProfile, getProfileBySeedKey } from "../profiles-repository";
 import {
   configYamlToColumnValues,
+  extractPreservedSections,
   isEmptyPlatformToolsets,
   platformToolsetsFromJson,
 } from "../profile-config-builder";
@@ -46,6 +47,9 @@ export interface SeedTarget {
   slug?: string;
   templateId?: string;
   mode: SeedMode;
+  /** When true, merge mode may overwrite existing config sections.
+   *  Defaults to false — existing user config is preserved. */
+  confirmOverride?: boolean;
 }
 
 export interface SeedResult {
@@ -133,7 +137,7 @@ function readRootSeedFiles(): {
   };
 }
 
-function seedRoot(mode: SeedMode): number {
+function seedRoot(mode: SeedMode, confirmOverride = false): number {
   const root = getAgentRoot();
   const files = readRootSeedFiles();
   const cols = configYamlToColumnValues(files.configYaml);
@@ -157,6 +161,25 @@ function seedRoot(mode: SeedMode): number {
         configYaml: cols.configYaml,
       });
       return 1;
+    }
+    // Warn about differing preserved sections
+    const currentPreserved = extractPreservedSections(root.configYaml);
+    const seedPreserved = extractPreservedSections(cols.configYaml);
+    const differingKeys = (Object.keys(seedPreserved) as Array<keyof typeof seedPreserved>).filter(
+      (k) => JSON.stringify(seedPreserved[k]) !== JSON.stringify(currentPreserved[k]),
+    );
+    if (differingKeys.length > 0) {
+      console.warn(
+        `[seed] root: existing config preserved. Differing sections: ${differingKeys.join(", ")}. ` +
+          "Pass --confirm-override to apply seed defaults for these sections.",
+      );
+      if (confirmOverride) {
+        updateAgentRoot({
+          platformToolsetsJson: cols.platformToolsetsJson,
+          configYaml: cols.configYaml,
+        });
+        return 1;
+      }
     }
     return 0;
   }
@@ -320,7 +343,7 @@ export function runCatalogSeed(options: SeedTarget): SeedResult {
   let categories = 0;
 
   if (options.target === "all" || options.target === "root") {
-    root = seedRoot(mode);
+    root = seedRoot(mode, options.confirmOverride);
   }
   if (options.target === "all" || options.target === "categories") {
     categories = seedCategories(mode);

@@ -6,6 +6,12 @@ jest.mock("@/lib/api-auth", () => ({
 
 jest.mock("@/lib/api-logger", () => ({ logApiError: jest.fn() }));
 
+const mockImportHermesState = jest.fn(() => null);
+
+jest.mock("@/lib/hermes-state-import", () => ({
+  importHermesStateFromDisk: (...args: unknown[]) => mockImportHermesState(...args),
+}));
+
 const mockRunCatalogSeed = jest.fn(() => ({
   profiles: 6,
   templates: 12,
@@ -39,6 +45,7 @@ describe("/api/seed", () => {
     });
     const res = await POST(req);
     const body = (await res.json()) as { data: { profiles: number } };
+    expect(body.data).toBeDefined();
     expect(body.data.profiles).toBe(6);
     expect(mockRunCatalogSeed).toHaveBeenCalledWith(
       expect.objectContaining({ target: "all", mode: "merge" }),

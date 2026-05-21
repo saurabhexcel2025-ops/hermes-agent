@@ -116,6 +116,41 @@ describe("profile-config-builder", () => {
     expect(resolved.source).toBe("config_yaml");
     expect(resolved.toolsets.discord).toEqual(["hermes-discord"]);
   });
+
+  it("preserves memory and plugins sections through parse/build", () => {
+    const input = [
+      "memory:",
+      "  provider: hindsight",
+      "  memory_enabled: true",
+      "plugins:",
+      "  hindsight:",
+      "    auto_retain: true",
+      "    api_url: http://localhost:9177",
+      "skills:",
+      "  disabled: []",
+    ].join("\n");
+    const parts = parseConfigYaml(input);
+    expect(parts.preservedSections.memory).toMatchObject({
+      provider: "hindsight",
+      memory_enabled: true,
+    });
+    expect(parts.preservedSections.plugins).toMatchObject({
+      hindsight: { auto_retain: true, api_url: "http://localhost:9177" },
+    });
+
+    const rebuilt = buildConfigYaml({
+      personality: parts.personality,
+      disabledSkills: parts.disabledSkills,
+      platformDisabledSkills: parts.platformDisabledSkills,
+      platformToolsets: parts.platformToolsets,
+      preservedSections: parts.preservedSections,
+      extraYamlLines: parts.extraYamlLines,
+    });
+    expect(rebuilt).toContain("provider: hindsight");
+    expect(rebuilt).toContain("plugins:");
+    expect(rebuilt).toContain("auto_retain: true");
+    expect(rebuilt).toContain("api_url: http://localhost:9177");
+  });
 });
 
 describe("buildMissionPrompt toolsets", () => {

@@ -185,5 +185,17 @@ platform_toolsets:
     - todo
     - vision
     - web
+memory:
+  provider: hindsight
+  memory_enabled: true
+
+plugins:
+  hindsight:
+    auto_retain: true
+    auto_recall: true
+    mode: local_external
+    api_url: http://localhost:9177
+    llm_provider: openai
+
 agent:
   max_turns: 60
