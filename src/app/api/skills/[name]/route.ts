@@ -1,27 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
 
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
-import { findSkillFile } from "@/lib/skills-enabled-config";
 import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
+import { ensureDb } from "@/lib/db";
+import { getSkill, upsertSkill, parseSkillFrontmatter } from "@/lib/skills-repository";
+import { pushSkillToHermes } from "@/lib/hermes-profile-sync";
+import { skillsRootForProfile } from "@/lib/skills-config";
+import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
+import { existsSync, readFileSync, statSync } from "fs";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   const { name } = await params;
-  const profile = request.nextUrl.searchParams.get("profile") || "default";
 
   try {
-    const filePath = findSkillFile(name, getActiveHermesHome(), profile);
+    ensureDb();
+    const row = getSkill(name);
+    if (row) {
+      return NextResponse.json({
+        data: {
+          name,
+          path: skillsRootForProfile(getActiveHermesHome(), "default") + "/" + name + "/SKILL.md",
+          content: row.content,
+          size: row.content.length,
+          lastModified: row.updatedAt,
+        },
+      });
+    }
 
-    if (!filePath || !existsSync(filePath)) {
-      return NextResponse.json(
-        { error: `Skill not found: ${name}` },
-        { status: 404 }
-      );
+    const skillsRoot = skillsRootForProfile(getActiveHermesHome(), "default");
+    const filePath = skillsRoot + "/" + name + "/SKILL.md";
+    if (!existsSync(filePath)) {
+      return NextResponse.json({ error: `Skill not found: ${name}` }, { status: 404 });
     }
 
     const content = readFileSync(filePath, "utf-8");
@@ -36,7 +49,8 @@ export async function GET(
         lastModified: stats.mtime.toISOString(),
       },
     });
-  } catch (error) {
+  }
+  catch (error) {
     logApiError("GET /api/skills/[name]", `reading skill ${name}`, error);
     return NextResponse.json({ error: "Failed to read skill" }, { status: 500 });
   }
@@ -44,18 +58,18 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   const auth = requireAuth(request);
   if (auth) return auth;
 
   const { name } = await params;
-  const profile = request.nextUrl.searchParams.get("profile") || "default";
 
   let body: unknown;
   try {
     body = await request.json();
-  } catch {
+  }
+  catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -69,43 +83,37 @@ export async function PUT(
   }
 
   try {
-    const filePath = findSkillFile(name, getActiveHermesHome(), profile);
+    ensureDb();
+    const meta = parseSkillFrontmatter(content);
+    upsertSkill({
+      skillKey: name,
+      content,
+      displayName: meta.name || name,
+      description: meta.description,
+      category: meta.category,
+      source: "custom",
+    });
 
-    if (!filePath) {
-      return NextResponse.json(
-        { error: `Skill not found: ${name}` },
-        { status: 404 }
-      );
+    const push = pushSkillToHermes(name);
+    if (!push.success) {
+      return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
     }
-
-    if (existsSync(filePath)) {
-      const backupPath = filePath + ".bak";
-      try {
-        writeFileSync(backupPath, readFileSync(filePath, "utf-8"), "utf-8");
-      } catch (err) {
-        logApiError("PUT /api/skills/[name]", `backup ${filePath}`, err);
-      }
-    }
-
-    writeFileSync(filePath, content, "utf-8");
-    const stats = statSync(filePath);
 
     appendAuditLine({
-      action: "skill.put",
+      action: "skills.put",
       resource: name,
       ok: true,
     });
 
     return NextResponse.json({
       data: {
+        success: true,
         name,
-        path: filePath,
-        content,
-        size: stats.size,
-        lastModified: stats.mtime.toISOString(),
+        size: content.length,
       },
     });
-  } catch (error) {
+  }
+  catch (error) {
     logApiError("PUT /api/skills/[name]", `writing skill ${name}`, error);
     return NextResponse.json({ error: "Failed to write skill" }, { status: 500 });
   }

@@ -19,6 +19,7 @@ export interface CatalogTemplateRow {
   outputFormat: string;
   constraints: string;
   suggestedSkills: string[];
+  suggestedToolsets: string[];
   localDirs: string[];
   references: string[];
   missionTimeMinutes: number | null;
@@ -40,6 +41,7 @@ interface DbRow {
   output_format: string;
   constraints: string;
   suggested_skills: string;
+  suggested_toolsets: string;
   local_dirs: string;
   references_json: string;
   mission_time_minutes: number | null;
@@ -71,6 +73,7 @@ function rowToTemplate(row: DbRow): CatalogTemplateRow {
     outputFormat: row.output_format,
     constraints: row.constraints,
     suggestedSkills: parseJsonArray(row.suggested_skills),
+    suggestedToolsets: parseJsonArray(row.suggested_toolsets ?? "[]"),
     localDirs: parseJsonArray(row.local_dirs),
     references: parseJsonArray(row.references_json),
     missionTimeMinutes: row.mission_time_minutes,
@@ -101,9 +104,9 @@ export function upsertCatalogTemplate(
       `INSERT INTO catalog_templates (
         id, seed_key, name, icon, color, category_id, profile_slug, description,
         instruction, context, goals, output_format, constraints,
-        suggested_skills, local_dirs, references_json,
+        suggested_skills, suggested_toolsets, local_dirs, references_json,
         mission_time_minutes, timeout_minutes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         seed_key = COALESCE(excluded.seed_key, catalog_templates.seed_key),
         name = excluded.name,
@@ -118,6 +121,7 @@ export function upsertCatalogTemplate(
         output_format = excluded.output_format,
         constraints = excluded.constraints,
         suggested_skills = excluded.suggested_skills,
+        suggested_toolsets = excluded.suggested_toolsets,
         local_dirs = excluded.local_dirs,
         references_json = excluded.references_json,
         mission_time_minutes = excluded.mission_time_minutes,
@@ -139,6 +143,7 @@ export function upsertCatalogTemplate(
       row.outputFormat,
       row.constraints,
       JSON.stringify(row.suggestedSkills),
+      JSON.stringify(row.suggestedToolsets ?? []),
       JSON.stringify(row.localDirs),
       JSON.stringify(row.references),
       row.missionTimeMinutes,

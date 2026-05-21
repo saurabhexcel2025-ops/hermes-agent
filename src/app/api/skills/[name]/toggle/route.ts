@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, writeFileSync, existsSync } from "fs";
 
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
-import { resolveSafeProfileName } from "@/lib/path-security";
+import { ensureDb } from "@/lib/db";
+import { getAgentRoot, updateAgentRoot } from "@/lib/agent-root-repository";
 import {
-  buildEnabledYamlLines,
-  findSkillsEnabledBlockLineRange,
-  findSkillsHeaderLineIndex,
-  getResolvedEnabledSkillNames,
-  configPathForProfile,
-  skillsRootForProfile,
-} from "@/lib/skills-enabled-config";
+  getDisabledSkills,
+  getProfile,
+  setProfileDisabledSkills,
+} from "@/lib/profiles-repository";
+import { pushProfileToHermes, pushRootToHermes } from "@/lib/hermes-profile-sync";
+import { resolveSafeProfileName } from "@/lib/path-security";
+import { serializeJsonArray } from "@/lib/profile-config-builder";
+import { getSkill } from "@/lib/skills-repository";
 
-// PUT — Toggle a skill on/off for a profile
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   const auth = requireAuth(request);
   if (auth) return auth;
@@ -25,6 +24,7 @@ export async function PUT(
   const { name } = await params;
 
   try {
+    ensureDb();
     const body = await request.json();
     const { profile: profileParam, enabled } = body;
 
@@ -38,51 +38,50 @@ export async function PUT(
     }
     const profile = profileResult.profile;
 
-    const home = getActiveHermesHome();
-    const configPath = configPathForProfile(home, profile);
-
-    if (!existsSync(configPath)) {
-      return NextResponse.json({ error: "Profile config not found" }, { status: 404 });
+    const skillKey = name.includes("/") ? name : name;
+    if (!getSkill(skillKey)) {
+      return NextResponse.json({ error: `Skill not in catalog: ${name}` }, { status: 404 });
     }
 
-    const content = readFileSync(configPath, "utf-8");
-    const skillsRoot = skillsRootForProfile(home, profile);
-    const currentEnabled = getResolvedEnabledSkillNames(content, skillsRoot);
+    let currentDisabled: string[];
+    if (profile === "default") {
+      const row = getAgentRoot();
+      currentDisabled = JSON.parse(row.disabledSkillsJson || "[]") as string[];
+    }
+    else {
+      if (!getProfile(profile)) {
+        return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+      }
+      currentDisabled = getDisabledSkills(profile);
+    }
 
-    const newEnabled = enabled
-      ? currentEnabled.includes(name)
-        ? currentEnabled
-        : [...currentEnabled, name].sort()
-      : currentEnabled.filter((s) => s !== name);
+    const newDisabled = enabled
+      ? currentDisabled.filter((s) => s !== skillKey && s !== name)
+      : currentDisabled.includes(skillKey)
+        ? currentDisabled
+        : [...currentDisabled, skillKey].sort();
 
-    const lines = content.split(/\r?\n/);
-    const trailingNl = /\r?\n$/.test(content);
-    const yamlLines = buildEnabledYamlLines(newEnabled);
-
-    const range = findSkillsEnabledBlockLineRange(lines);
-    if (range) {
-      lines.splice(range.start, range.endExclusive - range.start, ...yamlLines);
-    } else {
-      const hi = findSkillsHeaderLineIndex(lines);
-      if (hi >= 0) {
-        lines.splice(hi + 1, 0, ...yamlLines);
-      } else {
-        if (lines.length > 0 && lines[lines.length - 1].trim() !== "") {
-          lines.push("");
-        }
-        lines.push("skills:");
-        lines.push(...yamlLines);
+    if (profile === "default") {
+      updateAgentRoot({ disabledSkillsJson: serializeJsonArray(newDisabled) });
+      const push = pushRootToHermes();
+      if (!push.success) {
+        return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
       }
     }
-
-    const out = lines.join("\n") + (trailingNl ? "\n" : "");
-    writeFileSync(configPath, out, "utf-8");
+    else {
+      setProfileDisabledSkills(profile, newDisabled);
+      const push = pushProfileToHermes(profile);
+      if (!push.success) {
+        return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
+      }
+    }
 
     return NextResponse.json({
       data: { success: true, skill: name, profile, enabled },
     });
-  } catch (error) {
-    logApiError("PUT /api/skills/[name]/toggle", "toggling skill", error);
+  }
+  catch (error) {
+    logApiError("PUT /api/skills/[name]/toggle", `toggle ${name}`, error);
     return NextResponse.json({ error: "Failed to toggle skill" }, { status: 500 });
   }
 }

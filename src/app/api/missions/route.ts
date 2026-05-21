@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
         localDirs,
         references,
         skills,
+        suggestedToolsets,
         goals,
         context,
         dispatchMode,
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
         localDirs?: unknown;
         references?: string[];
         skills?: string[];
+        suggestedToolsets?: string[];
         goals?: string[];
         context?: string;
         dispatchMode?: string;
@@ -150,6 +152,7 @@ export async function POST(request: NextRequest) {
         localDirs: dirsNorm,
         references: references ?? [],
         skills: skills ?? [],
+        toolsets: suggestedToolsets ?? [],
         goals: goals ?? [],
         context: context ?? "",
         missionTimeMinutes: missionTimeMinutes ?? undefined,
@@ -186,6 +189,7 @@ export async function POST(request: NextRequest) {
         localDirs: dirsNorm,
         references: references ?? [],
         skills: skills ?? [],
+        suggestedToolsets: suggestedToolsets ?? [],
         goals: goals ?? [],
         modelId: modelId ?? undefined,
         provider: provider ?? undefined,
@@ -323,7 +327,7 @@ export async function POST(request: NextRequest) {
 
     // ── Update Mission ─────────────────────────────────────────
     if (action === "update") {
-      const { status, result, instruction, localDirs, references, skills, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw, outputFormat, constraints } = body as {
+      const { status, result, instruction, localDirs, references, skills, suggestedToolsets, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw, outputFormat, constraints } = body as {
         id?: string;
         missionId?: string;
         status?: string;
@@ -332,6 +336,7 @@ export async function POST(request: NextRequest) {
         localDirs?: unknown;
         references?: string[];
         skills?: string[];
+        suggestedToolsets?: string[];
         goals?: string[];
         modelId?: string;
         provider?: string;
@@ -365,6 +370,7 @@ export async function POST(request: NextRequest) {
         localDirs !== undefined ||
         references !== undefined ||
         skills !== undefined ||
+        suggestedToolsets !== undefined ||
         goals !== undefined ||
         missionTimeMinutes !== undefined ||
         timeoutMinutes !== undefined ||
@@ -383,6 +389,10 @@ export async function POST(request: NextRequest) {
               : existing.localDirs,
           references: references !== undefined ? references : existing.references,
           skills: skills !== undefined ? skills : existing.skills,
+          toolsets:
+            suggestedToolsets !== undefined
+              ? suggestedToolsets
+              : existing.suggestedToolsets,
           goals: goals !== undefined ? goals : existing.goals,
           missionTimeMinutes:
             missionTimeMinutes !== undefined
@@ -410,6 +420,7 @@ export async function POST(request: NextRequest) {
         localDirs?: LocalDirEntry[];
         references?: string[];
         skills?: string[];
+        suggestedToolsets?: string[];
         goals?: string[];
         modelId?: string | null;
         provider?: string | null;
@@ -433,6 +444,7 @@ export async function POST(request: NextRequest) {
       if (localDirs !== undefined) updates.localDirs = normalizeLocalDirsInput(localDirs);
       if (references !== undefined) updates.references = references;
       if (skills !== undefined) updates.skills = skills;
+      if (suggestedToolsets !== undefined) updates.suggestedToolsets = suggestedToolsets;
       if (goals !== undefined) updates.goals = goals;
       if (modelId !== undefined) updates.modelId = modelId;
       if (provider !== undefined) updates.provider = provider;

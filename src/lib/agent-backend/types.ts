@@ -27,6 +27,7 @@ export interface Mission {
   localDirs?: LocalDirEntry[];
   references?: string[];
   skills?: string[];
+  suggestedToolsets?: string[];
   goals?: string[];
   modelId?: string;
   provider?: string;

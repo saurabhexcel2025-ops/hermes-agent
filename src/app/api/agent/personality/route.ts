@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, writeFileSync, existsSync } from "fs";
 
-import { buildProfileHermesPathBundle } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
+import { ensureDb } from "@/lib/db";
+import { updateAgentRoot, getAgentRoot } from "@/lib/agent-root-repository";
+import { getProfile, updateProfileContent } from "@/lib/profiles-repository";
+import { pushProfileToHermes, pushRootToHermes } from "@/lib/hermes-profile-sync";
 import { resolveSafeProfileName } from "@/lib/path-security";
 
-// PUT — Update personality for a profile
 export async function PUT(request: NextRequest) {
   const auth = requireAuth(request);
   if (auth) return auth;
 
   try {
+    ensureDb();
     const body = await request.json();
     const { profile, personality } = body;
 
@@ -20,51 +22,37 @@ export async function PUT(request: NextRequest) {
     }
 
     const prof = resolveSafeProfileName(
-      profile && typeof profile === "string" ? profile : "default"
+      profile && typeof profile === "string" ? profile : "default",
     );
     if (!prof.ok) {
-      return NextResponse.json({ error: "Invalid profile name" }, { status: 400 });
-    }
-    const configPath = buildProfileHermesPathBundle(prof.profile).config;
-
-    if (!existsSync(configPath)) {
-      return NextResponse.json({ error: "Profile config not found" }, { status: 404 });
+      return NextResponse.json({ error: prof.error }, { status: 400 });
     }
 
-    // Update personality in YAML
-    const content = readFileSync(configPath, "utf-8");
-    const lines = content.split("\n");
-    let inAgent = false;
-    let foundPersonality = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim().startsWith("agent:")) {
-        inAgent = true;
-        continue;
+    if (prof.profile === "default") {
+      getAgentRoot();
+      updateAgentRoot({ personality });
+      const push = pushRootToHermes();
+      if (!push.success) {
+        return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
       }
-      if (inAgent && !lines[i].startsWith(" ") && lines[i].trim()) {
-        // End of agent section — insert personality here
-        if (!foundPersonality) {
-          lines.splice(i, 0, "  personality: " + personality);
-          foundPersonality = true;
-        }
-        inAgent = false;
+    }
+    else {
+      const row = getProfile(prof.profile);
+      if (!row) {
+        return NextResponse.json({ error: "Profile not found" }, { status: 404 });
       }
-      if (inAgent && lines[i].includes("personality:")) {
-        const indent = lines[i].length - lines[i].trimStart().length;
-        lines[i] = " ".repeat(indent) + "personality: " + personality;
-        foundPersonality = true;
+      updateProfileContent(prof.profile, { personality });
+      const push = pushProfileToHermes(prof.profile);
+      if (!push.success) {
+        return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
       }
     }
 
-    if (!foundPersonality && inAgent) {
-      lines.push("  personality: " + personality);
-    }
-
-    writeFileSync(configPath, lines.join("\n"));
-
-    return NextResponse.json({ data: { success: true, profile: profile || "default", personality } });
-  } catch (error) {
+    return NextResponse.json({
+      data: { success: true, profile: prof.profile, personality },
+    });
+  }
+  catch (error) {
     logApiError("PUT /api/agent/personality", "updating personality", error);
     return NextResponse.json({ error: "Failed to update personality" }, { status: 500 });
   }

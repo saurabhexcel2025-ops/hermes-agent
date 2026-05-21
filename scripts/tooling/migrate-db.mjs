@@ -6,10 +6,14 @@
  */
 
 import Database from "better-sqlite3";
-import { readFileSync, readdirSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
+import {
+  applyProfilesToolsParityUpgrade,
+  ensureProfilesToolsParity,
+} from "./db-schema-ensure.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -87,19 +91,25 @@ db.exec(`
 let currentVersion = getSchemaVersion(db);
 console.log(`schema_version before: ${currentVersion}`);
 
-const files = readdirSync(MIGRATIONS_DIR)
-  .filter((f) => f.endsWith(".sql"))
-  .sort();
+const hasCoreSchema = Boolean(
+  db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('missions', 'agent_profiles') LIMIT 1")
+    .get(),
+);
 
-for (const file of files) {
-  const num = parseInt(file.split("_")[0], 10);
-  if (isNaN(num) || num <= currentVersion) continue;
-  const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf-8");
-  console.log(`Applying migration ${file}...`);
-  db.exec(sql);
-  setSchemaVersion(db, num);
-  currentVersion = num;
-  console.log(`  -> schema_version ${num}`);
+if (currentVersion === 0 && !hasCoreSchema) {
+  const baselinePath = join(MIGRATIONS_DIR, "001_baseline.sql");
+  db.exec(readFileSync(baselinePath, "utf-8"));
+  setSchemaVersion(db, 3);
+  currentVersion = 3;
+  console.log("Applied baseline schema -> schema_version 3");
+}
+
+const afterUpgrade = applyProfilesToolsParityUpgrade(db, MIGRATIONS_DIR);
+if (afterUpgrade > currentVersion) {
+  console.log(`Applied v2 -> v3 parity upgrade -> schema_version ${afterUpgrade}`);
+} else {
+  ensureProfilesToolsParity(db);
 }
 
 const catTable = db

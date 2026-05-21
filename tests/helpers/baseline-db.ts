@@ -12,7 +12,16 @@ export const baselineSqlPath = join(
   "001_baseline.sql"
 );
 
-/** Apply the squashed baseline schema to an open SQLite database. */
+/** Apply the current squashed baseline schema. */
 export function execBaselineSchema(database: import("better-sqlite3").Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
   database.exec(readFileSync(baselineSqlPath, "utf-8"));
+  database
+    .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)")
+    .run("schema_version", "3");
 }

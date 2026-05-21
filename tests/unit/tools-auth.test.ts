@@ -99,7 +99,7 @@ describe("POST /api/tools configure action auth", () => {
     expect(mockRequireAuth).toHaveBeenCalled();
   });
 
-  it("proceeds when auth passes", async () => {
+  it("returns 410 when auth passes (mutations disabled)", async () => {
     mockRequireAuth.mockReturnValue(null);
 
     const req = new NextRequest("http://localhost/api/tools", {
@@ -108,9 +108,7 @@ describe("POST /api/tools configure action auth", () => {
     });
     const res = await POST(req);
 
-    // Should proceed past auth checks (not 401/403)
-    expect(res.status).not.toBe(401);
-    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(410);
   });
 });
 

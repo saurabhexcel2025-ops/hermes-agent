@@ -15,10 +15,6 @@ import Modal from "@/components/ui/Modal";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
 import type { AgentProfile, ProfileFile } from "@/types/hermes";
-import {
-  PERSONALITIES,
-  titleCasePersonality,
-} from "@/lib/personalities";
 
 interface EditorState {
   profileId: string;
@@ -36,8 +32,6 @@ export default function BehaviourPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [previewMode, setPreviewMode] = useState(true);
-  const [savingPersonality, setSavingPersonality] = useState<string | null>(null);
-
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
@@ -50,9 +44,8 @@ export default function BehaviourPage() {
 
   const { showToast, toastElement } = useToast();
 
-  const bundledProfiles = profiles.filter((p) => !p.isDefault && p.isBundled);
-  const driftCount = bundledProfiles.filter((p) => p.syncStatus === "drift").length;
-  const syncErrorCount = bundledProfiles.filter((p) => p.syncStatus === "error").length;
+  const driftCount = profiles.filter((p) => p.syncStatus === "drift").length;
+  const syncErrorCount = profiles.filter((p) => p.syncStatus === "error").length;
 
   const runProfileSync = async (
     body: Record<string, unknown>,
@@ -81,31 +74,54 @@ export default function BehaviourPage() {
     }
   };
 
-  const pullSlug = async (slug: string): Promise<boolean> => {
-    const res = await fetch("/api/agent/profiles/sync/pull", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug }),
-    });
-    const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
-    if (!res.ok || data.data?.success === false) {
-      showToast(data.error ?? `Pull failed for ${slug}`, "error");
-      return false;
-    }
-    return true;
-  };
-
   const handlePushAll = () =>
-    void runProfileSync({ all: true }, "All profiles pushed to Hermes");
+    void runProfileSync(
+      { all: true },
+      "All profiles pushed to Hermes. Model defaults re-applied to config.yaml.",
+    );
 
   const handlePushOne = (slug: string) =>
-    void runProfileSync({ slug }, `Pushed ${slug} to Hermes`);
+    void runProfileSync(
+      slug === "default" ? { root: true } : { slug },
+      slug === "default"
+        ? "Pushed Bob to Hermes. Model defaults re-applied to config.yaml."
+        : `Pushed ${slug} to Hermes`,
+    );
+
+  const handleImportDiscovered = async () => {
+    setSyncBusy(true);
+    try {
+      const res = await fetch("/api/agent/profiles/sync/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ importAllDiscovered: true }),
+      });
+      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
+      if (!res.ok || data.data?.success === false) {
+        showToast(data.error ?? "Import failed", "error");
+        return;
+      }
+      showToast("Imported discovered profiles from Hermes disk", "success");
+      await loadProfiles();
+    } catch {
+      showToast("Import failed", "error");
+    } finally {
+      setSyncBusy(false);
+    }
+  };
 
   const handlePullAll = async () => {
     setSyncBusy(true);
     try {
-      for (const p of bundledProfiles) {
-        if (!(await pullSlug(p.id))) return;
+      const res = await fetch("/api/agent/profiles/sync/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true, importDiscovered: true }),
+      });
+      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
+      if (!res.ok || data.data?.success === false) {
+        showToast(data.error ?? "Pull failed", "error");
+        return;
       }
       showToast("All profiles pulled from Hermes", "success");
       await loadProfiles();
@@ -119,10 +135,19 @@ export default function BehaviourPage() {
   const handlePullOne = async (slug: string) => {
     setSyncBusy(true);
     try {
-      if (await pullSlug(slug)) {
-        showToast(`Pulled ${slug} from Hermes`, "success");
-        await loadProfiles();
+      const body = slug === "default" ? { root: true } : { slug };
+      const res = await fetch("/api/agent/profiles/sync/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
+      if (!res.ok || data.data?.success === false) {
+        showToast(data.error ?? `Pull failed for ${slug}`, "error");
+        return;
       }
+      showToast(`Pulled ${slug} from Hermes`, "success");
+      await loadProfiles();
     } finally {
       setSyncBusy(false);
     }
@@ -260,27 +285,6 @@ export default function BehaviourPage() {
     }
   };
 
-  const handlePersonalityChange = async (profileId: string, personality: string) => {
-    setSavingPersonality(profileId);
-    try {
-      const res = await fetch("/api/agent/personality", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile: profileId === "default" ? "default" : profileId,
-          personality,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      showToast(`Personality set to "${personality}"`, "success");
-      loadProfiles();
-    } catch {
-      showToast("Failed to update personality", "error");
-    } finally {
-      setSavingPersonality(null);
-    }
-  };
-
   const hasChanges = editor ? editor.content !== editor.original : false;
   const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
 
@@ -316,11 +320,10 @@ export default function BehaviourPage() {
 
       <div className="px-6 py-6">
         <p className="text-xs text-white/40 font-mono mb-4 max-w-3xl">
-          Profile personality applies to this agent&apos;s config.yaml. Global display presets are on{" "}
-          <a href="/operations/personalities" className="text-neon-cyan hover:underline">
-            Personalities
-          </a>
-          .
+          Agent identity lives in <strong className="text-white/60">SOUL.md</strong>. Runtime policy
+          (skills.disabled, platform_toolsets, model blocks) is in each profile&apos;s{" "}
+          <strong className="text-white/60">config.yaml</strong>. Pull imports from Hermes disk into
+          SQLite; push writes Control Hub back to disk.
         </p>
 
         <ProfilesDriftBanner
@@ -333,6 +336,7 @@ export default function BehaviourPage() {
           selectedSlug={selectedProfileId}
           onPushAll={handlePushAll}
           onPullAll={() => void handlePullAll()}
+          onImportDiscovered={() => void handleImportDiscovered()}
           onPushOne={handlePushOne}
           onPullOne={(slug) => void handlePullOne(slug)}
           busy={syncBusy}
@@ -365,14 +369,17 @@ export default function BehaviourPage() {
                       className={`w-4 h-4 ${profile.isDefault ? "text-cyan-400" : "text-purple-400"}`}
                     />
                     <span className="font-semibold text-white text-sm truncate">{profile.name}</span>
-                    {profile.isDefault && <Badge color="cyan" size="sm">Default</Badge>}
-                    {!profile.isDefault && profile.syncStatus === "drift" && (
+                    {profile.isDefault && <Badge color="cyan" size="sm">Local default</Badge>}
+                    {profile.syncStatus === "drift" && (
                       <Badge color="orange" size="sm">Drift</Badge>
                     )}
-                    {!profile.isDefault && profile.syncStatus === "error" && (
+                    {profile.syncStatus === "error" && (
                       <Badge color="orange" size="sm">Sync error</Badge>
                     )}
                   </div>
+                  {!profile.isDefault && (
+                    <p className="text-[10px] font-mono text-white/25 mb-1">{profile.id}</p>
+                  )}
                   <p className="text-xs text-white/40 line-clamp-2 mb-2">{profile.description}</p>
                   <div className="flex items-center gap-2 text-[10px] text-white/30 font-mono">
                     <span>{profile.skillsCount} skills</span>
@@ -397,6 +404,9 @@ export default function BehaviourPage() {
                       <h2 className="font-semibold text-white">{selectedProfile.name}</h2>
                       {selectedProfile.isDefault && <Badge color="cyan" size="sm">Default</Badge>}
                     </div>
+                    {!selectedProfile.isDefault && (
+                      <p className="text-[10px] font-mono text-white/30 mt-0.5">slug: {selectedProfile.id}</p>
+                    )}
                     <p className="text-sm text-white/50 mt-1">{selectedProfile.description}</p>
                   </div>
                   {!selectedProfile.isDefault && (
@@ -412,25 +422,16 @@ export default function BehaviourPage() {
                   )}
                 </div>
 
-                <div className="p-4 border-b border-white/10 flex flex-wrap items-center gap-3">
-                  <span className="text-sm text-white/50">Profile personality:</span>
-                  <select
-                    value={selectedProfile.personality}
-                    onChange={(e) =>
-                      handlePersonalityChange(selectedProfile.id, e.target.value)
-                    }
-                    disabled={savingPersonality === selectedProfile.id}
-                    className="bg-dark-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-purple-500/50 focus:outline-none"
-                  >
-                    {PERSONALITIES.map((p) => (
-                      <option key={p} value={p}>
-                        {titleCasePersonality(p)}
-                      </option>
-                    ))}
-                  </select>
-                  {savingPersonality === selectedProfile.id && (
-                    <span className="text-xs text-white/30">Saving...</span>
-                  )}
+                <div className="p-4 border-b border-white/10">
+                  <p className="text-xs text-white/40 font-mono">
+                    Edit <strong className="text-white/60">SOUL.md</strong> for voice and identity.
+                    Use <strong className="text-white/60">config.yaml</strong> for skills.disabled and
+                    platform_toolsets. Session display presets:{" "}
+                    <a href="/operations/personalities" className="text-neon-cyan hover:underline">
+                      Personalities
+                    </a>
+                    .
+                  </p>
                 </div>
 
                 <div className="p-4 flex-1 overflow-auto">

@@ -10,6 +10,7 @@ Technical reference for Control Hub. Tone elsewhere in this folder is deliberate
 | [design-tokens.md](design-tokens.md) | UI colour tokens and theme conventions |
 | [API.md](API.md) | REST endpoints |
 | [CATALOG_AND_PROFILES.md](CATALOG_AND_PROFILES.md) | Seed pack, SQLite catalog, Hermes profile sync |
+| [TOOLS_AND_MISSIONS.md](TOOLS_AND_MISSIONS.md) | Profile `platform_toolsets`, Tools UI, mission tool hints |
 | [ENV_REFERENCE.md](ENV_REFERENCE.md) | Environment variables, dual DB paths, install flags |
 | [DEPLOY.md](DEPLOY.md) | Deploy, **`ch-deploy`**, TLS, Docker, ports, scripts layout |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// Personality Manager — CRUD for agent.personalities
+// Personality Manager — profile SOUL.md identity editor
 // ═══════════════════════════════════════════════════════════════
 
 "use client";
@@ -374,7 +374,7 @@ export default function PersonalitiesPage() {
     <AppPageShell>
       <PageHeader
         title="Personalities"
-        subtitle="Global display personality (config.yaml → display.personality). Profile personality is set on Agents."
+        subtitle="Hermes identities are SOUL.md files. Edit profile identity from Agents or this page."
         icon={Brain}
         color="purple"
       />
@@ -416,7 +416,7 @@ export default function PersonalitiesPage() {
             description={
               search
                 ? "Try a different search term"
-                : "Create your first personality preset to customise agent behaviour"
+                : "No profile SOUL identities found yet"
             }
           />
         ) : (
@@ -440,11 +440,9 @@ export default function PersonalitiesPage() {
             How Personalities Work
           </h3>
           <ul className="space-y-1.5 text-xs text-white/40 font-mono">
-            <li>• Global display personality in config.yaml (display.personality)</li>
-            <li>• Profile-specific personality is configured on the Agents page</li>
-            <li>• Click ✨ to set or clear the active global personality</li>
-            <li>• Use <code className="text-neon-purple bg-white/5 px-1 rounded">/personality</code> in CLI to switch at runtime</li>
-            <li>• Active personality is prepended to the agent&apos;s system prompt each message</li>
+            <li>• Hermes identity is stored in SOUL.md for Bob and each profile</li>
+            <li>• Control Hub stores SOUL.md in SQLite and pushes it to Hermes on save</li>
+            <li>• config.yaml is used for runtime policy such as skills.disabled and platform_toolsets</li>
           </ul>
         </div>
       </div>

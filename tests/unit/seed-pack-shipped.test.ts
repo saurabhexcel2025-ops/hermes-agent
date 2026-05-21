@@ -31,8 +31,13 @@ describe("shipped professional catalog (data/seed)", () => {
     for (const p of manifest.profiles) {
       const soul = join(repoRoot, "data/seed/profiles", p.slug, "SOUL.md");
       const agents = join(repoRoot, "data/seed/profiles", p.slug, "AGENTS.md");
+      const config = join(repoRoot, "data/seed/profiles", p.slug, "config.yaml");
       expect(existsSync(soul)).toBe(true);
       expect(existsSync(agents)).toBe(true);
+      expect(existsSync(config)).toBe(true);
+      const yaml = readFileSync(config, "utf-8");
+      expect(yaml).toContain("platform_toolsets:");
+      expect(yaml).toMatch(/hermes-cli|hermes-discord|hermes-telegram/);
     }
   });
 

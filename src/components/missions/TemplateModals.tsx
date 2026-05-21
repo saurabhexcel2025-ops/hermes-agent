@@ -60,6 +60,7 @@ export interface MissionTemplate {
   context: string;
   goals: string[];
   suggestedSkills: string[];
+  suggestedToolsets?: string[];
   localDirs?: LocalDirEntry[];
   references?: string[];
   isCustom?: boolean;

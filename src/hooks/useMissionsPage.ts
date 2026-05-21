@@ -4,6 +4,8 @@ import { useMissionsApi } from "@/hooks/useMissionsApi";
 import type { LocalDirEntry, Mission } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import { parseMissionPrompt } from "@/lib/build-mission-prompt";
+import { flattenProfileToolsets } from "@/lib/hermes-toolset-catalog";
+import type { PlatformToolsets } from "@/lib/profile-config-builder";
 import type { MissionFormState } from "@/components/missions/MissionCreateForm";
 import type { MissionTemplate } from "@/components/missions/TemplateModals";
 import {
@@ -112,6 +114,7 @@ export function useMissionsPage() {
   });
   const [newReferences, setNewReferences] = useState<string[]>([]);
   const [newSkills, setNewSkills] = useState<string[]>([]);
+  const [newToolsets, setNewToolsets] = useState<string[]>([]);
   const [referenceInput, setReferenceInput] = useState("");
   const [dispatching, setDispatching] = useState(false);
   const [cancellingMissionId, setCancellingMissionId] = useState<string | null>(
@@ -148,6 +151,7 @@ export function useMissionsPage() {
     newReferences,
     referenceInput,
     newSkills,
+    newToolsets,
   };
 
   const setFormField = <K extends keyof MissionFormState>(
@@ -177,6 +181,7 @@ export function useMissionsPage() {
       case "newReferences": setNewReferences(value as string[]); break;
       case "referenceInput": setReferenceInput(value as string); break;
       case "newSkills": setNewSkills(value as string[]); break;
+      case "newToolsets": setNewToolsets(value as string[]); break;
       case "scheduleStartTime": setScheduleStartTime(value as string); break;
     }
   };
@@ -198,6 +203,7 @@ export function useMissionsPage() {
       localDirs: newLocalDirs,
       references: newReferences,
       skills: newSkills,
+      suggestedToolsets: newToolsets,
       ...overrides,
     };
   }
@@ -217,8 +223,37 @@ export function useMissionsPage() {
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences([]);
     setNewSkills([]);
+    setNewToolsets([]);
     setShowCreate(false);
   }
+
+  useEffect(() => {
+    if (!newProfile) return;
+    const controller = new AbortController();
+    const slug = encodeURIComponent(newProfile);
+    Promise.all([
+      fetch(`/api/skills?profile=${slug}`, { signal: controller.signal }),
+      fetch(`/api/agent/profiles/${slug}/toolsets`, { signal: controller.signal }),
+    ])
+      .then(async ([skillsRes, toolsetsRes]) => {
+        const skillsData = await skillsRes.json();
+        const toolsetsData = await toolsetsRes.json();
+        const enabled = new Set(
+          ((skillsData.data?.skills ?? []) as Array<{ name: string; enabled: boolean }>)
+            .filter((s) => s.enabled)
+            .map((s) => s.name),
+        );
+        const toolsetIds = new Set(
+          flattenProfileToolsets(
+            (toolsetsData.data?.platformToolsets ?? {}) as PlatformToolsets,
+          ),
+        );
+        setNewSkills((prev) => prev.filter((s) => enabled.has(s)));
+        setNewToolsets((prev) => prev.filter((t) => toolsetIds.has(t)));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [newProfile]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -604,6 +639,7 @@ export function useMissionsPage() {
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences([]);
     setNewSkills([]);
+    setNewToolsets([]);
     setShowTemplateManager(false);
     setShowTemplateEditor(true);
   }, []);
@@ -629,6 +665,7 @@ export function useMissionsPage() {
       payload.localDirs = newLocalDirs;
       payload.references = newReferences;
       payload.suggestedSkills = newSkills;
+      payload.suggestedToolsets = newToolsets;
       payload.profile = newProfile;
       payload.defaultModel =
         typeof newModel === "string" && newModel.trim() !== ""
@@ -717,6 +754,9 @@ export function useMissionsPage() {
       (t as MissionTemplate & { references?: string[] }).references ?? [],
     );
     setNewSkills(t.suggestedSkills || []);
+    setNewToolsets(
+      (t as MissionTemplate & { suggestedToolsets?: string[] }).suggestedToolsets ?? [],
+    );
     const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
     setNewCategoryId(cid);
     const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;

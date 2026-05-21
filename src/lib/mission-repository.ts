@@ -24,6 +24,7 @@ interface MissionRow {
   local_dirs: string | null;
   references_: string | null;
   skills: string | null;
+  suggested_toolsets: string | null;
   goals: string | null;
   model_id: string | null;
   provider: string | null;
@@ -59,6 +60,7 @@ function rowToMission(row: MissionRow | undefined): Mission | null {
     localDirs: normalizeLocalDirsInput(safeJsonParse(row.local_dirs, [] as unknown[])),
     references: safeJsonParse(row.references_, [] as string[]),
     skills: safeJsonParse(row.skills, [] as string[]),
+    suggestedToolsets: safeJsonParse(row.suggested_toolsets, [] as string[]),
     goals: safeJsonParse(row.goals, [] as string[]),
     // Runtime settings (migration 013 — may be null on pre-migration DBs)
     modelId: row.model_id ?? undefined,
@@ -115,6 +117,7 @@ export function createMission(data: {
   localDirs?: LocalDirEntry[] | string[];
   references?: string[];
   skills?: string[];
+  suggestedToolsets?: string[];
   goals?: string[];
   modelId?: string;
   provider?: string;
@@ -132,15 +135,16 @@ export function createMission(data: {
   const localDirs = JSON.stringify(normalizeLocalDirsInput(data.localDirs ?? []));
   const references = JSON.stringify(data.references ?? []);
   const skills = JSON.stringify(data.skills ?? []);
+  const suggestedToolsets = JSON.stringify(data.suggestedToolsets ?? []);
   const goals = JSON.stringify(data.goals ?? []);
 
   inTransaction(() => {
     db()
       .prepare(
-        `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, goals, model_id, provider, profile_name, mission_time_minutes, timeout_minutes, schedule, cron_job_id, category_id, output_format, constraints)
-         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO missions (id, name, prompt, profile_id, status, created_at, updated_at, local_dirs, references_, skills, suggested_toolsets, goals, model_id, provider, profile_name, mission_time_minutes, timeout_minutes, schedule, cron_job_id, category_id, output_format, constraints)
+         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, data.name, data.prompt, data.profileId ?? null, ts, ts, localDirs, references, skills, goals,
+      .run(id, data.name, data.prompt, data.profileId ?? null, ts, ts, localDirs, references, skills, suggestedToolsets, goals,
         data.modelId ?? null, data.provider ?? null, data.profileName ?? null,
         data.missionTimeMinutes ?? null, data.timeoutMinutes ?? null, data.schedule ?? null, data.cronJobId ?? null,
         data.categoryId ?? null, data.outputFormat ?? null, data.constraints ?? null);
@@ -159,6 +163,7 @@ export function updateMission(
     localDirs?: LocalDirEntry[] | string[];
     references?: string[];
     skills?: string[];
+    suggestedToolsets?: string[];
     goals?: string[];
     modelId?: string | null;
     provider?: string | null;
@@ -207,6 +212,10 @@ export function updateMission(
     if (updates.skills !== undefined) {
       sets.push("skills = ?");
       vals.push(JSON.stringify(updates.skills));
+    }
+    if (updates.suggestedToolsets !== undefined) {
+      sets.push("suggested_toolsets = ?");
+      vals.push(JSON.stringify(updates.suggestedToolsets));
     }
     if (updates.goals !== undefined) {
       sets.push("goals = ?");

@@ -74,6 +74,21 @@ jest.mock("@/lib/audit-log", () => ({
   appendAuditLine: jest.fn(),
 }));
 
+jest.mock("@/lib/skills-repository", () => ({
+  listSkills: jest.fn(() => []),
+}));
+
+jest.mock("@/lib/agent-root-repository", () => ({
+  getAgentRoot: jest.fn(() => ({
+    disabledSkillsJson: "[]",
+  })),
+}));
+
+jest.mock("@/lib/profiles-repository", () => ({
+  getDisabledSkills: jest.fn(() => []),
+  getProfile: jest.fn(() => null),
+}));
+
 jest.mock("@/lib/sessions-api-guard", () => ({
   sessionsRateLimitResponse: jest.fn(() => null),
 }));
@@ -97,31 +112,16 @@ describe("GET /api/cron", () => {
 describe("GET /api/tools", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns available toolsets", async () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      "platform_toolsets:\n  cli:\n    - terminal\n    - file\ntoolsets:\n  - terminal\n  - file\n"
-    );
-
+  it("returns Hermes toolset catalog", async () => {
     const request = new NextRequest("http://localhost/api/tools");
     const { GET } = await import("@/app/api/tools/route");
     const res = await GET(request);
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.data).toBeDefined();
-    expect(Array.isArray(data.data.tools)).toBe(true);
-  });
-
-  it("returns tools list when config not found", async () => {
-    mockExistsSync.mockReturnValue(false);
-
-    const request = new NextRequest("http://localhost/api/tools");
-    const { GET } = await import("@/app/api/tools/route");
-    const res = await GET(request);
-
-    // Route still returns 200 with available tools (seeded from SQLite)
-    expect(res.status).toBe(200);
+    expect(Array.isArray(data.data.platforms)).toBe(true);
+    expect(Array.isArray(data.data.toolsets)).toBe(true);
+    expect(data.data.toolsets.some((t: { id: string }) => t.id === "terminal")).toBe(true);
   });
 });
 

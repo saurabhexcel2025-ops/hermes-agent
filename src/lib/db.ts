@@ -5,9 +5,10 @@
 
 import Database, { type Database as _DatabaseType } from "better-sqlite3";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
 import { needsBaselineRebuild, rebuildToBaseline } from "./db/upgrade";
+import { applyProfilesToolsParityUpgrade } from "./db/apply-profiles-tools-upgrade";
 
 // ── Ensure data directory exists ───────────────────────────────
 
@@ -86,6 +87,7 @@ export function now(): string {
 // ── Migration runner ───────────────────────────────────────────
 
 const SCHEMA_VERSION_KEY = "schema_version";
+const BASELINE_SCHEMA_VERSION = 3;
 
 function getSchemaVersion(database: Database.Database): number {
   try {
@@ -104,6 +106,13 @@ function setSchemaVersion(database: Database.Database, version: number): void {
     .run(SCHEMA_VERSION_KEY, String(version));
 }
 
+function tableExists(database: Database.Database, name: string): boolean {
+  const row = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(name) as { name: string } | undefined;
+  return Boolean(row);
+}
+
 function runMigrations(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS meta (
@@ -118,6 +127,15 @@ function runMigrations(database: Database.Database): void {
     ? readFileSync(baselinePath, "utf-8")
     : "";
 
+  const currentVersion = getSchemaVersion(database);
+  const hasCoreSchema = tableExists(database, "missions") || tableExists(database, "agent_profiles");
+
+  if (currentVersion === 0 && !hasCoreSchema && baselineSql) {
+    database.exec(baselineSql);
+    setSchemaVersion(database, BASELINE_SCHEMA_VERSION);
+    return;
+  }
+
   if (needsBaselineRebuild(database) && baselineSql) {
     rebuildToBaseline(database, DB_PATH, baselineSql);
     _db = null;
@@ -130,28 +148,7 @@ function runMigrations(database: Database.Database): void {
     return;
   }
 
-  const currentVersion = getSchemaVersion(database);
-
-  const migrations: Array<{ num: number; sql: string }> = [];
-  try {
-    const files = readdirSync(migrationsDir)
-      .filter((f: string) => f.endsWith(".sql"))
-      .sort();
-    for (const file of files) {
-      const num = parseInt(file.split("_")[0], 10);
-      if (!isNaN(num) && num > currentVersion) {
-        const sql = readFileSync(join(migrationsDir, file), "utf-8");
-        migrations.push({ num, sql });
-      }
-    }
-  } catch {
-    // No migrations dir — schema shipped via pre-baked DB
-  }
-
-  for (const { num, sql } of migrations) {
-    database.exec(sql);
-    setSchemaVersion(database, num);
-  }
+  applyProfilesToolsParityUpgrade(database, migrationsDir);
 }
 
 // ── Bootstrap: ensure DB + schema exist ───────────────────────

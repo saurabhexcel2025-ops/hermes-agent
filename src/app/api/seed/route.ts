@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { runCatalogSeed, getSeedState, type SeedTarget } from "@/lib/seed/catalog-seed";
+import { importHermesStateFromDisk } from "@/lib/hermes-state-import";
+import { getHermesHome } from "@/lib/hermes-home";
+import { existsSync } from "fs";
 
 export async function GET() {
   try {
@@ -30,8 +33,12 @@ export async function POST(request: NextRequest) {
           ? body.id
           : undefined;
 
+    const hermesHome = getHermesHome();
+    const imported = existsSync(hermesHome + "/config.yaml")
+      ? importHermesStateFromDisk()
+      : null;
     const result = runCatalogSeed({ target, mode, slug, templateId });
-    return NextResponse.json({ data: result });
+    return NextResponse.json({ data: { ...result, imported } });
   } catch (error) {
     logApiError("POST /api/seed", "seed", error);
     return NextResponse.json({ error: "Failed to run seed" }, { status: 500 });

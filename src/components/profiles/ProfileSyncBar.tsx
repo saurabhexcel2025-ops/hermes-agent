@@ -6,6 +6,7 @@ interface ProfileSyncBarProps {
   selectedSlug: string | null;
   onPushAll: () => void;
   onPullAll: () => void;
+  onImportDiscovered?: () => void;
   onPushOne: (slug: string) => void;
   onPullOne: (slug: string) => void;
   busy: boolean;
@@ -15,12 +16,12 @@ export default function ProfileSyncBar({
   selectedSlug,
   onPushAll,
   onPullAll,
+  onImportDiscovered,
   onPushOne,
   onPullOne,
   busy,
 }: ProfileSyncBarProps) {
-  const canActOnOne =
-    selectedSlug != null && selectedSlug !== "default";
+  const canActOnOne = selectedSlug != null;
 
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -28,7 +29,7 @@ export default function ProfileSyncBar({
         type="button"
         disabled={busy}
         onClick={() => void onPushAll()}
-        title="Push all professional profiles from database to Hermes disk"
+        title="Push all profiles and Bob from database to Hermes disk"
         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-lg border border-neon-purple/40 text-neon-purple hover:bg-neon-purple/10 disabled:opacity-50"
       >
         {busy ? (
@@ -42,7 +43,7 @@ export default function ProfileSyncBar({
         type="button"
         disabled={busy}
         onClick={() => void onPullAll()}
-        title="Pull all professional profiles from Hermes disk into database"
+        title="Pull all profiles and Bob from Hermes disk into database"
         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-lg border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/10 disabled:opacity-50"
       >
         {busy ? (
@@ -52,6 +53,17 @@ export default function ProfileSyncBar({
         )}
         Pull all
       </button>
+      {onImportDiscovered ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void onImportDiscovered()}
+          title="Import profile directories on disk that are not yet in SQLite"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-lg border border-white/15 text-white/50 hover:bg-white/5 disabled:opacity-50"
+        >
+          Import discovered
+        </button>
+      ) : null}
       {canActOnOne ? (
         <>
           <span className="text-white/20">|</span>

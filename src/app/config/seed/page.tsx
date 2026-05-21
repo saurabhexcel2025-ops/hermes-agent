@@ -63,7 +63,7 @@ export default function ConfigSeedPage() {
   }, [load]);
 
   const runSeed = async (
-    target: "all" | "profiles" | "templates" | "categories",
+    target: "all" | "root" | "profiles" | "templates" | "categories",
     mode: "merge" | "replace",
     extra?: { slug?: string; templateId?: string },
   ) => {
@@ -87,7 +87,7 @@ export default function ConfigSeedPage() {
   const confirmReseedAll = () => {
     if (
       !window.confirm(
-        "Restore entire default catalog? This replaces seeded profiles and templates in the database and pushes profiles to Hermes.",
+        "Restore entire default catalog? This replaces Bob, seeded profiles, templates, and categories in the database.",
       )
     ) {
       return;
@@ -116,14 +116,22 @@ export default function ConfigSeedPage() {
               </p>
             ) : null}
 
+            <p className="text-xs text-white/40 font-mono border border-amber-500/20 rounded-lg p-3 bg-amber-500/5">
+              <strong className="text-amber-200/80">Import before seed:</strong> if{" "}
+              <code className="text-white/50">~/.hermes</code> exists, run{" "}
+              <code className="text-white/50">npx tsx scripts/tooling/import-hermes-state.ts</code>{" "}
+              (or use setup/ch-deploy) before merge seed. Merge never overwrites imported Bob or
+              seeded profiles with existing content.
+            </p>
+
             <section className="border border-neon-cyan/30 rounded-xl p-6 bg-dark-900/80">
               <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-neon-cyan" />
                 Reseed all
               </h2>
               <p className="text-sm text-white/60 mb-4">
-                Restores {profiles.length} professional agents, {templates.length} mission
-                templates, and default categories, then pushes agent profiles to Hermes.
+                Imports existing Hermes state first, then restores Bob, {profiles.length} professional
+                agents, {templates.length} mission templates, and default categories.
               </p>
               <button
                 type="button"
@@ -132,6 +140,14 @@ export default function ConfigSeedPage() {
                 className="px-4 py-2 rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/40 hover:bg-neon-cyan/30 font-mono text-sm disabled:opacity-50"
               >
                 {busy?.startsWith("all-replace") ? "Working…" : "Restore entire default catalog"}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void runSeed("root", "replace")}
+                className="ml-3 px-4 py-2 rounded-lg bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 font-mono text-sm disabled:opacity-50"
+              >
+                {busy?.startsWith("root-replace") ? "Working…" : "Restore Bob only"}
               </button>
               {state?.lastRun ? (
                 <p className="text-[10px] font-mono text-white/30 mt-3">

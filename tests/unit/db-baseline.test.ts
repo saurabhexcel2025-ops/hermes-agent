@@ -21,10 +21,13 @@ const EXPECTED_TABLES = [
   "cron_jobs",
   "sessions",
   "stories",
-  "tool_plugins",
   "sync_registry",
   "gateway_platforms",
   "error_log_entries",
+  "agent_profiles",
+  "agent_root",
+  "skills",
+  "catalog_templates",
   "agent_processes",
 ];
 
@@ -50,7 +53,13 @@ describe("001_baseline.sql", () => {
       .prepare("PRAGMA table_info(missions)")
       .all() as Array<{ name: string }>;
     expect(missionCols.map((c) => c.name)).toEqual(
-      expect.arrayContaining(["cron_job_id", "goals", "model_id", "provider"])
+      expect.arrayContaining([
+        "cron_job_id",
+        "goals",
+        "model_id",
+        "provider",
+        "suggested_toolsets",
+      ]),
     );
 
     db.close();
