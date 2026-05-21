@@ -20,6 +20,15 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# ── Wire-only mode ───────────────────────────────────────────
+# When --wire-only is passed, skip PostgreSQL / server / systemd
+# setup and only update config.yaml + sync to Control Hub SQLite.
+WIRE_ONLY=false
+if [ "${1:-}" = "--wire-only" ]; then
+    WIRE_ONLY=true
+    shift
+fi
+
 # ── Helpers ──────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -52,6 +61,7 @@ if [ -f "$HERMES_HOME/hindsight/config.json" ]; then
 fi
 
 # ── Check sudo access ────────────────────────────────────────
+if [ "$WIRE_ONLY" = false ]; then
 step "Checking sudo access"
 if ! sudo -n true 2>/dev/null; then
     echo ""
@@ -63,8 +73,10 @@ if ! sudo -n true 2>/dev/null; then
     fi
 fi
 ok "Sudo access confirmed"
+fi
 
 # ── Step 1: PostgreSQL ───────────────────────────────────────
+if [ "$WIRE_ONLY" = false ]; then
 step "Step 1: PostgreSQL"
 if command -v pg_isready &>/dev/null && pg_isready -q 2>/dev/null; then
     ok "PostgreSQL already running"
@@ -191,6 +203,7 @@ if __name__ == "__main__":
 PYEOF
     ok "Server script created"
 fi
+fi  # WIRE_ONLY = false block (PostgreSQL + server setup)
 
 # ── Step 6: Configuration ────────────────────────────────────
 step "Step 6: Configuration"
@@ -245,7 +258,36 @@ else
     echo "    provider: hindsight"
 fi
 
+# ── Step 6b: Sync to Control Hub SQLite ─────────────────────
+step "Step 6b: Syncing to Control Hub SQLite"
+CH_DATA_DIR="${CH_DATA_DIR:-$HOME/control-hub/data}"
+CH_DB="$CH_DATA_DIR/control-hub.db"
+if [ -f "$CH_DB" ]; then
+    if command -v python3 &>/dev/null; then
+        python3 -c "
+import json, os, sqlite3
+ch_dir = os.environ.get('CH_DATA_DIR', os.path.expanduser('~/control-hub/data'))
+hermes_home = os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes'))
+db_path = os.path.join(ch_dir, 'control-hub.db')
+if os.path.exists(db_path):
+    with open(os.path.join(hermes_home, 'config.yaml')) as f:
+        config_yaml = f.read()
+    conn = sqlite3.connect(db_path)
+    conn.execute('UPDATE agent_root SET config_yaml = ?, updated_at = datetime(\\'now\\') WHERE id = 1', (config_yaml,))
+    conn.commit()
+    conn.close()
+    print('ok')
+" 2>/dev/null && ok "SQLite agent_root.config_yaml synced" || warn "SQLite sync failed — may need hermes migrate first"
+    else
+        warn "python3 not found — cannot sync to Control Hub SQLite"
+    fi
+else
+    info "Control Hub database not found at $CH_DB — SQLite sync skipped"
+    echo "  SQLite sync will happen on next deploy update via seed-catalog"
+fi
+
 # ── Step 7: Systemd Service ──────────────────────────────────
+if [ "$WIRE_ONLY" = false ]; then
 step "Step 7: Systemd service"
 sudo tee /etc/systemd/system/hindsight.service > /dev/null << EOF
 [Unit]
@@ -299,6 +341,7 @@ if curl -s --max-time 3 http://127.0.0.1:9177/health 2>/dev/null | grep -q healt
     COUNT=$(curl -s --max-time 10 "http://127.0.0.1:9177/v1/default/banks/hermes/memories/list?limit=1" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('total',0))" 2>/dev/null || echo "?")
     ok "Test memory stored ($COUNT memories in bank)"
 fi
+fi  # WIRE_ONLY = false block (systemd + verification)
 
 # ── Done ─────────────────────────────────────────────────────
 echo ""
