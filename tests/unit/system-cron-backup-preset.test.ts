@@ -14,8 +14,8 @@ describe("system cron backup preset", () => {
     expect(backup?.label).toBe("Backup");
   });
 
-  it("ships ch-backup.sh next to other preset scripts", () => {
-    expect(HARDWARE_CRON_PRESET_SCRIPT_FILES).toContain("ch-backup.sh");
+  it("ships ch-backup.sh under scripts/hardware", () => {
+    expect(HARDWARE_CRON_PRESET_SCRIPT_FILES).toEqual(["ch-backup.sh"]);
     const abs = path.join(process.cwd(), "scripts", "hardware", "ch-backup.sh");
     expect(fs.existsSync(abs)).toBe(true);
   });

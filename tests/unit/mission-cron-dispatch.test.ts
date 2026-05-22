@@ -87,10 +87,12 @@ jest.mock("@/lib/session-repository", () => ({
 
 const mockCreateCronJob = jest.fn();
 const mockPushJobToHermes = jest.fn();
+const mockDeleteCronJob = jest.fn();
 
 jest.mock("@/lib/cron-repository", () => ({
   createCronJob: (...args: unknown[]) => mockCreateCronJob(...args),
   pushJobToHermes: (...args: unknown[]) => mockPushJobToHermes(...args),
+  deleteCronJob: (...args: unknown[]) => mockDeleteCronJob(...args),
 }));
 
 jest.mock("@/lib/mission-cron-sync", () => ({
@@ -222,6 +224,28 @@ describe("POST /api/missions — cron dispatch (dispatchMode='cron')", () => {
         call[1]?.status === "dispatched",
     );
     expect(statusUpdates.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns 502 with cronPushError when pushJobToHermes fails", async () => {
+    mockPushJobToHermes.mockReturnValue({
+      ok: false,
+      error: "Hermes venv Python not found under /home/user/.hermes/hermes-agent",
+    });
+
+    const res = await postRoute({
+      action: "dispatch",
+      name: "Test Recurring Mission",
+      instruction: "Do the thing",
+      dispatchMode: "cron",
+      schedule: "every 5m",
+    });
+
+    expect(res.status).toBe(502);
+    const json = (await res.json()) as { cronPushError?: string; error?: string };
+    expect(json.cronPushError).toContain("Hermes venv");
+    expect(mockDeleteCronJob).toHaveBeenCalledWith("cj-mock-001");
+    const agentBackend = require("@/lib/backends").agentBackend;
+    expect(agentBackend.dispatchMission).not.toHaveBeenCalled();
   });
 
   it("returns the linked mission in the response", async () => {

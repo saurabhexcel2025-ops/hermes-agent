@@ -69,6 +69,10 @@ noninteractive() {
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 HERMES_INSTALL_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh"
 
+# shellcheck source=../lib/ch-env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/ch-env.sh"
+ch_print_hermes_install_paths
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║   Control Hub — Installer                 ║"

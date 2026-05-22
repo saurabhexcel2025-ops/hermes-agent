@@ -31,7 +31,7 @@ Config: [`jest.config.js`](../jest.config.js) at repo root. Coverage thresholds 
 
 ### Hermes pathing (unit)
 
-- [`tests/unit/hermes-package-path.test.ts`](../tests/unit/hermes-package-path.test.ts) — `resolveHermesAgentPackage()` candidate order (no hardcoded machine paths).
+- [`tests/unit/hermes-package-path.test.ts`](../tests/unit/hermes-package-path.test.ts) — canonical `{HERMES_HOME}/hermes-agent` resolution and venv path errors.
 - [`tests/unit/hermes-profile-paths.test.ts`](../tests/unit/hermes-profile-paths.test.ts) — `getHermesDefaultRoot()`, `resolveProfileHermesHome()` (standard, profile subdir, profile-as-home, Docker root).
 - [`tests/unit/dispatch-mission-cli.test.ts`](../tests/unit/dispatch-mission-cli.test.ts) — mission dispatch sets `HERMES_HOME` on subprocess env for non-default profiles.
 
@@ -91,7 +91,7 @@ npm: `npm run test:full-install` (smoke + `--skip-http`), `npm run test:full-ins
 
 Primary pipeline: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Ubuntu (`shell-custom-scripts`, install, `prebuild`, ESLint with **`--max-warnings 0`**, Hermes-path grep gate, `tsc`, Jest coverage, build, Playwright smoke with `PLAYWRIGHT_SMOKE=1`) plus macOS build/test, E2E smoke on Ubuntu, and a **`docker-image`** job that runs **`docker build -f Dockerfile .`** then **`tests/scripts/docker-deploy-api-smoke.sh`** (GET version check + POST restart + HTTP still up) so the production image and dashboard deploy path do not silently rot. The **`build-test-*`** jobs use separate named steps (ESLint, TypeScript, unit tests, build) so the first failing step is obvious in the Actions UI. Actions use **`actions/checkout@v5`** and **`actions/setup-node@v5`** (action runtime on Node 24 per upstream; app build still uses `node-version: "20"` in the workflow).
 
-[`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) covers dotenv, profile sync gates, and **`bash -n`** on key scripts. **End-to-end exercise of `ch-deploy.sh` restart/stop loops** (fixture git tree, stubbed `npm`, etc.) is **not** in that harness yet; run manual **`ch-deploy`** checks on a staging host or extend the script when you need regression coverage there.
+[`tests/scripts/run-shell-custom-tests.sh`](../tests/scripts/run-shell-custom-tests.sh) covers dotenv, profile sync gates, and **`bash -n`** on key scripts. For **`ch-deploy.sh`** restart/stop loops on a real host, run manual checks on staging (see [DEPLOY.md](DEPLOY.md)).
 
 Other workflows: **gitleaks** (secret scan).
 

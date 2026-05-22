@@ -2,7 +2,7 @@
 
 import { existsSync } from "fs";
 import { join, resolve } from "path";
-import { tmpdir } from "os";
+import { homedir, tmpdir } from "os";
 import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 
 jest.mock("fs", () => ({
@@ -11,8 +11,9 @@ jest.mock("fs", () => ({
 }));
 
 import {
-  listHermesAgentPackageCandidates,
+  getHermesAgentPackageDir,
   resolveHermesAgentPackage,
+  resolveHermesVenvPython,
 } from "@/lib/hermes-package-path";
 
 const existsSyncMock = existsSync as jest.MockedFunction<typeof existsSync>;
@@ -20,10 +21,12 @@ const existsSyncMock = existsSync as jest.MockedFunction<typeof existsSync>;
 describe("hermes-package-path", () => {
   afterEach(() => {
     existsSyncMock.mockImplementation(jest.requireActual<typeof import("fs")>("fs").existsSync);
+    delete process.env.HERMES_HOME;
     delete process.env.HERMES_AGENT_ROOT;
+    delete process.env.HERMES_AGENT_VENV_PYTHON;
   });
 
-  it("finds package under hermes home", () => {
+  it("resolves package under hermes home only", () => {
     const base = mkdtempSync(join(tmpdir(), "ch-hermes-pkg-"));
     const pkg = join(base, "hermes-agent");
     mkdirSync(join(pkg, "cron"), { recursive: true });
@@ -35,22 +38,38 @@ describe("hermes-package-path", () => {
       return jest.requireActual<typeof import("fs")>("fs").existsSync(p);
     });
 
+    expect(getHermesAgentPackageDir(base)).toBe(resolve(pkg));
     expect(resolveHermesAgentPackage(base)).toBe(resolve(pkg));
-    expect(resolve(listHermesAgentPackageCandidates(base)[0])).toBe(resolve(pkg));
   });
 
-  it("honors HERMES_AGENT_ROOT override", () => {
-    const base = mkdtempSync(join(tmpdir(), "ch-hermes-override-"));
-    const pkg = join(base, "custom-agent");
-    mkdirSync(join(pkg, "cron"), { recursive: true });
-    writeFileSync(join(pkg, "cron", "jobs.py"), "# stub\n");
-    process.env.HERMES_AGENT_ROOT = pkg;
+  it("does not consult ~/.local/share/hermes-agent", () => {
+    const base = mkdtempSync(join(tmpdir(), "ch-hermes-missing-"));
+    const legacyShare = join(homedir(), ".local", "share", "hermes-agent");
 
     existsSyncMock.mockImplementation((p) => {
-      if (String(p) === join(pkg, "cron", "jobs.py")) return true;
+      const s = String(p);
+      if (s.startsWith(legacyShare)) return true;
       return false;
     });
 
-    expect(resolveHermesAgentPackage(join(base, "unused-home"))).toBe(pkg);
+    expect(resolveHermesAgentPackage(base)).toBeNull();
+    const calls = existsSyncMock.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((p) => p.includes(".local/share/hermes-agent"))).toBe(false);
+  });
+
+  it("throws when venv python is missing", () => {
+    const base = mkdtempSync(join(tmpdir(), "ch-hermes-no-venv-"));
+    const pkg = join(base, "hermes-agent");
+    mkdirSync(join(pkg, "cron"), { recursive: true });
+    writeFileSync(join(pkg, "cron", "jobs.py"), "# stub\n");
+
+    existsSyncMock.mockImplementation((p) => {
+      const s = String(p);
+      if (s === join(pkg, "cron", "jobs.py")) return true;
+      if (s.includes("venv/bin/python3") || s.includes(".venv/bin/python3")) return false;
+      return jest.requireActual<typeof import("fs")>("fs").existsSync(p);
+    });
+
+    expect(() => resolveHermesVenvPython(base)).toThrow(/venv Python not found/);
   });
 });

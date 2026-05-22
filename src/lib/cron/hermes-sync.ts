@@ -8,8 +8,7 @@
 // get the same validation, atomic writes, and path-resolution the
 // scheduler uses.
 //
-// Hermes venv Python path: HERMES_AGENT_VENV_PYTHON from .env.local
-// (defaults to ~/.local/share/hermes-agent/venv/bin/python3)
+// Hermes venv: $HERMES_HOME/hermes-agent/venv/bin/python3 (see hermes-package-path.ts)
 
 import { spawnSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
@@ -17,7 +16,7 @@ import { db, uuid, now } from "../db";
 import { getActiveHermesPaths } from "../hermes-agent-runtime";
 import { logApiError } from "../api-logger";
 import {
-  listHermesAgentPackageCandidates,
+  getHermesAgentPackageDir,
   resolveHermesAgentPackage,
   resolveHermesVenvPython,
 } from "../hermes-package-path";
@@ -31,8 +30,27 @@ import type {
 import { getCronJob, getCronJobByHermesId, listCronJobs } from "./read";
 import { updateCronJob } from "./write";
 
-function getHermesVenvPython(): string {
-  return resolveHermesVenvPython(getActiveHermesPaths().root);
+function resolveHermesCronRuntime(hermesHome: string): {
+  ok: true;
+  hermesAgentPath: string;
+  python: string;
+} | { ok: false; error: string } {
+  const hermesAgentPath = resolveHermesAgentPackage(hermesHome);
+  if (!hermesAgentPath) {
+    const expected = getHermesAgentPackageDir(hermesHome);
+    return {
+      ok: false,
+      error:
+        `Hermes agent package not found at ${expected} (missing cron/jobs.py). ` +
+        `Install Hermes under HERMES_HOME (default ~/.hermes).`,
+    };
+  }
+  try {
+    const python = resolveHermesVenvPython(hermesHome);
+    return { ok: true, hermesAgentPath, python };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ── Hermes jobs.json read ────────────────────────────────────
@@ -346,14 +364,9 @@ export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
-  const hermesAgentPath = resolveHermesAgentPackage(hermesHome);
-
-  if (!hermesAgentPath) {
-    return {
-      ok: false,
-      error: `Could not find hermes-agent cron module. Searched: ${listHermesAgentPackageCandidates(hermesHome).join(", ")}`,
-    };
-  }
+  const runtime = resolveHermesCronRuntime(hermesHome);
+  if (!runtime.ok) return { ok: false, error: runtime.error };
+  const { hermesAgentPath, python } = runtime;
 
   const allJobs = listCronJobs();
 
@@ -386,11 +399,6 @@ export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
   try {
     writeFileSync(tmpScript, script, "utf-8");
 
-    const python = getHermesVenvPython();
-    if (!existsSync(python)) {
-      return { ok: false, error: `Hermes venv Python not found at: ${python}` };
-    }
-
     const result = spawnSync(python, [tmpScript, "write_all"], {
       input: JSON.stringify(jobsForPython),
       encoding: "utf-8",
@@ -422,16 +430,9 @@ export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: s
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
-  const hermesAgentPath = resolveHermesAgentPackage(hermesHome);
-
-  if (!hermesAgentPath) {
-    return { ok: false, error: "Could not find hermes-agent cron module" };
-  }
-
-  const python = getHermesVenvPython();
-  if (!existsSync(python)) {
-    return { ok: false, error: `Hermes venv Python not found: ${python}` };
-  }
+  const runtime = resolveHermesCronRuntime(hermesHome);
+  if (!runtime.ok) return { ok: false, error: runtime.error };
+  const { hermesAgentPath, python } = runtime;
 
   const jobPayload = {
     id: job.hermes_job_id ?? job.id,
@@ -500,16 +501,9 @@ export function removeJobFromHermes(hermesJobId: string): { ok: boolean; error?:
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
-  const hermesAgentPath = resolveHermesAgentPackage(hermesHome);
-
-  if (!hermesAgentPath) {
-    return { ok: false, error: "Could not find hermes-agent cron module" };
-  }
-
-  const python = getHermesVenvPython();
-  if (!existsSync(python)) {
-    return { ok: false, error: `Hermes venv Python not found: ${python}` };
-  }
+  const runtime = resolveHermesCronRuntime(hermesHome);
+  if (!runtime.ok) return { ok: false, error: runtime.error };
+  const { hermesAgentPath, python } = runtime;
 
   const tmpScript = `/tmp/ch_cron_del_${process.pid}_${Date.now()}.py`;
 

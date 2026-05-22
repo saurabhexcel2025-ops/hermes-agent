@@ -23,13 +23,13 @@ Control Hub is a web command centre built for [Hermes Agent](https://hermes-agen
 
 1. **Install Hermes Agent** on the same machine (see link above). Run `hermes setup` if prompted.
 
-2. **Get Control Hub:**
+2. **Get Control Hub** (installs to `~/control-hub` by default, or use an existing clone):
    ```bash
    git clone https://github.com/Daniel-Parke/hermes-control-hub.git
    cd hermes-control-hub
-   bash scripts/bootstrap/install.sh
+   bash scripts/bootstrap/install.sh --in-repo
    ```
-   For an existing clone only: `bash scripts/bootstrap/setup.sh` or `bash scripts/bootstrap/install.sh --in-repo`.
+   Fresh machine without a clone yet: `bash scripts/bootstrap/install.sh` (clones to `~/control-hub` then runs setup).
 
 3. **Open the dashboard** at `http://127.0.0.1:<PORT>/` (PORT is written to `.env.local` during setup, usually **42069–42100**).
 
@@ -63,7 +63,7 @@ Control Hub is a web command centre built for [Hermes Agent](https://hermes-agen
 
 | Location | Holds |
 |----------|--------|
-| **`~/.hermes`** (`HERMES_HOME`) | Hermes install: `config.yaml`, `profiles/`, agent cron `jobs.json`, logs. |
+| **`~/.hermes`** (`HERMES_HOME`) | Hermes data: `config.yaml`, `profiles/`, cron `jobs.json`, sessions. Package: `~/.hermes/hermes-agent/`. |
 | **`~/control-hub/data`** (`CH_DATA_DIR`, default) | Control Hub SQLite, missions, templates, stories—not committed to git. |
 
 Set `CH_DATA_DIR` and `HERMES_HOME` in `.env.local` if you use non-default paths.
