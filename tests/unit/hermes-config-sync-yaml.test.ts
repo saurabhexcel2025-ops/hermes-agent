@@ -73,6 +73,25 @@ afterEach(() => {
   if (fakeRoot && existsSync(fakeRoot)) rmSync(fakeRoot, { recursive: true, force: true });
 });
 
+describe("syncFallbacksToHermesConfig", () => {
+  it("writes agent.api_max_retries and read-back matches", () => {
+    writeFileSync(
+      join(fakeRoot, "config.yaml"),
+      yaml.dump({ agent: { api_max_retries: 2 } }),
+      "utf-8",
+    );
+    const { syncFallbacksToHermesConfig } = require("@/lib/hermes-config-sync") as typeof import("@/lib/hermes-config-sync");
+
+    syncFallbacksToHermesConfig([], { apiMaxRetries: 5 });
+
+    const cfg = yaml.load(readFileSync(join(fakeRoot, "config.yaml"), "utf-8")) as {
+      agent?: { api_max_retries?: number };
+    };
+    expect(cfg.agent?.api_max_retries).toBe(5);
+  });
+
+});
+
 describe("syncDefaultsToHermesConfig", () => {
   it("writes model.default + provider + base_url + empty api_key when agent default is set", () => {
     const { createModel, setDefaultModel } = require("@/lib/models-repository") as typeof import("@/lib/models-repository");

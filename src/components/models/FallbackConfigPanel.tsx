@@ -13,6 +13,9 @@ interface FallbackConfigPanelProps {
   onSyncToHermes: () => Promise<void>;
   onImportFromConfig: () => Promise<void>;
   syncing?: boolean;
+  saving?: boolean;
+  dirty?: boolean;
+  saveError?: string | null;
   importing?: boolean;
 }
 
@@ -22,8 +25,12 @@ export default function FallbackConfigPanel({
   onSyncToHermes,
   onImportFromConfig,
   syncing = false,
+  saving = false,
+  dirty = false,
+  saveError = null,
   importing = false,
 }: FallbackConfigPanelProps) {
+  const syncBlocked = syncing || saving || dirty;
   // Local state mirrors props; no cascading effects needed — invoke onUpdate directly
   const handleRetriesChange = (value: string) => {
     const num = parseInt(value, 10);
@@ -123,16 +130,26 @@ export default function FallbackConfigPanel({
         </p>
       </div>
 
+      {(saving || dirty || saveError) && (
+        <p className="text-[10px] font-mono text-white/40">
+          {saveError
+            ? saveError
+            : saving || dirty
+              ? "Saving settings…"
+              : null}
+        </p>
+      )}
+
       {/* Action buttons */}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => void onSyncToHermes()}
-          disabled={syncing}
+          disabled={syncBlocked}
           className="flex items-center gap-2 px-4 h-9 bg-neon-purple/10 border border-neon-purple/30 text-neon-purple text-xs font-mono rounded-lg hover:bg-neon-purple/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
-          {syncing ? "Syncing…" : "Sync to Hermes"}
+          {syncing ? "Syncing…" : saving || dirty ? "Save pending…" : "Sync to Hermes"}
         </button>
         <button
           type="button"

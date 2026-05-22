@@ -7,9 +7,15 @@ import * as yaml from "js-yaml";
 import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
-import { addFallbackEntry, listFallbackChain } from "@/lib/fallbacks-repository";
+import {
+  addFallbackEntry,
+  getFallbackConfig,
+  listFallbackChain,
+  updateFallbackConfigBatch,
+} from "@/lib/fallbacks-repository";
+import { parseFallbackAgentSettingsFromYaml } from "@/lib/fallback-config-yaml";
 import { upsertModel } from "@/lib/models-repository";
-import { syncFallbacksToHermesConfig } from "@/lib/hermes-config-sync";
+import { syncEnabledFallbackChainToHermes } from "@/lib/fallback-sync-helpers";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 
 interface ImportPreview {
@@ -76,7 +82,13 @@ export async function POST(request: NextRequest) {
     const rawContent = readFileSync(paths.config, "utf-8");
     const config = yaml.load(rawContent) as {
       fallback_providers?: Array<{ provider?: string; model?: string; base_url?: string }>;
+      agent?: unknown;
     } | null;
+
+    const agentSettings = parseFallbackAgentSettingsFromYaml(config?.agent);
+    if (Object.keys(agentSettings).length > 0) {
+      updateFallbackConfigBatch(agentSettings);
+    }
 
     const chain = config?.fallback_providers ?? [];
     const imported: string[] = [];
@@ -120,18 +132,8 @@ export async function POST(request: NextRequest) {
       existingKeys.add(key);
     }
 
-    // Re-sync to Hermes config
-    const updatedChain = listFallbackChain().filter((e) => e.enabled);
-    syncFallbacksToHermesConfig(
-      updatedChain.map((e) => ({
-        modelId: e.modelIdString,
-        provider: e.provider,
-        baseUrl: null,
-        overrideBaseUrl: e.overrideBaseUrl,
-        apiKey: null,
-      })),
-      {}
-    );
+    const fullConfig = getFallbackConfig();
+    syncEnabledFallbackChainToHermes(fullConfig);
 
     appendAuditLine({
       action: "fallback.import",

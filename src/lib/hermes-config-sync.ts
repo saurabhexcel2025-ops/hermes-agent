@@ -407,6 +407,74 @@ export function removeSingleCredentialFromHermesEnv(
 
 // ── Fallback chain sync to Hermes config ──────────────────────
 
+export interface FallbackAgentSettingsFromDisk {
+  apiMaxRetries?: number;
+  restorePrimaryOnFallback?: boolean;
+  fallbackNotification?: boolean;
+}
+
+/**
+ * Read `agent.*` fallback fields from on-disk config.yaml (post-write verify).
+ */
+export function readFallbackAgentSettingsFromConfig(
+  configPath?: string,
+): FallbackAgentSettingsFromDisk | null {
+  const paths = getActiveHermesPaths();
+  const target = configPath ?? paths.config;
+  if (!existsSync(target)) return null;
+
+  try {
+    const raw = readFileSync(target, "utf-8");
+    const yamlConfig = (yaml.load(raw) as HermesConfig) ?? {};
+    const agent = yamlConfig.agent as Record<string, unknown> | undefined;
+    if (!agent) return {};
+    const out: FallbackAgentSettingsFromDisk = {};
+    if (typeof agent.api_max_retries === "number") {
+      out.apiMaxRetries = agent.api_max_retries;
+    }
+    if (typeof agent.restore_primary_on_fallback === "boolean") {
+      out.restorePrimaryOnFallback = agent.restore_primary_on_fallback;
+    }
+    if (typeof agent.fallback_notification === "boolean") {
+      out.fallbackNotification = agent.fallback_notification;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function assertFallbackAgentSettingsWritten(
+  configPath: string,
+  expected: {
+    apiMaxRetries?: number;
+    restorePrimaryOnFallback?: boolean;
+    fallbackNotification?: boolean;
+  },
+): void {
+  const readBack = readFallbackAgentSettingsFromConfig(configPath);
+  if (!readBack) {
+    throw new Error("Failed to read back config.yaml after fallback sync");
+  }
+  if (expected.apiMaxRetries !== undefined && readBack.apiMaxRetries !== expected.apiMaxRetries) {
+    throw new Error(
+      `config.yaml api_max_retries mismatch: expected ${expected.apiMaxRetries}, got ${readBack.apiMaxRetries ?? "missing"}`,
+    );
+  }
+  if (
+    expected.restorePrimaryOnFallback !== undefined &&
+    readBack.restorePrimaryOnFallback !== expected.restorePrimaryOnFallback
+  ) {
+    throw new Error("config.yaml restore_primary_on_fallback did not persist");
+  }
+  if (
+    expected.fallbackNotification !== undefined &&
+    readBack.fallbackNotification !== expected.fallbackNotification
+  ) {
+    throw new Error("config.yaml fallback_notification did not persist");
+  }
+}
+
 /**
  * Write the fallback chain and behavioural config entries to
  * ~/.hermes/config.yaml as `fallback_providers` (chain) +
@@ -420,7 +488,7 @@ export function syncFallbacksToHermesConfig(
     fallbackNotification?: boolean;
     apiMaxRetries?: number;
   }
-): { backupPath: string | null } {
+): { backupPath: string | null; configPath: string; hermesHome: string } {
   const paths = getActiveHermesPaths();
   const configPath = paths.config;
   ensureDir(paths.root);
@@ -453,5 +521,11 @@ export function syncFallbacksToHermesConfig(
   const serialized = yaml.dump(yamlConfig, { lineWidth: -1, noRefs: true });
   atomicWriteFile(configPath, serialized);
 
-  return { backupPath };
+  assertFallbackAgentSettingsWritten(configPath, {
+    apiMaxRetries: config.apiMaxRetries,
+    restorePrimaryOnFallback: config.restorePrimaryOnFallback,
+    fallbackNotification: config.fallbackNotification,
+  });
+
+  return { backupPath, configPath, hermesHome: paths.root };
 }
