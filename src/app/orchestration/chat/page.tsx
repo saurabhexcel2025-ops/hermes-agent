@@ -16,6 +16,7 @@ import {
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
+import { InlineSelect } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { CHAT_DEFAULT_MODEL, CHAT_MAX_SESSIONS } from "@/types/chat";
 import type { ChatMessage, ChatSession } from "@/types/chat";
@@ -266,7 +267,7 @@ export default function ChatPage() {
 
   // Get active session
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const messages = useMemo(() => activeSession?.messages || [], [activeSession]);
+  const messages = activeSession?.messages ?? [];
 
   // Restore per-session model when switching sessions
   useEffect(() => {
@@ -278,7 +279,7 @@ export default function ChatPage() {
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [sessions, activeSessionId]);
 
   // ── Model change ────────────────────────────────────────────
   const handleModelChange = useCallback(
@@ -485,17 +486,14 @@ export default function ChatPage() {
         color="cyan"
         actions={
           <div className="flex items-center gap-2">
-            <select
+            <InlineSelect
               value={model}
-              onChange={(e) => handleModelChange(e.target.value)}
+              onChange={handleModelChange}
+              options={mergedModels.map((m) => ({ value: m, label: displayModelName(m) }))}
+              accentColor="purple"
+              className="w-[220px] text-xs"
               disabled={modelsLoading}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/80 outline-none focus:border-neon-purple/50 transition-colors font-mono cursor-pointer appearance-none max-w-[220px] disabled:opacity-50"
-              title={modelsError ?? "Select model"}
-            >
-              {mergedModels.map((m) => (
-                <option key={m} value={m}>{displayModelName(m)}</option>
-              ))}
-            </select>
+            />
             {modelsError && (
               <span className="text-[10px] text-neon-orange/80 font-mono" title={modelsError}>
                 !
