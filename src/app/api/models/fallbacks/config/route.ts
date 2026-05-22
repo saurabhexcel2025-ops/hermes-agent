@@ -2,18 +2,12 @@
 // /api/models/fallbacks/config — GET/PUT fallback behaviour config
 // ═══════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
-import { getFallbackConfig, updateFallbackConfigBatch, listFallbackChain } from "@/lib/fallbacks-repository";
-import { syncFallbacksToHermesConfig } from "@/lib/hermes-config-sync";
-
-const configPutSchema = z.object({
-  restorePrimaryOnFallback: z.boolean().optional(),
-  fallbackNotification: z.boolean().optional(),
-  apiMaxRetries: z.number().int().min(0).max(10).optional(),
-});
+import { fallbackConfigPutSchema } from "@/lib/fallback-config-schema";
+import { getFallbackConfig, updateFallbackConfigBatch } from "@/lib/fallbacks-repository";
+import { syncEnabledFallbackChainToHermes } from "@/lib/fallback-sync-helpers";
 
 export async function GET() {
   try {
@@ -35,7 +29,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const parsed = configPutSchema.safeParse(raw);
+  const parsed = fallbackConfigPutSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Invalid request body", details: parsed.error.flatten() },
@@ -45,23 +39,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const updated = updateFallbackConfigBatch(parsed.data);
-
-    // Re-sync fallback chain to Hermes config
-    const chain = listFallbackChain().filter((e) => e.enabled);
-    syncFallbacksToHermesConfig(
-      chain.map((e) => ({
-        modelId: e.modelIdString,
-        provider: e.provider,
-        baseUrl: null,
-        overrideBaseUrl: e.overrideBaseUrl,
-        apiKey: null,
-      })),
-      {
-        restorePrimaryOnFallback: updated.restorePrimaryOnFallback,
-        fallbackNotification: updated.fallbackNotification,
-        apiMaxRetries: updated.apiMaxRetries,
-      }
-    );
+    syncEnabledFallbackChainToHermes(updated);
 
     appendAuditLine({ action: "fallback.config.update", resource: "config", ok: true });
     return NextResponse.json({ data: { config: updated } });

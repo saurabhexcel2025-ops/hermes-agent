@@ -2,9 +2,10 @@
 // useModelsPage — state + handlers for /config/models
 // ═══════════════════════════════════════════════════════════════
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useToast } from "@/components/ui/Toast";
+import { safeApiCall } from "@/lib/api-fetch";
 import type { ModelEditorRecord } from "@/components/models/ModelEditor";
 import type { DefaultsModelOption } from "@/components/models/DefaultsGrid";
 import { TASK_TYPES, type TaskType } from "@/lib/hermes-providers";
@@ -36,7 +37,13 @@ export function useModelsPage() {
     apiMaxRetries: 2,
   });
   const [syncingFallback, setSyncingFallback] = useState(false);
+  const [fallbackConfigSaving, setFallbackConfigSaving] = useState(false);
+  const [fallbackConfigDirty, setFallbackConfigDirty] = useState(false);
+  const [fallbackConfigError, setFallbackConfigError] = useState<string | null>(null);
   const [importingFallback, setImportingFallback] = useState(false);
+  const fallbackSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackSaveGenRef = useRef(0);
+  const pendingFallbackConfigRef = useRef<FallbackConfig | null>(null);
   const [editingFallbackEntry, setEditingFallbackEntry] = useState<FallbackChainEntry | null>(null);
   const [editingFallbackUrl, setEditingFallbackUrl] = useState("");
   const [savingFallbackUrl, setSavingFallbackUrl] = useState(false);
@@ -466,15 +473,109 @@ export function useModelsPage() {
     [loadAll, showToast]
   );
 
+  const persistFallbackConfigNow = useCallback(
+    async (config: FallbackConfig): Promise<boolean> => {
+      const gen = ++fallbackSaveGenRef.current;
+      setFallbackConfigSaving(true);
+      setFallbackConfigError(null);
+      const { ok, data: res, error } = await safeApiCall<{ data: { config: FallbackConfig } }>(
+        "/api/models/fallbacks/config",
+        {
+          method: "PUT",
+          body: {
+            restorePrimaryOnFallback: config.restorePrimaryOnFallback,
+            fallbackNotification: config.fallbackNotification,
+            apiMaxRetries: config.apiMaxRetries,
+          },
+        },
+      );
+      if (gen !== fallbackSaveGenRef.current) {
+        return false;
+      }
+      setFallbackConfigSaving(false);
+      const saved = res?.data?.config;
+      if (!ok || !saved) {
+        setFallbackConfigError(error ?? "Failed to save fallback settings");
+        return false;
+      }
+      setFallbackConfig(saved);
+      setFallbackConfigDirty(false);
+      return true;
+    },
+    [],
+  );
+
+  const handleFallbackConfigChange = useCallback(
+    (next: FallbackConfig) => {
+      setFallbackConfig(next);
+      setFallbackConfigDirty(true);
+      setFallbackConfigError(null);
+      pendingFallbackConfigRef.current = next;
+
+      if (fallbackSaveTimerRef.current) {
+        clearTimeout(fallbackSaveTimerRef.current);
+      }
+      fallbackSaveTimerRef.current = setTimeout(() => {
+        const toSave = pendingFallbackConfigRef.current;
+        if (!toSave) return;
+        void persistFallbackConfigNow(toSave);
+      }, 400);
+    },
+    [persistFallbackConfigNow],
+  );
+
+  const flushFallbackConfigSave = useCallback(async (): Promise<boolean> => {
+    if (fallbackSaveTimerRef.current) {
+      clearTimeout(fallbackSaveTimerRef.current);
+      fallbackSaveTimerRef.current = null;
+    }
+    const pending = pendingFallbackConfigRef.current ?? fallbackConfig;
+    if (!fallbackConfigDirty && !fallbackConfigSaving) {
+      return true;
+    }
+    return persistFallbackConfigNow(pending);
+  }, [fallbackConfig, fallbackConfigDirty, fallbackConfigSaving, persistFallbackConfigNow]);
+
   const handleSyncFallbackToHermes = useCallback(async () => {
     setSyncingFallback(true);
     try {
-      const res = await fetch("/api/models/fallbacks/sync", {
+      const expectedRetries = fallbackConfig.apiMaxRetries;
+      const saved = await flushFallbackConfigSave();
+      if (!saved) {
+        showToast(fallbackConfigError ?? "Save fallback settings before syncing", "error");
+        return;
+      }
+
+      const { ok, data: res, error } = await safeApiCall<{
+        data: {
+          success: boolean;
+          config: FallbackConfig;
+          configPath?: string;
+        };
+      }>("/api/models/fallbacks/sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: fallbackConfig }),
+        body: { config: fallbackConfig },
       });
-      if (!res.ok) throw new Error("Sync failed");
+
+      const payload = res?.data;
+      if (!ok || !payload?.success) {
+        showToast(error ?? "Sync failed", "error");
+        return;
+      }
+
+      if (payload.config) {
+        setFallbackConfig(payload.config);
+        setFallbackConfigDirty(false);
+      }
+
+      if (payload.config.apiMaxRetries !== expectedRetries) {
+        showToast(
+          `Sync finished but retry threshold is still ${payload.config.apiMaxRetries} (expected ${expectedRetries})`,
+          "error",
+        );
+        return;
+      }
+
       showToast("Fallback config synced to Hermes", "success");
     } catch (err) {
       showToast(
@@ -484,7 +585,12 @@ export function useModelsPage() {
     } finally {
       setSyncingFallback(false);
     }
-  }, [fallbackConfig, showToast]);
+  }, [
+    fallbackConfig,
+    fallbackConfigError,
+    flushFallbackConfigSave,
+    showToast,
+  ]);
 
   const handleImportFallbackFromConfig = useCallback(async () => {
     setImportingFallback(true);
@@ -520,7 +626,10 @@ export function useModelsPage() {
     busyTaskType,
     fallbackChain,
     fallbackConfig,
-    setFallbackConfig,
+    handleFallbackConfigChange,
+    fallbackConfigSaving,
+    fallbackConfigDirty,
+    fallbackConfigError,
     syncingFallback,
     importingFallback,
     editing,

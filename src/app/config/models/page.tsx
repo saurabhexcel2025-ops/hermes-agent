@@ -39,7 +39,10 @@ export default function ModelsPage() {
     busyTaskType,
     fallbackChain,
     fallbackConfig,
-    setFallbackConfig,
+    handleFallbackConfigChange,
+    fallbackConfigSaving,
+    fallbackConfigDirty,
+    fallbackConfigError,
     syncingFallback,
     importingFallback,
     editing,
@@ -147,7 +150,10 @@ export default function ModelsPage() {
               editingFallbackEntry={editingFallbackEntry}
               editingFallbackUrl={editingFallbackUrl}
               savingFallbackUrl={savingFallbackUrl}
-              onFallbackConfigChange={setFallbackConfig}
+              onFallbackConfigChange={handleFallbackConfigChange}
+              fallbackConfigSaving={fallbackConfigSaving}
+              fallbackConfigDirty={fallbackConfigDirty}
+              fallbackConfigError={fallbackConfigError}
               onReorder={handleFallbackReorder}
               onToggle={handleFallbackToggle}
               onDelete={handleFallbackDelete}

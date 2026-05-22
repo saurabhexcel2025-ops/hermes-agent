@@ -302,7 +302,7 @@ export function pushCredential(credentialId: string): SyncActionResult {
 export interface FullPushResult {
   modelResults: SyncActionResult[];
   credentialResults: SyncActionResult[];
-  fallbackResult: { backupPath: string | null } | null;
+  fallbackResult: SyncActionResult | null;
 }
 
 /**
@@ -342,12 +342,12 @@ export function pushAllToHermes(): FullPushResult {
     }
   }
 
-  // Push fallback chain
+  // Push fallback chain + behaviour config
   let fallbackResult: FullPushResult["fallbackResult"] = null;
   try {
     const chain = listFallbackChain().filter((e) => e.enabled);
     const config = getFallbackConfig();
-    fallbackResult = syncFallbacksToHermesConfig(
+    const synced = syncFallbacksToHermesConfig(
       chain.map((e) => ({
         modelId: e.modelIdString,
         provider: e.provider,
@@ -361,8 +361,22 @@ export function pushAllToHermes(): FullPushResult {
         apiMaxRetries: config.apiMaxRetries,
       }
     );
-  } catch {
-    // Best-effort — fallbacks are optional
+    fallbackResult = {
+      success: true,
+      backupPath: synced.backupPath,
+      details: [{ action: "pushed", detail: `Fallback chain synced to ${synced.configPath}` }],
+    };
+  } catch (err) {
+    fallbackResult = {
+      success: false,
+      backupPath: null,
+      details: [
+        {
+          action: "error",
+          detail: err instanceof Error ? err.message : "Fallback sync failed",
+        },
+      ],
+    };
   }
 
   return { modelResults, credentialResults, fallbackResult };
