@@ -36,7 +36,6 @@ jest.mock("@/lib/cron-repository", () => ({
   })),
 }));
 
-import { logApiError } from "@/lib/api-logger";
 import * as cronRepository from "@/lib/cron-repository";
 import { mockRequest } from "../helpers/api-test-helpers";
 
