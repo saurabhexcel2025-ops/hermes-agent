@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
           updateMission(mission.id, { cronJobId: cronJob.id });
 
           // Push to Hermes so the scheduler picks it up
-          const pushResult = pushJobToHermes(cronJob.id);
+          const pushResult = await pushJobToHermes(cronJob.id);
           if (!pushResult.ok) {
             logApiError("POST /api/missions", "pushJobToHermes", pushResult.error);
             deleteCronJob(cronJob.id);
@@ -530,9 +530,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
       if (mission.cronJobId && shouldRebuildPrompt) {
-        syncMissionToCronJob(missionIdFinal);
+        await syncMissionToCronJob(missionIdFinal);
       } else if (mission.cronJobId && schedule !== undefined) {
-        syncMissionToCronJob(missionIdFinal);
+        await syncMissionToCronJob(missionIdFinal);
       }
 
       if (prompt !== undefined) {
@@ -580,7 +580,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      pauseMissionCron(cancelId);
+      await pauseMissionCron(cancelId);
 
       const shouldKillProcess =
         existingMission.status === "dispatched" || existingMission.status === "queued";
@@ -613,7 +613,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
       }
 
-      deleteMissionCron(missionIdFinal);
+      await deleteMissionCron(missionIdFinal);
 
       const ok = deleteMission(missionIdFinal);
       if (!ok)
