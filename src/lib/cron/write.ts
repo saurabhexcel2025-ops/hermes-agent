@@ -26,9 +26,12 @@ function parseScheduleToJson(
 function parseRepeatJson(
   repeat?: { times: number | null; completed?: number }
 ): string {
+  if (repeat === undefined) {
+    return JSON.stringify({ times: 1, completed: 0 });
+  }
   return JSON.stringify({
-    times: repeat?.times ?? 1,
-    completed: repeat?.completed ?? 0,
+    times: repeat.times === undefined ? 1 : repeat.times,
+    completed: repeat.completed ?? 0,
   });
 }
 

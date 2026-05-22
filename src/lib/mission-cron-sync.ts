@@ -44,7 +44,7 @@ export function enrichMissionCron(
   return { ...mission, cronJob: cronJobToBrief(job) };
 }
 
-export function syncMissionToCronJob(missionId: string): boolean {
+export async function syncMissionToCronJob(missionId: string): Promise<boolean> {
   const mission = getMission(missionId);
   if (!mission?.cronJobId) return false;
   const job = getCronJob(mission.cronJobId);
@@ -60,7 +60,7 @@ export function syncMissionToCronJob(missionId: string): boolean {
       schedule: mission.schedule ?? job.schedule_display,
       profile_name: mission.profileName ?? job.profile_name,
     });
-    const push = pushJobToHermes(mission.cronJobId);
+    const push = await pushJobToHermes(mission.cronJobId);
     if (!push.ok) {
       logApiError("syncMissionToCronJob", missionId, new Error(push.error ?? "push failed"));
       return false;
@@ -72,12 +72,12 @@ export function syncMissionToCronJob(missionId: string): boolean {
   }
 }
 
-export function pauseMissionCron(missionId: string): boolean {
+export async function pauseMissionCron(missionId: string): Promise<boolean> {
   const mission = getMission(missionId);
   if (!mission?.cronJobId) return false;
   try {
     updateCronJob(mission.cronJobId, { enabled: false, state: "paused" });
-    pushJobToHermes(mission.cronJobId);
+    await pushJobToHermes(mission.cronJobId);
     return true;
   } catch (err) {
     logApiError("pauseMissionCron", missionId, err);
@@ -85,13 +85,13 @@ export function pauseMissionCron(missionId: string): boolean {
   }
 }
 
-export function deleteMissionCron(missionId: string): boolean {
+export async function deleteMissionCron(missionId: string): Promise<boolean> {
   const mission = getMission(missionId);
   if (!mission?.cronJobId) return true;
   const job = getCronJob(mission.cronJobId);
   try {
     if (job?.hermes_job_id) {
-      removeJobFromHermes(job.hermes_job_id);
+      await removeJobFromHermes(job.hermes_job_id);
     }
     deleteCronJob(mission.cronJobId);
     updateMission(missionId, { cronJobId: null });

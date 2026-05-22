@@ -10,7 +10,7 @@
 //
 // Hermes venv: $HERMES_HOME/hermes-agent/venv/bin/python3 (see hermes-package-path.ts)
 
-import { spawnSync } from "child_process";
+import { spawn } from "child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { db, uuid, now } from "../db";
 import { getActiveHermesPaths } from "../hermes-agent-runtime";
@@ -29,6 +29,53 @@ import type {
 } from "./types";
 import { getCronJob, getCronJobByHermesId, listCronJobs } from "./read";
 import { updateCronJob } from "./write";
+
+/**
+ * Run an executable with args, optional stdin input, and return { stdout, stderr }.
+ * Async wrapper around child_process.spawn. Does NOT go through a shell.
+ * Compatible with Turbopack/Next.js bundling (no child_process/promises).
+ */
+function spawnAsync(
+  cmd: string,
+  args: string[],
+  opts: { input?: string; encoding?: string; timeout?: number; killSignal?: NodeJS.Signals } = {}
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    child.stdout!.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr!.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    if (opts.timeout && opts.timeout > 0) {
+      timer = setTimeout(() => {
+        child.kill((opts.killSignal || "SIGTERM") as NodeJS.Signals);
+      }, opts.timeout);
+    }
+
+    child.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(stderr || stdout || `exit code ${code}`));
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+    child.on("error", (err) => {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
+
+    if (opts.input) {
+      child.stdin!.write(opts.input);
+      child.stdin!.end();
+    } else {
+      child.stdin!.end();
+    }
+  });
+}
 
 function resolveHermesCronRuntime(hermesHome: string): {
   ok: true;
@@ -311,8 +358,20 @@ elif action == "create":
     try:
         sched_raw = json.loads(job_def["schedule"])
         if isinstance(sched_raw, dict):
-            # Accept expr, expression, or kind as the cron string
-            job_def["schedule"] = sched_raw.get("expr") or sched_raw.get("expression") or sched_raw.get("kind") or job_def.get("schedule_display", "* * * * *")
+            # The schedule may already be parsed (from CronJobRecord) or in raw form.
+            # Parsed form: {"kind":"interval","minutes":5,"display":"every 5m"}
+            #              {"kind":"cron","expr":"*/5 * * * *","display":"..."}
+            # Raw form: {"kind":"every 5m"}
+            kind = sched_raw.get("kind", "")
+            if kind == "interval" and "minutes" in sched_raw:
+                job_def["schedule"] = f"every {sched_raw['minutes']}m"
+            elif kind == "cron" and "expr" in sched_raw:
+                job_def["schedule"] = sched_raw["expr"]
+            elif kind in ("once",) and "run_at" in sched_raw:
+                job_def["schedule"] = sched_raw["run_at"]
+            else:
+                # Fallback: use kind itself (for raw "every 5m" kind) or display
+                job_def["schedule"] = sched_raw.get("expr") or sched_raw.get("display") or kind or job_def.get("schedule_display", "* * * * *")
         else:
             job_def["schedule"] = str(sched_raw)
     except Exception:
@@ -323,11 +382,13 @@ elif action == "create":
         job_def["repeat"] = repeat_raw.get("times") if isinstance(repeat_raw, dict) else (repeat_raw or 1)
     except Exception:
         job_def["repeat"] = 1
+    # profile_name is stored in CH SQLite but Hermes create_job uses "profile" not "profile_name"
+    # name is intentionally passed through — without it create_job defaults name=prompt
     result = create_job(**{k: v for k, v in job_def.items() if v is not None and k not in (
-        "name", "schedule_display", "repeat_json", "ch_job_id", "id",
+        "schedule_display", "repeat_json", "ch_job_id", "id",
         "enabled", "state", "hermes_job_id", "source", "orphan",
         "created_at", "next_run_at", "last_run_at", "last_status",
-        "last_delivery_error"
+        "last_delivery_error", "profile_name"
     )})
     print(json.dumps({"ok": True, "job_id": result["id"]}))
 
@@ -360,7 +421,7 @@ function buildPythonScript(
  * Call Hermes Python to write all CH jobs to Hermes jobs.json.
  * CH is the system of record; Hermes file is updated to match exactly.
  */
-export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
+export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: string }> {
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
@@ -399,31 +460,32 @@ export function syncAllJobsToHermes(): { ok: boolean; error?: string } {
   try {
     writeFileSync(tmpScript, script, "utf-8");
 
-    const result = spawnSync(python, [tmpScript, "write_all"], {
-      input: JSON.stringify(jobsForPython),
-      encoding: "utf-8",
-      timeout: 15_000,
-      killSignal: "SIGTERM",
-    });
+    await spawnAsync(
+      python,
+      [tmpScript, "write_all"],
+      {
+        input: JSON.stringify(jobsForPython),
+        timeout: 15_000,
+        killSignal: "SIGTERM" as NodeJS.Signals,
+      }
+    );
 
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
 
-    if (result.status !== 0) {
-      const err = result.stderr ?? result.stdout ?? "Unknown error";
-      logApiError("syncAllJobsToHermes", "python write_all", new Error(String(err)));
-      return { ok: false, error: String(err).slice(0, 500) };
-    }
-
     return { ok: true };
-  } catch (err) {
-    return { ok: false, error: String(err) };
+  } catch (err: unknown) {
+    try { unlinkSync(tmpScript); } catch { /* best-effort */ }
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    logApiError("syncAllJobsToHermes", "python write_all", new Error(String(message).slice(0, 500)));
+    return { ok: false, error: String(message).slice(0, 500) };
   }
 }
 
 /**
  * Push a single CH job to Hermes (create or update).
  */
-export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: string; error?: string } {
+export async function pushJobToHermes(chJobId: string): Promise<{ ok: boolean; hermesJobId?: string; error?: string }> {
   const job = getCronJob(chJobId);
   if (!job) return { ok: false, error: `Job not found: ${chJobId}` };
 
@@ -463,21 +525,17 @@ export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: s
   try {
     writeFileSync(tmpScript, script, "utf-8");
 
-    const result = spawnSync(
+    const { stdout } = await spawnAsync(
       python,
       [tmpScript, "create"],
-      { input: JSON.stringify(jobPayload), encoding: "utf-8", timeout: 15_000, killSignal: "SIGTERM" }
+      { input: JSON.stringify(jobPayload), timeout: 15_000, killSignal: "SIGTERM" as NodeJS.Signals }
     );
 
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
 
-    if (result.status !== 0) {
-      return { ok: false, error: String(result.stderr ?? result.stdout).slice(0, 500) };
-    }
-
     let parsed: { ok: boolean; job_id?: string; error?: string } = { ok: false };
     try {
-      parsed = JSON.parse(result.stdout ?? "{}");
+      parsed = JSON.parse(stdout ?? "{}");
     } catch {
       /* ignore parse errors */
     }
@@ -489,15 +547,18 @@ export function pushJobToHermes(chJobId: string): { ok: boolean; hermesJobId?: s
     }
 
     return { ok: true, hermesJobId };
-  } catch (err) {
-    return { ok: false, error: String(err) };
+  } catch (err: unknown) {
+    try { unlinkSync(tmpScript); } catch { /* best-effort */ }
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    return { ok: false, error: String(message).slice(0, 500) };
   }
 }
 
 /**
  * Remove a job from Hermes jobs.json by its Hermes job id.
  */
-export function removeJobFromHermes(hermesJobId: string): { ok: boolean; error?: string } {
+export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: boolean; error?: string }> {
   const paths = getActiveHermesPaths();
   const hermesHome = paths.root;
 
@@ -511,19 +572,22 @@ export function removeJobFromHermes(hermesJobId: string): { ok: boolean; error?:
 
   try {
     writeFileSync(tmpScript, script, "utf-8");
-    const result = spawnSync(python, [tmpScript, "delete", hermesJobId], {
-      encoding: "utf-8",
-      timeout: 15_000,
-      killSignal: "SIGTERM",
-    });
+    await spawnAsync(
+      python,
+      [tmpScript, "delete", hermesJobId],
+      {
+        timeout: 15_000,
+        killSignal: "SIGTERM" as NodeJS.Signals,
+      }
+    );
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
 
-    if (result.status !== 0) {
-      return { ok: false, error: String(result.stderr ?? result.stdout).slice(0, 500) };
-    }
     return { ok: true };
-  } catch (err) {
-    return { ok: false, error: String(err) };
+  } catch (err: unknown) {
+    try { unlinkSync(tmpScript); } catch { /* best-effort */ }
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    return { ok: false, error: String(message).slice(0, 500) };
   }
 }
 
@@ -538,10 +602,10 @@ export function removeJobFromHermes(hermesJobId: string): { ok: boolean; error?:
  * For jobs that exist in CH but not in Hermes: they are pushed.
  * For jobs deleted in Hermes but still in CH: marked orphan.
  */
-export function syncCronWithHermes(): SyncResult {
+export async function syncCronWithHermes(): Promise<SyncResult> {
   const hermesImport = importHermesJobs();
 
-  const exportResult = syncAllJobsToHermes();
+  const exportResult = await syncAllJobsToHermes();
   const hermesExportErrors: string[] = exportResult.error ? [exportResult.error] : [];
 
   return {

@@ -32,6 +32,11 @@ export async function GET(request: NextRequest) {
 
   try {
     ensureDb();
+
+    if (profile !== "default" && !getProfile(profile)) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+
     const home = getActiveHermesHome();
     const skillsDir = skillsRootForProfile(home, profile);
     const disabled = resolveEffectiveDisabledSkills(profile, { refreshFromDisk });
@@ -89,10 +94,6 @@ export async function GET(request: NextRequest) {
       const cat = skill.category || "uncategorized";
       if (!categories[cat]) categories[cat] = [];
       categories[cat].push(skill);
-    }
-
-    if (profile !== "default" && !getProfile(profile)) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
     return NextResponse.json({

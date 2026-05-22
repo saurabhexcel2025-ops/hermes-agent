@@ -78,6 +78,8 @@ function recordToApiJob(job: CronJobRecord) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Pull latest execution state from Hermes before reading
+    importHermesJobs();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -115,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "sync") {
       // Full bidirectional sync
-      const result = syncCronWithHermes();
+      const result = await syncCronWithHermes();
       appendAuditLine({
         action: "cron.sync",
         resource: "hermes",
@@ -157,7 +159,11 @@ export async function POST(request: NextRequest) {
       for (const job of jobs) {
         updateCronJob(job.id, { enabled: false, state: "paused" });
         if (job.hermes_job_id) {
-          pushJobToHermes(job.id); // best-effort
+          try {
+            await pushJobToHermes(job.id);
+          } catch {
+            // best-effort
+          }
         }
         paused++;
       }
@@ -247,7 +253,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Sync to Hermes
-    const pushResult = pushJobToHermes(newJob.id);
+    const pushResult = await pushJobToHermes(newJob.id);
     if (!pushResult.ok) {
       deleteCronJob(newJob.id);
       return cronSyncFailureResponse("POST /api/cron", pushResult);
@@ -297,7 +303,7 @@ export async function PUT(request: NextRequest) {
     // ── Pause ─────────────────────────────────────────────────
     if (action === "pause") {
       const updated = updateCronJob(id, { enabled: false, state: "paused" });
-      const pushResult = pushJobToHermes(id);
+      const pushResult = await pushJobToHermes(id);
       if (!pushResult.ok) {
         return cronSyncFailureResponse("PUT /api/cron pause", pushResult);
       }
@@ -308,7 +314,7 @@ export async function PUT(request: NextRequest) {
     // ── Resume ────────────────────────────────────────────────
     if (action === "resume") {
       const updated = updateCronJob(id, { enabled: true, state: "scheduled" });
-      const pushResult = pushJobToHermes(id);
+      const pushResult = await pushJobToHermes(id);
       if (!pushResult.ok) {
         return cronSyncFailureResponse("PUT /api/cron resume", pushResult);
       }
@@ -322,7 +328,7 @@ export async function PUT(request: NextRequest) {
         state: "run_requested",
         next_run_at: new Date().toISOString(),
       });
-      const pushResult = pushJobToHermes(id);
+      const pushResult = await pushJobToHermes(id);
       if (!pushResult.ok) {
         return cronSyncFailureResponse("PUT /api/cron run", pushResult);
       }
@@ -370,7 +376,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Sync to Hermes
-    const pushResult = pushJobToHermes(id);
+    const pushResult = await pushJobToHermes(id);
     if (!pushResult.ok) {
       return cronSyncFailureResponse("PUT /api/cron", pushResult);
     }
@@ -405,7 +411,7 @@ export async function DELETE(request: NextRequest) {
 
     // Remove from Hermes first (best-effort)
     if (existing.hermes_job_id) {
-      const delResult = removeJobFromHermes(existing.hermes_job_id);
+      const delResult = await removeJobFromHermes(existing.hermes_job_id);
       if (!delResult.ok) {
         logApiError("DELETE /api/cron", "removeJobFromHermes", new Error(delResult.error ?? "unknown"));
       }

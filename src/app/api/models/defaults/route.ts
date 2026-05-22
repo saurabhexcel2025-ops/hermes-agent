@@ -34,8 +34,6 @@ export async function PUT(request: NextRequest) {
   const parsed = setDefaultPutSchema.safeParse(raw);
   if (!parsed.success) return zodErrorResponse(parsed.error);
 
-
-
   try {
     const defaults = setDefaultModel(parsed.data.taskType as TaskType, parsed.data.modelId);
     syncDefaultsToHermesConfig();
