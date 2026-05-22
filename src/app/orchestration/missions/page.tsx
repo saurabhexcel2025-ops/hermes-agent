@@ -15,6 +15,7 @@ import {
 } from "@/components/missions/TemplateModals";
 import { useMissionsPage } from "@/hooks/useMissionsPage";
 import MissionsList from "@/components/missions/MissionsList";
+import { mapCategories } from "@/lib/mission-form-utils";
 
 export default function MissionsPage() {
   const vm = useMissionsPage();
@@ -174,11 +175,7 @@ export default function MissionsPage() {
             missions={missions}
             formState={formState}
             setFormField={setFormField}
-            categories={categories.map((c) => ({
-              id: c.id,
-              name: c.name,
-              color: c.color,
-            }))}
+            categories={mapCategories(categories)}
             categoryId={newCategoryId}
             onCategoryChange={setCategoryId}
             onCreateCategory={handleCreateCategory}
@@ -240,11 +237,7 @@ export default function MissionsPage() {
         onTemplateColorChange={setTemplateColor}
         templateSaving={templateSaving}
         onSave={handleTemplateSave}
-        categories={categories.map((c) => ({
-          id: c.id,
-          name: c.name,
-          color: c.color,
-        }))}
+        categories={mapCategories(categories)}
         categoryId={newCategoryId}
         onCategoryChange={setCategoryId}
         onCreateCategory={handleCreateCategory}

@@ -4,27 +4,24 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { safeApiCall } from "@/lib/api-fetch";
+import { useApiData } from "@/hooks/useApiData";
 import type { SystemCronJob } from "@/types/hermes";
+
+interface SystemCronData {
+  jobs: SystemCronJob[];
+  total: number;
+}
 
 export function useSystemCronJobs() {
   const { showToast } = useToast();
-  const [jobs, setJobs] = useState<SystemCronJob[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { data, loading, refetch: loadJobs } = useApiData<SystemCronData>("/api/cron/hardware", {
+    transform: (raw) => raw as SystemCronData,
+  });
 
-  const loadJobs = useCallback(async () => {
-    setLoading(true);
-    const { ok, data } = await safeApiCall<{ jobs?: SystemCronJob[] }>("/api/cron/hardware");
-    if (!ok) {
-      showToast("Failed to load system cron jobs", "error");
-      setJobs([]);
-    } else {
-      setJobs(data?.jobs ?? []);
-    }
-    setLoading(false);
-  }, [showToast]);
+  const jobs = useMemo(() => data?.jobs ?? [], [data?.jobs]);
 
   const handleToggle = useCallback(
     async (id: string) => {
