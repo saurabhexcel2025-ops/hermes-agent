@@ -199,9 +199,29 @@ describe("POST /api/missions — cron dispatch (dispatchMode='cron')", () => {
     // Must push to Hermes
     expect(mockPushJobToHermes).toHaveBeenCalledWith("cj-mock-001");
 
-    // Must NOT dispatch a one-shot chat
+    // Must ALSO dispatch one-shot for immediate first run
     const agentBackend = require("@/lib/backends").agentBackend;
-    expect(agentBackend.dispatchMission).not.toHaveBeenCalled();
+    expect(agentBackend.dispatchMission).toHaveBeenCalledTimes(1);
+    const dispatchCall = agentBackend.dispatchMission.mock.calls[0][0];
+    expect(dispatchCall.missionId).toBe("m-cron-test-001");
+  });
+
+  it("sets mission status to dispatched (not queued) for immediate first run", async () => {
+    await postRoute({
+      action: "dispatch",
+      name: "Test Recurring Mission",
+      instruction: "Do the thing every 5 minutes",
+      dispatchMode: "cron",
+      schedule: "every 5m",
+    });
+
+    // Should start as dispatched, not queued
+    const statusUpdates = mockUpdateMission.mock.calls.filter(
+      (call: unknown[]) =>
+        call[0] === "m-cron-test-001" &&
+        call[1]?.status === "dispatched",
+    );
+    expect(statusUpdates.length).toBeGreaterThanOrEqual(1);
   });
 
   it("returns the linked mission in the response", async () => {
