@@ -5,7 +5,31 @@ import {
   formatBytes,
   truncate,
   messageSummary,
+  safeJsonParse,
 } from "@/lib/utils";
+
+describe("safeJsonParse", () => {
+  it("returns fallback for null, undefined, and empty string", () => {
+    expect(safeJsonParse(null, [])).toEqual([]);
+    expect(safeJsonParse(undefined, { times: 1 })).toEqual({ times: 1 });
+    expect(safeJsonParse("", ["x"])).toEqual(["x"]);
+  });
+
+  it("parses valid JSON", () => {
+    expect(safeJsonParse('["a","b"]', [] as string[])).toEqual(["a", "b"]);
+    expect(safeJsonParse('{"times":null}', { times: 1, completed: 0 })).toEqual({
+      times: null,
+    });
+  });
+
+  it("returns fallback on malformed JSON (cron/mission DB fields)", () => {
+    expect(safeJsonParse("{not json", [] as string[])).toEqual([]);
+    expect(safeJsonParse("undefined", { times: 1, completed: 0 })).toEqual({
+      times: 1,
+      completed: 0,
+    });
+  });
+});
 
 describe("titleCase", () => {
   it("capitalises first letter", () => {
