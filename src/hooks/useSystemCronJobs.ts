@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { safeApiCall } from "@/lib/api-fetch";
 import { useApiData } from "@/hooks/useApiData";
@@ -21,7 +21,7 @@ export function useSystemCronJobs() {
     transform: (raw) => raw as SystemCronData,
   });
 
-  const jobs = data?.jobs ?? [];
+  const jobs = useMemo(() => data?.jobs ?? [], [data?.jobs]);
 
   const handleToggle = useCallback(
     async (id: string) => {

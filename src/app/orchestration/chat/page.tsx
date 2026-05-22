@@ -397,8 +397,8 @@ export default function ChatPage() {
     const priorMessages = isNewSession ? [] : (sessionAtSend?.messages ?? []);
     const apiMessages = toApiMessages(priorMessages, text);
 
-    // Stream the response
-    const success = await streamChatResponse(
+    // Stream the response (errors handled via onError callback)
+    await streamChatResponse(
       apiMessages,
       model,
       controller,
