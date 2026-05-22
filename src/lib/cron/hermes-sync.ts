@@ -383,8 +383,9 @@ elif action == "create":
     except Exception:
         job_def["repeat"] = 1
     # profile_name is stored in CH SQLite but Hermes create_job uses "profile" not "profile_name"
+    # name is intentionally passed through — without it create_job defaults name=prompt
     result = create_job(**{k: v for k, v in job_def.items() if v is not None and k not in (
-        "name", "schedule_display", "repeat_json", "ch_job_id", "id",
+        "schedule_display", "repeat_json", "ch_job_id", "id",
         "enabled", "state", "hermes_job_id", "source", "orphan",
         "created_at", "next_run_at", "last_run_at", "last_status",
         "last_delivery_error", "profile_name"
