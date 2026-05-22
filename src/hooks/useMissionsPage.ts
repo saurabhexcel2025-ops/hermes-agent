@@ -614,14 +614,79 @@ export function useMissionsPage() {
     setShowCreate(true);
   };
 
-  const handleSaveAsTemplate = () => {
+  const handleSaveAsTemplate = async () => {
     if (!newInstruction.trim()) return;
-    setTemplateName(newName || "");
-    setTemplateDescription("");
-    setTemplateIcon("Zap");
-    setTemplateColor("cyan");
-    setEditingTemplateId(null);
-    setShowTemplateEditor(true);
+
+    const name = newName.trim() || "Untitled Template";
+
+    // Check if we're overwriting an existing template
+    const existingTemplate = editingTemplateId
+      ? templates.find((t) => t.id === editingTemplateId)
+      : templates.find(
+          (t) =>
+            t.name === name &&
+            (t as MissionTemplate & { isCustom?: boolean }).isCustom !== false,
+        );
+
+    if (existingTemplate) {
+      const confirmed = window.confirm(
+        `Overwrite template "${existingTemplate.name}"?`,
+      );
+      if (!confirmed) return;
+    }
+
+    setTemplateSaving(true);
+    try {
+      const payload: Record<string, unknown> = existingTemplate
+        ? { action: "update", templateId: existingTemplate.id }
+        : { action: "create" };
+
+      payload.name = name;
+      payload.icon = templateIcon;
+      payload.color = templateColor;
+      payload.description = templateDescription || "";
+      payload.instruction = newInstruction;
+      payload.context = newContext;
+      payload.outputFormat = newOutputFormat;
+      payload.constraints = newConstraints;
+      payload.goals = newGoals.split("\n").filter((g) => g.trim());
+      payload.localDirs = newLocalDirs;
+      payload.references = newReferences;
+      payload.suggestedSkills = newSkills;
+      payload.suggestedToolsets = newToolsets;
+      payload.profile = newProfile;
+      payload.defaultModel =
+        typeof newModel === "string" && newModel.trim() !== ""
+          ? newModel.trim()
+          : undefined;
+      payload.defaultProvider =
+        typeof newProvider === "string" && newProvider.trim() !== ""
+          ? newProvider.trim()
+          : undefined;
+      payload.timeoutMinutes = newTimeout;
+      if (newCategoryId) payload.categoryId = newCategoryId;
+
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        showToast(
+          existingTemplate ? "Template updated!" : "Template saved!",
+          "success",
+        );
+        setEditingTemplateId(null);
+        fetchData();
+      } else {
+        showToast("Failed to save template", "error");
+      }
+    } catch {
+      showToast("Failed to save template", "error");
+    } finally {
+      setTemplateSaving(false);
+    }
   };
 
   const handleCreateNewTemplate = useCallback(() => {

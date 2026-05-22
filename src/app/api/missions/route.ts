@@ -206,9 +206,10 @@ export async function POST(request: NextRequest) {
       const isCronMode = dispatchMode === "cron" && scheduleVal;
 
       if (isCronMode) {
-        // ── Recurring mission: create a cron job instead of dispatching one-shot ──
-        // The mission record stays "queued"; the cron job will dispatch it on schedule.
-        updateMission(mission.id, { status: "queued" });
+        // ── Recurring mission: create a cron job + dispatch first run immediately ──
+        // Creating a cron job handles subsequent runs on schedule, but the user
+        // expects the first run to start right away rather than waiting for the
+        // next schedule tick.
 
         try {
           const profileNameFinal = profileName as string | undefined;
@@ -234,6 +235,65 @@ export async function POST(request: NextRequest) {
           const pushResult = pushJobToHermes(cronJob.id);
           if (!pushResult.ok) {
             logApiError("POST /api/missions", "pushJobToHermes", pushResult.error);
+          }
+
+          // ── Immediate first-run dispatch ──
+          // Don't wait for the cron scheduler — start the first run now.
+          updateMission(mission.id, { status: "dispatched" });
+
+          let sessionIdFromDb: string | undefined;
+          try {
+            const session = createSession({
+              source: "mission",
+              missionId: mission.id,
+              profileName: profileName ?? null,
+              modelId: modelId ?? null,
+              provider: provider ?? null,
+              title: mission.name,
+              status: "active",
+            });
+            sessionIdFromDb = session.id;
+          } catch (err) {
+            logApiError("POST /api/missions", "createSession (cron)", err);
+          }
+
+          try {
+            const dispatched = await agentBackend.dispatchMission({
+              missionId: mission.id,
+              name: mission.name,
+              prompt: mission.prompt,
+              profileId: mission.profileId,
+              profileName,
+              modelId,
+              provider,
+            });
+
+            let sessionId: string | undefined = dispatched.sessionId ?? sessionIdFromDb;
+            if (!sessionId && sessionIdFromDb) {
+              sessionId = sessionIdFromDb;
+            } else if (!sessionId) {
+              for (let attempt = 0; attempt < 10; attempt++) {
+                await new Promise((r) => setTimeout(r, 800));
+                try {
+                  const sid = await agentBackend.getMissionSessionId?.(mission.id);
+                  if (sid) {
+                    sessionId = sid;
+                    break;
+                  }
+                } catch { /* keep polling */ }
+              }
+            }
+
+            updateMission(mission.id, {
+              sessionId,
+              status: "dispatched",
+            });
+          } catch (err) {
+            logApiError("POST /api/missions", "immediate dispatch (cron)", err);
+            if (sessionIdFromDb) {
+              updateSession(sessionIdFromDb, { status: "failed", endedAt: new Date().toISOString() });
+            }
+            updateMission(mission.id, { status: "failed" });
           }
 
           appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: true });
