@@ -112,13 +112,9 @@ export default function LogsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
-  const dataRef = useRef<LogData | null>(null);
-  useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
 
   const loadLogs = useCallback(async () => {
-    const hasData = dataRef.current !== null;
+    const hasData = data !== null;
     setLoadError(null);
     if (hasData) {
       setRefreshing(true);
@@ -145,11 +141,7 @@ export default function LogsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeLog, lineCount]);
-
-  // Stable ref for polling — avoids recreating the interval when loadLogs deps change
-  const loadLogsRef = useRef(loadLogs);
-  useEffect(() => { loadLogsRef.current = loadLogs; }, [loadLogs]);
+  }, [activeLog, lineCount, data]);
 
   const handleDeleteAllLogs = useCallback(async () => {
     if (!deleteConfirm) {
@@ -199,12 +191,12 @@ export default function LogsPage() {
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
-      void loadLogsRef.current();
+      void loadLogs();
     }, 5000);
     return () => {
       clearInterval(id);
     };
-  }, [autoRefresh]);
+  }, [autoRefresh, loadLogs]);
 
   useEffect(() => {
     if (autoScroll && terminalRef.current) {
