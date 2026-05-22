@@ -78,6 +78,8 @@ function recordToApiJob(job: CronJobRecord) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Pull latest execution state from Hermes before reading
+    importHermesJobs();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -157,7 +159,11 @@ export async function POST(request: NextRequest) {
       for (const job of jobs) {
         updateCronJob(job.id, { enabled: false, state: "paused" });
         if (job.hermes_job_id) {
-          await pushJobToHermes(job.id); // best-effort
+          try {
+            await pushJobToHermes(job.id);
+          } catch {
+            // best-effort
+          }
         }
         paused++;
       }
