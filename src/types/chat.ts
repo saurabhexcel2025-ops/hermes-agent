@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// Chat Types — Shared between chat page and any future chat components
+// Chat Types — Shared between chat page and chat-related components
 // ═══════════════════════════════════════════════════════════════
 
 export interface ChatMessage {

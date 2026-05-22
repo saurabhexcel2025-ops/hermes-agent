@@ -6,7 +6,7 @@ import {
 
 describe("sanitizeLogBasename", () => {
   it("accepts letters digits dot underscore hyphen", () => {
-    expect(sanitizeLogBasename("ch-health")).toBe("ch-health");
+    expect(sanitizeLogBasename("ch-backup")).toBe("ch-backup");
     expect(sanitizeLogBasename("agent2")).toBe("agent2");
     expect(sanitizeLogBasename("my.log.file")).toBe("my.log.file");
   });
@@ -30,7 +30,7 @@ describe("sanitizeLogBasename", () => {
 describe("categorizeLogFileGroup", () => {
   it("classifies core and hardware", () => {
     expect(categorizeLogFileGroup("agent")).toBe("core");
-    expect(categorizeLogFileGroup("ch-watchdog")).toBe("system");
+    expect(categorizeLogFileGroup("ch-backup")).toBe("system");
     expect(categorizeLogFileGroup("custom")).toBe("other");
   });
 });

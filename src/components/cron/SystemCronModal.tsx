@@ -11,7 +11,7 @@ import { Cpu, Loader2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import CronScheduleInput from "@/components/cron/CronScheduleInput";
-import { baseInputStyles } from "@/lib/theme";
+import { baseInputStyles, inputFieldClasses } from "@/lib/theme";
 import { HARDWARE_CRON_UI_PRESETS } from "@/lib/hardware-cron";
 import type { SystemCronJob } from "@/types/hermes";
 
@@ -221,28 +221,48 @@ export default function SystemCronModal({ open, onClose, onSave, editingJob }: P
         />
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-white/70">Script Command</label>
-          <select
-            value={command || presetPaths[0]?.value || ""}
-            onChange={(e) => setCommand(e.target.value)}
-            disabled={!meta || presetPaths.length === 0}
-            className={`${baseInputStyles} cursor-pointer disabled:opacity-50`}
-          >
-            {!commandInPresets && command ? (
-              <option value={command}>{command} (current)</option>
-            ) : null}
-            {presetPaths.map((script) => (
-              <option key={script.value} value={script.value}>
-                {script.label} — {script.value}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-white/30">
-            Scripts live under Control Hub&apos;s system scripts directory (
-            <span className="font-mono text-white/50">{meta?.scriptsDir ?? "…"}</span>
-            ). Default logs:{" "}
-            <span className="font-mono text-white/50">{meta?.logDir ?? "…"}</span>
-          </p>
+          <label className="text-sm font-medium text-white/70">Backup script</label>
+          {presetPaths.length <= 1 ? (
+            <>
+              <input
+                type="text"
+                readOnly
+                value={command || presetPaths[0]?.value || ""}
+                className={`${inputFieldClasses("cyan")} opacity-80`}
+              />
+              <p className="text-xs text-white/30">
+                Nightly Hermes backup via{" "}
+                <span className="font-mono text-white/50">ch-backup.sh</span>
+                {" "}(logs:{" "}
+                <span className="font-mono text-white/50">{meta?.logDir ?? "…"}</span>
+                ).
+              </p>
+            </>
+          ) : (
+            <>
+              <select
+                value={command || presetPaths[0]?.value || ""}
+                onChange={(e) => setCommand(e.target.value)}
+                disabled={!meta || presetPaths.length === 0}
+                className={`${inputFieldClasses("cyan")} cursor-pointer disabled:opacity-50`}
+              >
+                {!commandInPresets && command ? (
+                  <option value={command}>{command} (current)</option>
+                ) : null}
+                {presetPaths.map((script) => (
+                  <option key={script.value} value={script.value}>
+                    {script.label} — {script.value}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-white/30">
+                Scripts under{" "}
+                <span className="font-mono text-white/50">{meta?.scriptsDir ?? "…"}</span>
+                ; logs:{" "}
+                <span className="font-mono text-white/50">{meta?.logDir ?? "…"}</span>
+              </p>
+            </>
+          )}
         </div>
 
         {isEdit && (

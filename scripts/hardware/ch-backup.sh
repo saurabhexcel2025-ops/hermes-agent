@@ -32,22 +32,31 @@ if [[ ! -f "$BRIDGE" ]]; then
   exit 1
 fi
 
+hermes_default_root() {
+  local h="${1:-$HERMES_HOME}"
+  if [[ "$(basename "$(dirname "$h")")" == "profiles" ]]; then
+    dirname "$(dirname "$h")"
+  elif [[ "$h" == "$HOME/.hermes" || "$h" == "$HOME/.hermes/"* ]]; then
+    echo "$HOME/.hermes"
+  else
+    echo "$h"
+  fi
+}
+
 resolve_python() {
-  local h="$1"
+  local default_root
+  default_root="$(hermes_default_root "$1")"
   local p
   for p in \
-    "${HERMES_AGENT_VENV_PYTHON:-}" \
-    "$h/hermes-agent/venv/bin/python3" \
-    "$h/hermes-agent/.venv/bin/python3" \
-    "$(dirname "$h")/hermes-agent/venv/bin/python3" \
-    "${HOME:-}/.local/share/hermes-agent/venv/bin/python3" \
-    "/usr/bin/python3"; do
-    if [[ -n "$p" && -x "$p" ]]; then
+    "$default_root/hermes-agent/venv/bin/python3" \
+    "$default_root/hermes-agent/.venv/bin/python3"; do
+    if [[ -x "$p" ]]; then
       echo "$p"
       return 0
     fi
   done
-  echo "python3"
+  echo "[$(date -Iseconds 2>/dev/null || date)] [ch-backup] ERROR: Hermes venv not found under $default_root/hermes-agent" >&2
+  exit 1
 }
 
 PYTHON="$(resolve_python "$HERMES_HOME")"

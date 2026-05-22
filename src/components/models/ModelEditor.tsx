@@ -24,6 +24,7 @@ import { HERMES_PROVIDERS, type HermesProvider } from "@/lib/hermes-providers";
 import CredentialPicker, {
   type CredentialOption,
 } from "@/components/models/CredentialPicker";
+import { inputFieldClasses } from "@/lib/theme";
 
 export interface ModelEditorRecord {
   id: string;
@@ -223,7 +224,7 @@ export default function ModelEditor({
             value={form.name}
             onChange={(e) => update("name", e.target.value)}
             placeholder="e.g. Claude Sonnet 4 (production)"
-            className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
+            className={inputFieldClasses("purple")}
           />
           <p className="text-xs text-white/30 font-mono">
             Display name only — does not need to match the model identifier
@@ -239,7 +240,7 @@ export default function ModelEditor({
                 update("provider", e.target.value as HermesProvider);
                 update("credentialsId", null);
               }}
-              className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none transition-colors font-mono appearance-none cursor-pointer focus:border-neon-purple/50"
+              className={`${inputFieldClasses("purple")} appearance-none cursor-pointer`}
             >
               {HERMES_PROVIDERS.map((p) => (
                 <option key={p} value={p} className="bg-dark-900">
@@ -256,7 +257,7 @@ export default function ModelEditor({
               value={form.modelId}
               onChange={(e) => update("modelId", e.target.value)}
               placeholder="anthropic/claude-sonnet-4"
-              className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
+              className={inputFieldClasses("purple")}
             />
           </div>
         </div>
@@ -272,7 +273,7 @@ export default function ModelEditor({
               value={form.baseUrl}
               onChange={(e) => update("baseUrl", e.target.value)}
               placeholder="https://api.anthropic.com/v1"
-              className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
+              className={inputFieldClasses("purple")}
             />
           </div>
           <div className="space-y-1.5">
@@ -286,7 +287,7 @@ export default function ModelEditor({
               onChange={(e) => update("contextLength", e.target.value)}
               placeholder="200000"
               min={1000}
-              className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
+              className={inputFieldClasses("purple")}
             />
           </div>
         </div>
@@ -312,7 +313,7 @@ export default function ModelEditor({
                 value={form.credentialLabel}
                 onChange={(e) => update("credentialLabel", e.target.value)}
                 placeholder={`${form.provider} key`}
-                className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
+                className={inputFieldClasses("purple")}
               />
             </div>
             <div className="space-y-1.5">
@@ -323,7 +324,7 @@ export default function ModelEditor({
                 value={form.apiKey}
                 onChange={(e) => update("apiKey", e.target.value)}
                 placeholder={isEdit ? "Leave blank to keep existing" : "sk-..."}
-                className="w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-purple/50 transition-colors font-mono"
+                className={inputFieldClasses("purple")}
               />
               <p className="text-xs text-white/30 font-mono">
                 Stored plain text in the registry and synced to ~/.hermes/.env so

@@ -93,7 +93,7 @@ function parseCrontabLine(
     command.split(" ")[0]?.split("/").pop() ||
     "unknown";
 
-  // Name from script: ch-watchdog → Control Hub Watchdog
+  // Name from script: ch-backup → Control Hub Backup
   const name = scriptName
     .replace(/^ch-/, "Control Hub ")
     .replace(/-/g, " ")

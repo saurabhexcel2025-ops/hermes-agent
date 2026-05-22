@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { db, inTransaction, uuid, now } from "./db";
+import { safeJsonParse } from "./utils";
 import type { Mission, MissionStatus } from "@/lib/agent-backend/types";
 import type { LocalDirEntry } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
@@ -36,12 +37,6 @@ interface MissionRow {
   category_id: string | null;
   output_format: string | null;
   constraints: string | null;
-}
-
-function safeJsonParse<T>(val: string | null | undefined, fallback: T): T {
-  if (!val) return fallback;
-  try { return JSON.parse(val) as T; }
-  catch { return fallback; }
 }
 
 function rowToMission(row: MissionRow | undefined): Mission | null {

@@ -18,13 +18,17 @@ Breaking or structural data changes, documented so upgrades are not guesswork. I
 
 **Cron repeat:** Recurring jobs created by CH use **`repeat.times: null`** for “run forever”, matching Hermes’ canonical form.
 
+## 2026-05 — Single Hermes install path
+
+**Change:** Control Hub no longer searches `~/.local/share/hermes-agent` or alternate package paths. Hermes code must live at **`{HERMES_HOME}/hermes-agent/`** (default `~/.hermes/hermes-agent/`). Cron and backups use that venv only.
+
+**If you relied on `~/.local/share/hermes-agent`:** Run the [Nous Hermes installer](https://hermes-agent.nousresearch.com/docs/getting-started/installation) so the git layout exists under `~/.hermes`, or set `HERMES_HOME` to a tree that contains `hermes-agent/cron/jobs.py`.
+
 ## Local Hermes install resolution
 
-**Current behaviour:** Control Hub resolves the local Hermes install path from **`HERMES_HOME`** / **`AGENT_HOME`** environment variables (default `~/.hermes`) via **`getActiveHermesPaths()`** / **`getActiveHermesHome()`** in `src/lib/hermes-agent-runtime.ts`.
+**Current behaviour:** **`HERMES_HOME`** (default `~/.hermes`) via **`getActiveHermesPaths()`** in `src/lib/hermes-agent-runtime.ts`. Agent package: **`getHermesAgentPackageDir()`** → `{defaultRoot}/hermes-agent`.
 
-**If you use env vars:** Set `HERMES_HOME` or `AGENT_HOME` to your Hermes install directory. The default is `~/.hermes`.
-
-**Backups:** Include `CH_DATA_DIR` and your Hermes install root (`HERMES_HOME`). See [CONTROL_HUB.md](CONTROL_HUB.md) and [DEPLOY.md](DEPLOY.md).
+**Backups:** Include `CH_DATA_DIR` and `HERMES_HOME`. See [DEPLOY.md](DEPLOY.md).
 
 ## 2026-05 — SQLite schema v3 (profiles, toolsets, missions)
 
@@ -74,7 +78,7 @@ Then in the UI: **Operations → Tools** — Pull/Push per profile as needed. Le
 
 **Prebuild DB:** `npm run prebuild` writes `{repo}/data/control-hub.db` using the same baseline. Runtime uses `{CH_DATA_DIR}/control-hub.db` (default `~/control-hub/data/control-hub.db`). If `{repo}/data/control-hub.db` has `schema_version !== 3`, prebuild deletes and recreates it (CI/dev convenience only).
 
-**Removed tables:** Teams, custom kanban, and persistent goals tables are not recreated (features removed from the UI).
+**Removed UI areas** (no SQLite tables): teams/kanban/goals — not part of current Control Hub.
 
 ## Paths after upgrade
 

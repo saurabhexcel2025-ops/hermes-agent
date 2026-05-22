@@ -28,6 +28,8 @@ cd "$REPO_ROOT"
 
 # shellcheck source=../lib/ch-env.sh
 source "$SCRIPT_DIR/../lib/ch-env.sh"
+# shellcheck source=../lib/ch-dotenv-local.sh
+source "$SCRIPT_DIR/../lib/ch-dotenv-local.sh"
 # shellcheck source=../lib/ch-port.sh
 source "$SCRIPT_DIR/../lib/ch-port.sh"
 
@@ -53,6 +55,7 @@ ch_setup_port_and_dev_origins "$REPO_ROOT" || exit 1
 CH_PORT_DISPLAY="${CH_SELECTED_PORT}"
 
 ENV_LOCAL="${REPO_ROOT}/.env.local"
+ch_load_control_hub_env_local "$REPO_ROOT"
 
 # ── Advanced env (optional; before Hermes detection) ─────────
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
@@ -83,6 +86,9 @@ if ! ch_noninteractive_install; then
         fi
     fi
 fi
+
+ch_env_set "$ENV_LOCAL" "HERMES_HOME" "$HERMES_HOME"
+ch_print_hermes_install_paths
 
 # ── Hermes / agent home (optional) ────────────────────────────
 HERMES_CONFIGURED=false
@@ -149,7 +155,9 @@ if command -v node &>/dev/null && [ -f "$REPO_ROOT/scripts/tooling/discover-agen
     CH_DATA_DIR="$CH_DATA_ROOT" node "$REPO_ROOT/scripts/tooling/discover-agents.mjs" || true
     if [ -f "$CH_DATA_ROOT/hermes-detection.json" ]; then
         if ! grep -q '"valid": true' "$CH_DATA_ROOT/hermes-detection.json" 2>/dev/null; then
-            echo "⚠  Hermes install not detected at HERMES_HOME — set HERMES_HOME in .env.local (see .env.example)"
+            echo "⚠  Hermes install not detected at HERMES_HOME."
+            echo "   Install: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+            echo "   Or set HERMES_HOME in .env.local to an existing install (see .env.example)."
         fi
     fi
 fi

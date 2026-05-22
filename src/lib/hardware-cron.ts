@@ -7,14 +7,7 @@
  * UI labels + filenames for hardware cron presets.
  * Ship matching files under `scripts/hardware/` (`scripts/bootstrap/setup.sh` copies into CH_DATA_DIR/scripts).
  */
-export const HARDWARE_CRON_UI_PRESETS = [
-  { label: "Watchdog", file: "ch-watchdog.sh" },
-  { label: "System Monitor", file: "ch-sysmon.sh" },
-  { label: "Backup", file: "ch-backup.sh" },
-  { label: "Health Check", file: "ch-health.sh" },
-  { label: "Log Rotate", file: "ch-logrotate.sh" },
-  { label: "Network Monitor", file: "ch-netmon.sh" },
-] as const;
+export const HARDWARE_CRON_UI_PRESETS = [{ label: "Backup", file: "ch-backup.sh" }] as const;
 
 /** Filenames only (single source of truth with HARDWARE_CRON_UI_PRESETS). */
 export const HARDWARE_CRON_PRESET_SCRIPT_FILES: readonly string[] =

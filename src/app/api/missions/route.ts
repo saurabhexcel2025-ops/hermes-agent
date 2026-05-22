@@ -21,7 +21,7 @@ import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
-import { createCronJob, pushJobToHermes } from "@/lib/cron-repository";
+import { createCronJob, deleteCronJob, pushJobToHermes } from "@/lib/cron-repository";
 import { getCategory } from "@/lib/mission-category-repository";
 import { listProfiles } from "@/lib/profiles-repository";
 import {
@@ -235,6 +235,17 @@ export async function POST(request: NextRequest) {
           const pushResult = pushJobToHermes(cronJob.id);
           if (!pushResult.ok) {
             logApiError("POST /api/missions", "pushJobToHermes", pushResult.error);
+            deleteCronJob(cronJob.id);
+            updateMission(mission.id, { cronJobId: null, status: "failed" });
+            appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: false });
+            return NextResponse.json(
+              {
+                error: "Failed to sync cron job to Hermes",
+                cronPushError: pushResult.error ?? "unknown",
+                data: { mission: enrichMissionCron(getMission(mission.id)!) },
+              },
+              { status: 502 }
+            );
           }
 
           // ── Immediate first-run dispatch ──

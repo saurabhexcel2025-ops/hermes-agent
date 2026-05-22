@@ -13,6 +13,7 @@ import {
   MessageCircle, Send, Plus, X, Download,
   Bot, User, Loader2, AlertTriangle, Square,
 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -475,7 +476,8 @@ export default function ChatPage() {
 
   // ── Render ─────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full">
+    <AppPageShell className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col flex-1 min-h-0">
       <PageHeader
         icon={MessageCircle}
         title="Chat"
@@ -742,6 +744,7 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </AppPageShell>
   );
 }

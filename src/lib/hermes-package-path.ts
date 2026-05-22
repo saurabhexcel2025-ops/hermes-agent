@@ -1,79 +1,61 @@
 // ═══════════════════════════════════════════════════════════════
-// hermes-package-path.ts — Locate hermes-agent Python package + venv
+// hermes-package-path.ts — Hermes agent package + venv (single layout)
 // ═══════════════════════════════════════════════════════════════
+//
+// Canonical install: $HERMES_HOME/hermes-agent/ (default ~/.hermes/hermes-agent).
 
 import { existsSync } from "fs";
-import { homedir } from "os";
 import { join, resolve } from "path";
 
-function norm(p: string): string {
-  return p.replace(/[/\\]+$/, "");
-}
+import { getHermesHome } from "./hermes-home";
+import { getHermesDefaultRootFromHome } from "./hermes-profile-paths";
 
 function hasCronJobsModule(packageDir: string): boolean {
   return existsSync(join(packageDir, "cron", "jobs.py"));
 }
 
-/**
- * Optional override for exotic installs (see .env.example).
- */
-export function getHermesAgentRootOverride(): string | null {
-  const raw = process.env.HERMES_AGENT_ROOT?.trim();
-  return raw ? norm(raw) : null;
+/** Directory containing the hermes-agent Python package (cron/jobs.py). */
+export function getHermesAgentPackageDir(hermesHome?: string): string {
+  const home = hermesHome ?? getHermesHome();
+  const root = getHermesDefaultRootFromHome(home);
+  return resolve(join(root, "hermes-agent"));
+}
+
+/** Human-readable expected venv path for error messages. */
+export function expectedHermesVenvPythonPath(hermesHome?: string): string {
+  return join(getHermesAgentPackageDir(hermesHome), "venv", "bin", "python3");
 }
 
 /**
- * Candidate directories containing `cron/jobs.py`, in search order.
+ * Resolve the hermes-agent package directory when cron/jobs.py is present.
  */
-export function listHermesAgentPackageCandidates(hermesHome: string): string[] {
-  const home = norm(hermesHome);
-  const override = getHermesAgentRootOverride();
-  const nativeShare = join(homedir(), ".local", "share", "hermes-agent");
-
-  const candidates: string[] = [];
-  if (override) candidates.push(override);
-  candidates.push(
-    join(home, "hermes-agent"),
-    resolve(home, "..", "hermes-agent"),
-    nativeShare
-  );
-
-  const seen = new Set<string>();
-  return candidates.filter((p) => {
-    const key = resolve(p);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/**
- * Resolve the hermes-agent package directory (contains `cron/jobs.py`).
- */
-export function resolveHermesAgentPackage(hermesHome: string): string | null {
-  for (const candidate of listHermesAgentPackageCandidates(hermesHome)) {
-    if (hasCronJobsModule(candidate)) return resolve(candidate);
-  }
-  return null;
+export function resolveHermesAgentPackage(hermesHome?: string): string | null {
+  const pkg = getHermesAgentPackageDir(hermesHome);
+  return hasCronJobsModule(pkg) ? pkg : null;
 }
 
 /**
  * Python interpreter for Hermes cron subprocesses.
+ * @throws Error when package or venv python is missing
  */
-export function resolveHermesVenvPython(hermesHome: string): string {
-  const fromEnv = process.env.HERMES_AGENT_VENV_PYTHON?.trim();
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
-
+export function resolveHermesVenvPython(hermesHome?: string): string {
   const pkg = resolveHermesAgentPackage(hermesHome);
-  if (pkg) {
-    for (const rel of ["venv/bin/python3", ".venv/bin/python3"]) {
-      const p = join(pkg, rel);
-      if (existsSync(p)) return p;
-    }
+  const expectedDir = getHermesAgentPackageDir(hermesHome);
+
+  if (!pkg) {
+    throw new Error(
+      `Hermes agent package not found at ${expectedDir} (missing cron/jobs.py). ` +
+        `Install Hermes under HERMES_HOME (default ~/.hermes).`
+    );
   }
 
-  const nativeVenv = join(homedir(), ".local", "share", "hermes-agent", "venv", "bin", "python3");
-  if (existsSync(nativeVenv)) return nativeVenv;
+  for (const rel of ["venv/bin/python3", ".venv/bin/python3"]) {
+    const p = join(pkg, rel);
+    if (existsSync(p)) return p;
+  }
 
-  return "python3";
+  throw new Error(
+    `Hermes venv Python not found under ${pkg}. ` +
+      `Expected ${expectedHermesVenvPythonPath(hermesHome)} — run the Hermes installer.`
+  );
 }

@@ -13,6 +13,19 @@
  *   const { data } = await apiFetch("/api/monitor");
  *   await apiFetch("/api/missions", { method: "POST", body: JSON.stringify({...}) });
  */
+/** Build a user-visible message from an API error JSON body. */
+export function formatApiError(
+  json: { error?: unknown; cronPushError?: unknown },
+  fallback: string,
+): string {
+  const base = typeof json.error === "string" ? json.error : fallback;
+  const push =
+    typeof json.cronPushError === "string" && json.cronPushError.trim()
+      ? json.cronPushError
+      : null;
+  return push ? `${base}: ${push}` : base;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic JSON fetch returns arbitrary shapes
 export async function apiFetch(path: string, options?: RequestInit): Promise<any> {
   const res = await fetch(path, {
@@ -23,7 +36,7 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<any
   const json = await res.json().catch(() => ({ error: "Request failed" }));
 
   if (!res.ok) {
-    throw new Error(json.error ?? `HTTP ${res.status}`);
+    throw new Error(formatApiError(json, `HTTP ${res.status}`));
   }
 
   return json;
