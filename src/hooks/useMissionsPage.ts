@@ -13,6 +13,7 @@ import {
   groupTemplatesByCategory,
 } from "@/lib/mission-categories";
 import type { ManagedCategory } from "@/components/missions/CategoryManagerModal";
+import { buildTemplatePayload } from "@/lib/mission-form-utils";
 
 export type MissionRow = Mission & {
   cronJob?: {
@@ -637,34 +638,29 @@ export function useMissionsPage() {
 
     setTemplateSaving(true);
     try {
-      const payload: Record<string, unknown> = existingTemplate
-        ? { action: "update", templateId: existingTemplate.id }
-        : { action: "create" };
-
-      payload.name = name;
-      payload.icon = templateIcon;
-      payload.color = templateColor;
-      payload.description = templateDescription || "";
-      payload.instruction = newInstruction;
-      payload.context = newContext;
-      payload.outputFormat = newOutputFormat;
-      payload.constraints = newConstraints;
-      payload.goals = newGoals.split("\n").filter((g) => g.trim());
-      payload.localDirs = newLocalDirs;
-      payload.references = newReferences;
-      payload.suggestedSkills = newSkills;
-      payload.suggestedToolsets = newToolsets;
-      payload.profile = newProfile;
-      payload.defaultModel =
-        typeof newModel === "string" && newModel.trim() !== ""
-          ? newModel.trim()
-          : undefined;
-      payload.defaultProvider =
-        typeof newProvider === "string" && newProvider.trim() !== ""
-          ? newProvider.trim()
-          : undefined;
-      payload.timeoutMinutes = newTimeout;
-      if (newCategoryId) payload.categoryId = newCategoryId;
+      const action = existingTemplate ? "update" : "create";
+      const payload = buildTemplatePayload({
+        action,
+        templateId: existingTemplate?.id,
+        name,
+        icon: templateIcon,
+        color: templateColor,
+        description: templateDescription,
+        instruction: newInstruction,
+        context: newContext,
+        outputFormat: newOutputFormat,
+        constraints: newConstraints,
+        goals: newGoals,
+        localDirs: newLocalDirs,
+        references: newReferences,
+        suggestedSkills: newSkills,
+        suggestedToolsets: newToolsets,
+        profile: newProfile,
+        defaultModel: newModel,
+        defaultProvider: newProvider,
+        timeoutMinutes: newTimeout,
+        categoryId: newCategoryId,
+      });
 
       const res = await fetch("/api/templates", {
         method: "POST",
@@ -713,39 +709,31 @@ export function useMissionsPage() {
     if (!templateName.trim()) return;
     setTemplateSaving(true);
     try {
-      const payload: Record<string, unknown> = editingTemplateId
-        ? { action: "update", templateId: editingTemplateId }
-        : { action: "create" };
-
-      payload.name = templateName;
-      payload.icon = templateIcon;
-      payload.color = templateColor;
-      payload.description = templateDescription;
-
-      payload.instruction = newInstruction;
-      payload.context = newContext;
-      payload.outputFormat = newOutputFormat;
-      payload.constraints = newConstraints;
-      payload.goals = newGoals.split("\n").filter((g) => g.trim());
-      payload.localDirs = newLocalDirs;
-      payload.references = newReferences;
-      payload.suggestedSkills = newSkills;
-      payload.suggestedToolsets = newToolsets;
-      payload.profile = newProfile;
-      payload.defaultModel =
-        typeof newModel === "string" && newModel.trim() !== ""
-          ? newModel.trim()
-          : undefined;
-      payload.defaultProvider =
-        typeof newProvider === "string" && newProvider.trim() !== ""
-          ? newProvider.trim()
-          : undefined;
-      payload.timeoutMinutes = newTimeout;
-      if (newCategoryId) payload.categoryId = newCategoryId;
-      if (!editingTemplateId) {
-        payload.dispatchMode = newDispatch;
-        payload.schedule = newSchedule;
-      }
+      const action = editingTemplateId ? "update" : "create";
+      const payload = buildTemplatePayload({
+        action,
+        templateId: editingTemplateId ?? undefined,
+        name: templateName,
+        icon: templateIcon,
+        color: templateColor,
+        description: templateDescription,
+        instruction: newInstruction,
+        context: newContext,
+        outputFormat: newOutputFormat,
+        constraints: newConstraints,
+        goals: newGoals,
+        localDirs: newLocalDirs,
+        references: newReferences,
+        suggestedSkills: newSkills,
+        suggestedToolsets: newToolsets,
+        profile: newProfile,
+        defaultModel: newModel,
+        defaultProvider: newProvider,
+        timeoutMinutes: newTimeout,
+        categoryId: newCategoryId,
+        dispatchMode: editingTemplateId ? undefined : newDispatch,
+        schedule: editingTemplateId ? undefined : newSchedule,
+      });
 
       const res = await fetch("/api/templates", {
         method: "POST",
