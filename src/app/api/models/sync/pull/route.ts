@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { updateModel, listModels } from "@/lib/models-repository";
 import { readHermesConfigModels, type HermesConfigModelEntry } from "@/lib/hermes-config-sync";
-import { logApiError } from "@/lib/api-logger";
+
 
 interface Diff { field: string; before: unknown; after: unknown }
 
