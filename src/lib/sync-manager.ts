@@ -15,6 +15,7 @@ import {
   syncSingleCredentialToHermesEnv,
   syncFallbacksToHermesConfig,
   syncDefaultsToHermesConfig,
+  readHermesConfigModels,
 } from "./hermes-config-sync";
 import { isHermesProvider, type HermesProvider, envVarForProvider } from "./hermes-providers";
 
@@ -76,47 +77,6 @@ function readHermesPrimaryModel(): { modelId: string; provider: string; baseUrl:
   }
 }
 
-/**
- * Collect every unique (provider, modelId) pair currently written in
- * config.yaml's model.* + auxiliary.* sections.
- */
-function readHermesConfigModels(): Array<{ name: string; provider: string; modelId: string }> {
-  const paths = getActiveHermesPaths();
-  if (!existsSync(paths.config)) return [];
-
-  try {
-    const raw = readFileSync(paths.config, "utf-8");
-    const config = (yaml.load(raw) as HermesYamlConfig) ?? {};
-    const found: Array<{ name: string; provider: string; modelId: string }> = [];
-
-    // Primary agent model
-    if (config.model?.default) {
-      const provider = config.model.provider ?? "";
-      found.push({
-        name: config.model.default,
-        provider,
-        modelId: config.model.default,
-      });
-    }
-
-    // Auxiliary slots
-    const aux = config.auxiliary ?? {};
-    for (const entry of Object.values(aux)) {
-      if (entry?.model) {
-        found.push({
-          name: entry.model,
-          provider: entry.provider ?? "",
-          modelId: entry.model,
-        });
-      }
-    }
-
-    return found;
-  } catch {
-    return [];
-  }
-}
-
 // ── Drift detection ───────────────────────────────────────────
 
 /**
@@ -132,9 +92,13 @@ export function detectConfigDrift(): DriftReport {
 
   // Read what's currently in config.yaml
   const hermesPrimary = readHermesPrimaryModel();
-  const hermesModels = readHermesConfigModels();
-
-  const hermesKeySet = new Set(hermesModels.map((m) => `${m.provider}::${m.modelId}`));
+  const hermesModelMap = readHermesConfigModels();
+  const hermesKeySet = new Set(hermesModelMap.keys());
+  const hermesModels = [...hermesModelMap.values()].map((m) => ({
+    name: m.modelId,
+    provider: m.provider,
+    modelId: m.modelId,
+  }));
 
   // 1. Models in config.yaml but not in DB
   const modelsInHermesNotInDb = hermesModels.filter(

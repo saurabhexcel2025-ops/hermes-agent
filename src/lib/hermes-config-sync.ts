@@ -209,6 +209,73 @@ interface HermesConfig {
   [key: string]: unknown;
 }
 
+/**
+ * Collect every unique (provider, modelId) pair currently written in
+ * config.yaml's model.* + auxiliary.* + fallback_providers.* sections.
+ *
+ * Shared by sync-manager.ts (drift detection) and the sync/pull route
+ * (per-model pull from Hermes config → DB).
+ */
+export interface HermesConfigModelEntry {
+  modelId: string;
+  provider: string;
+  baseUrl: string | null;
+}
+
+export function readHermesConfigModels(): Map<string, HermesConfigModelEntry> {
+  const paths = getActiveHermesPaths();
+  if (!existsSync(paths.config)) return new Map();
+
+  try {
+    const raw = readFileSync(paths.config, "utf-8");
+    const config = (yaml.load(raw) as Record<string, unknown> | null) ?? {};
+    const map = new Map<string, HermesConfigModelEntry>();
+
+    // Primary model section
+    const model = config.model as { default?: string; provider?: string; base_url?: string } | undefined;
+    if (model?.default && model.provider) {
+      const key = `${model.provider}::${model.default}`;
+      map.set(key, {
+        modelId: model.default,
+        provider: model.provider,
+        baseUrl: model.base_url?.trim() || null,
+      });
+    }
+
+    // Auxiliary sections
+    const aux = config.auxiliary as Record<string, { model?: string; provider?: string; base_url?: string }> | undefined;
+    for (const entry of Object.values(aux ?? {})) {
+      if (entry?.model && entry.provider) {
+        const key = `${entry.provider}::${entry.model}`;
+        map.set(key, {
+          modelId: entry.model,
+          provider: entry.provider,
+          baseUrl: entry.base_url?.trim() || null,
+        });
+      }
+    }
+
+    // Fallback providers chain — models used as fallbacks
+    const fallback = config.fallback_providers as Array<{ provider?: string; model?: string; base_url?: string }> | undefined;
+    for (const entry of fallback ?? []) {
+      if (entry?.model && entry.provider) {
+        const key = `${entry.provider}::${entry.model}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            modelId: entry.model,
+            provider: entry.provider,
+            baseUrl: entry.base_url?.trim() || null,
+          });
+        }
+      }
+    }
+
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
 /** Auxiliary slots written through to `auxiliary.<task>.*`. */
 const AUXILIARY_TASKS: ReadonlyArray<TaskType> = TASK_TYPES.filter(
   (t) => t !== "agent"

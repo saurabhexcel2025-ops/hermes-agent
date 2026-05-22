@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
 import { ensureDb } from "@/lib/db";
-import { updateAgentRoot, getAgentRoot } from "@/lib/agent-root-repository";
+import { updateAgentRoot } from "@/lib/agent-root-repository";
 import { getProfile, updateProfileContent } from "@/lib/profiles-repository";
 import { pushProfileToHermes, pushRootToHermes } from "@/lib/hermes-profile-sync";
 import { resolveSafeProfileName } from "@/lib/path-security";
@@ -29,7 +29,6 @@ export async function PUT(request: NextRequest) {
     }
 
     if (prof.profile === "default") {
-      getAgentRoot();
       updateAgentRoot({ personality });
       const push = pushRootToHermes();
       if (!push.success) {

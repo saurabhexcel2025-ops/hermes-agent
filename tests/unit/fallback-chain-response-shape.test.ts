@@ -58,29 +58,28 @@ afterEach(() => {
 });
 
 describe("GET /api/models/fallbacks — response shape", () => {
-  it("returns both 'entries' and 'chain' keys in the data envelope", () => {
-    // Verify the API route implementation returns both keys
+  it("returns 'entries' key in the data envelope (chain removed — use entries)", () => {
+    // Verify the API route implementation returns the canonical 'entries' key
     const routePath = join(repoRoot, "src", "app", "api", "models", "fallbacks", "route.ts");
     const routeContent = readFileSync(routePath, "utf-8");
 
-    // The route must return 'chain' as an alias for 'entries'
-    expect(routeContent).toContain("chain: entries");
+    // The route must return 'entries' (the canonical key)
     expect(routeContent).toContain("entries");
+    expect(routeContent).not.toContain("chain: entries");
   });
 
-  it("entries and chain contain the same array value", () => {
+  it("listFallbackChain returns consistent results on repeated calls", () => {
     const repo = require("@/lib/fallbacks-repository");
     const modRepo = require("@/lib/models-repository");
 
     const m = modRepo.createModel({ name: "Test", provider: "anthropic", modelId: "claude-test" });
     repo.addFallbackEntry({ modelId: m.id });
 
-    const chain = repo.listFallbackChain();
-    expect(chain.length).toBe(1);
+    const first = repo.listFallbackChain();
+    expect(first.length).toBe(1);
 
-    // The 'chain' and 'entries' keys are the same reference in the route
-    // Since we can't call NextResponse directly, verify the repo returns consistently
-    const entries = repo.listFallbackChain();
-    expect(entries).toEqual(chain);
+    // Verify the repo returns consistent results on repeated calls
+    const second = repo.listFallbackChain();
+    expect(second).toEqual(first);
   });
 });
