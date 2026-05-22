@@ -77,6 +77,11 @@ export function badgeClasses(color: AccentColor): string {
 export const baseInputStyles =
   "w-full bg-dark-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none transition-colors font-mono";
 
+/** Canonical text input / select classes with accent focus ring. */
+export function inputFieldClasses(accent: AccentColor = "cyan"): string {
+  return `${baseInputStyles} ${focusColorMap[accent]}`;
+}
+
 // ── Responsive Layout Utilities ────────────────────────────────
 // These constants enforce consistent responsive behavior across the app.
 // Use them in components to ensure text truncates properly in flex containers.

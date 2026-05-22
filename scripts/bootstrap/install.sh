@@ -71,13 +71,13 @@ HERMES_INSTALL_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/
 
 # shellcheck source=../lib/ch-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/ch-env.sh"
-ch_print_hermes_install_paths
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║   Control Hub — Installer                 ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
+ch_print_hermes_install_paths
 
 if [ "$IN_REPO" = true ]; then
     if ! command -v node &>/dev/null; then

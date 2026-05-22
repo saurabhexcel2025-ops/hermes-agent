@@ -5,6 +5,7 @@
 "use client";
 
 import { useRef, useEffect, useCallback } from "react";
+import { inputFieldClasses } from "@/lib/theme";
 
 interface AutoTextareaProps {
   value: string;
@@ -58,7 +59,7 @@ export default function AutoTextarea({
       placeholder={placeholder}
       disabled={disabled}
       spellCheck={false}
-      className={`w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono resize-none overflow-hidden transition-none ${className}`}
+      className={`${inputFieldClasses("cyan")} resize-none overflow-hidden transition-none ${className}`}
       style={{ height: "auto" }}
     />
   );

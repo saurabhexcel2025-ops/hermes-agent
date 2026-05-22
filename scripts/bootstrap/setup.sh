@@ -28,6 +28,8 @@ cd "$REPO_ROOT"
 
 # shellcheck source=../lib/ch-env.sh
 source "$SCRIPT_DIR/../lib/ch-env.sh"
+# shellcheck source=../lib/ch-dotenv-local.sh
+source "$SCRIPT_DIR/../lib/ch-dotenv-local.sh"
 # shellcheck source=../lib/ch-port.sh
 source "$SCRIPT_DIR/../lib/ch-port.sh"
 
@@ -53,11 +55,10 @@ ch_setup_port_and_dev_origins "$REPO_ROOT" || exit 1
 CH_PORT_DISPLAY="${CH_SELECTED_PORT}"
 
 ENV_LOCAL="${REPO_ROOT}/.env.local"
+ch_load_control_hub_env_local "$REPO_ROOT"
 
 # ── Advanced env (optional; before Hermes detection) ─────────
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-ch_env_set "$ENV_LOCAL" "HERMES_HOME" "$HERMES_HOME"
-ch_print_hermes_install_paths
 if ! ch_noninteractive_install; then
     if [ "${CH_INSTALL_ADVANCED:-}" = "1" ]; then
         ADVANCED=yes
@@ -85,6 +86,9 @@ if ! ch_noninteractive_install; then
         fi
     fi
 fi
+
+ch_env_set "$ENV_LOCAL" "HERMES_HOME" "$HERMES_HOME"
+ch_print_hermes_install_paths
 
 # ── Hermes / agent home (optional) ────────────────────────────
 HERMES_CONFIGURED=false
