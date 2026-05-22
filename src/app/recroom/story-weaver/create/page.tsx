@@ -207,6 +207,33 @@ function CreateStoryPage() {
   const [showSaveTheme, setShowSaveTheme] = useState(false);
   const [newThemeName, setNewThemeName] = useState("");
 
+  // Theme: sets only premise + tags (NOT characters, NOT params).
+  // Defined at component level (not inside useEffect) so useCallback can
+  // be stable and satisfy React Compiler immutability requirements.
+  const applyTheme = useCallback((theme: StoryTheme) => {
+    setPremise(theme.premise);
+    if (theme.genre?.length) setGenres([...theme.genre]);
+    if (theme.era) setEra(theme.era);
+    if (theme.setting) setSetting(theme.setting);
+    if (theme.mood?.length) setMoods([...theme.mood]);
+    setSelectedTheme(theme.id);
+  }, [setPremise, setGenres, setEra, setSetting, setMoods, setSelectedTheme]);
+
+  // Restore selected theme from URL search params on page load
+  useEffect(() => {
+    const themeId = searchParams.get("theme");
+    if (themeId) {
+      setSelectedTheme(themeId);
+      fetch("/api/stories", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "themes", subAction: "list" }),
+      }).then(r => r.json()).then(d => {
+        const theme = d.data?.themes?.find((t: StoryTheme) => t.id === themeId);
+        if (theme) applyTheme(theme);
+      }).catch(() => {});
+    }
+  }, [searchParams, applyTheme]);
+
   // Load saved data on mount
   useEffect(() => {
     setHasDraft(!!localStorage.getItem(DRAFT_KEY));
@@ -222,19 +249,7 @@ function CreateStoryPage() {
     }).then(r => r.json()).then(d => {
       if (d.data?.themes) setSavedThemes(d.data.themes);
     }).catch(() => {});
-
-    // Load from URL params (from themes page "Use Theme")
-    const themeId = searchParams.get("themeId");
-    if (themeId) {
-      fetch("/api/stories", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "themes", subAction: "list" }),
-      }).then(r => r.json()).then(d => {
-        const theme = d.data?.themes?.find((t: StoryTheme) => t.id === themeId);
-        if (theme) applyTheme(theme);
-      }).catch(() => {});
-    }
-  }, [searchParams]);
+  }, []);
 
   // Auto-save draft
   useEffect(() => {
@@ -270,16 +285,6 @@ function CreateStoryPage() {
     setWordCountRange("standard");
     setExpandedChars({});
     if (!titleManuallyEdited) setTitle(t.name);
-  };
-
-  // Theme: sets only premise + tags (NOT characters, NOT params)
-  const applyTheme = (theme: StoryTheme) => {
-    setPremise(theme.premise);
-    if (theme.genre?.length) setGenres([...theme.genre]);
-    if (theme.era) setEra(theme.era);
-    if (theme.setting) setSetting(theme.setting);
-    if (theme.mood?.length) setMoods([...theme.mood]);
-    setSelectedTheme(theme.id);
   };
 
   const importCharacter = (cs: CharacterSheet) => {

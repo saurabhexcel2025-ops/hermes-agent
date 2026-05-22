@@ -446,7 +446,7 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
   try {
     writeFileSync(tmpScript, script, "utf-8");
 
-    const { stdout, stderr } = await spawnAsync(
+    await spawnAsync(
       python,
       [tmpScript, "write_all"],
       {
@@ -459,9 +459,10 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
 
     return { ok: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const message = err.stderr ?? err.stdout ?? err.message ?? "Unknown error";
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
     logApiError("syncAllJobsToHermes", "python write_all", new Error(String(message).slice(0, 500)));
     return { ok: false, error: String(message).slice(0, 500) };
   }
@@ -510,7 +511,7 @@ export async function pushJobToHermes(chJobId: string): Promise<{ ok: boolean; h
   try {
     writeFileSync(tmpScript, script, "utf-8");
 
-    const { stdout, stderr } = await spawnAsync(
+    const { stdout } = await spawnAsync(
       python,
       [tmpScript, "create"],
       { input: JSON.stringify(jobPayload), timeout: 15_000, killSignal: "SIGTERM" as NodeJS.Signals }
@@ -532,9 +533,10 @@ export async function pushJobToHermes(chJobId: string): Promise<{ ok: boolean; h
     }
 
     return { ok: true, hermesJobId };
-  } catch (err: any) {
+  } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const message = err.stderr ?? err.stdout ?? err.message ?? "Unknown error";
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
     return { ok: false, error: String(message).slice(0, 500) };
   }
 }
@@ -556,7 +558,7 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
 
   try {
     writeFileSync(tmpScript, script, "utf-8");
-    const { stdout, stderr } = await spawnAsync(
+    await spawnAsync(
       python,
       [tmpScript, "delete", hermesJobId],
       {
@@ -567,9 +569,10 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
 
     return { ok: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const message = err.stderr ?? err.stdout ?? err.message ?? "Unknown error";
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
     return { ok: false, error: String(message).slice(0, 500) };
   }
 }
