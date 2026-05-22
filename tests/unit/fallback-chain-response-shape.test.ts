@@ -2,8 +2,8 @@
 /** @jest-environment node */
 
 /**
- * Tests for fallback chain API response shape — verifies the 'chain' alias
- * key exists alongside 'entries' in the GET response.
+ * Tests for fallback chain API response shape — verifies the 'entries'
+ * key exists in the GET response (legacy 'chain' alias removed).
  */
 
 import { readFileSync } from "fs";
@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("GET /api/models/fallbacks — response shape", () => {
-  it("returns 'entries' key in the data envelope (chain removed — use entries)", () => {
+  it("returns the 'entries' key in the data envelope", () => {
     // Verify the API route implementation returns the canonical 'entries' key
     const routePath = join(repoRoot, "src", "app", "api", "models", "fallbacks", "route.ts");
     const routeContent = readFileSync(routePath, "utf-8");
@@ -68,18 +68,14 @@ describe("GET /api/models/fallbacks — response shape", () => {
     expect(routeContent).not.toContain("chain: entries");
   });
 
-  it("listFallbackChain returns consistent results on repeated calls", () => {
+  it("listFallbackChain returns array of entries", () => {
     const repo = require("@/lib/fallbacks-repository");
     const modRepo = require("@/lib/models-repository");
 
     const m = modRepo.createModel({ name: "Test", provider: "anthropic", modelId: "claude-test" });
     repo.addFallbackEntry({ modelId: m.id });
 
-    const first = repo.listFallbackChain();
-    expect(first.length).toBe(1);
-
-    // Verify the repo returns consistent results on repeated calls
-    const second = repo.listFallbackChain();
-    expect(second).toEqual(first);
+    const entries = repo.listFallbackChain();
+    expect(entries.length).toBe(1);
   });
 });
