@@ -358,8 +358,20 @@ elif action == "create":
     try:
         sched_raw = json.loads(job_def["schedule"])
         if isinstance(sched_raw, dict):
-            # Accept expr, expression, or kind as the cron string
-            job_def["schedule"] = sched_raw.get("expr") or sched_raw.get("expression") or sched_raw.get("kind") or job_def.get("schedule_display", "* * * * *")
+            # The schedule may already be parsed (from CronJobRecord) or in raw form.
+            # Parsed form: {"kind":"interval","minutes":5,"display":"every 5m"}
+            #              {"kind":"cron","expr":"*/5 * * * *","display":"..."}
+            # Raw form: {"kind":"every 5m"}
+            kind = sched_raw.get("kind", "")
+            if kind == "interval" and "minutes" in sched_raw:
+                job_def["schedule"] = f"every {sched_raw['minutes']}m"
+            elif kind == "cron" and "expr" in sched_raw:
+                job_def["schedule"] = sched_raw["expr"]
+            elif kind in ("once",) and "run_at" in sched_raw:
+                job_def["schedule"] = sched_raw["run_at"]
+            else:
+                # Fallback: use kind itself (for raw "every 5m" kind) or display
+                job_def["schedule"] = sched_raw.get("expr") or sched_raw.get("display") or kind or job_def.get("schedule_display", "* * * * *")
         else:
             job_def["schedule"] = str(sched_raw)
     except Exception:
@@ -370,11 +382,12 @@ elif action == "create":
         job_def["repeat"] = repeat_raw.get("times") if isinstance(repeat_raw, dict) else (repeat_raw or 1)
     except Exception:
         job_def["repeat"] = 1
+    # profile_name is stored in CH SQLite but Hermes create_job uses "profile" not "profile_name"
     result = create_job(**{k: v for k, v in job_def.items() if v is not None and k not in (
         "name", "schedule_display", "repeat_json", "ch_job_id", "id",
         "enabled", "state", "hermes_job_id", "source", "orphan",
         "created_at", "next_run_at", "last_run_at", "last_status",
-        "last_delivery_error"
+        "last_delivery_error", "profile_name"
     )})
     print(json.dumps({"ok": True, "job_id": result["id"]}))
 
