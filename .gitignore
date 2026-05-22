@@ -56,3 +56,9 @@ a.out
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Build artifacts
+a.out
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.npmrc

@@ -77,7 +77,7 @@ export function useModelsPage() {
         ? ((await driftRes.json()) as { data?: SyncDrift })
         : { data: null };
       const fbData = fbRes.ok
-        ? ((await fbRes.json()) as { data?: { chain?: FallbackChainEntry[] } })
+        ? ((await fbRes.json()) as { data?: { entries?: FallbackChainEntry[] } })
         : { data: null };
       const fbCfgData = fbCfgRes.ok
         ? ((await fbCfgRes.json()) as { data?: { config?: FallbackConfig } })
@@ -98,8 +98,8 @@ export function useModelsPage() {
         setDrift(driftData.data);
       }
 
-      if (fbData.data?.chain) {
-        setFallbackChain(fbData.data.chain);
+      if (fbData.data?.entries) {
+        setFallbackChain(fbData.data.entries);
       }
 
       if (fbCfgData.data?.config) {

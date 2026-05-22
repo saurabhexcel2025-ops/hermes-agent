@@ -4,84 +4,16 @@
 // DB records by provider+modelId.
 // ═══════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync, readFileSync } from "fs";
-import * as yaml from "js-yaml";
 import { requireAuth } from "@/lib/api-auth";
 import { updateModel, listModels } from "@/lib/models-repository";
-import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
-
-interface HermesModelSection {
-  modelId: string;
-  provider: string;
-  baseUrl: string | null;
-}
-
-/**
- * Read config.yaml and return a map of all model sections keyed by
- * their `provider::modelId` combination. Covers both `model.*` (primary)
- * and `auxiliary.*` sections.
- */
-function readHermesConfigModels(): Map<string, HermesModelSection> {
-  const paths = getActiveHermesPaths();
-  if (!existsSync(paths.config)) return new Map();
-
-  try {
-    const raw = readFileSync(paths.config, "utf-8");
-    const config = yaml.load(raw) as Record<string, unknown> | null;
-    if (!config) return new Map();
-
-    const map = new Map<string, HermesModelSection>();
-
-    // Primary model section
-    const model = config.model as { default?: string; provider?: string; base_url?: string } | undefined;
-    if (model?.default && model.provider) {
-      const key = `${model.provider}::${model.default}`;
-      map.set(key, {
-        modelId: model.default,
-        provider: model.provider,
-        baseUrl: model.base_url?.trim() || null,
-      });
-    }
-
-    // Auxiliary sections
-    const aux = config.auxiliary as Record<string, { model?: string; provider?: string; base_url?: string }> | undefined;
-    for (const entry of Object.values(aux ?? {})) {
-      if (entry?.model && entry.provider) {
-        const key = `${entry.provider}::${entry.model}`;
-        map.set(key, {
-          modelId: entry.model,
-          provider: entry.provider,
-          baseUrl: entry.base_url?.trim() || null,
-        });
-      }
-    }
-
-    // Fallback providers chain — models used as fallbacks
-    const fallback = config.fallback_providers as Array<{ provider?: string; model?: string; base_url?: string }> | undefined;
-    for (const entry of fallback ?? []) {
-      if (entry?.model && entry.provider) {
-        const key = `${entry.provider}::${entry.model}`;
-        if (!map.has(key)) {
-          map.set(key, {
-            modelId: entry.model,
-            provider: entry.provider,
-            baseUrl: entry.base_url?.trim() || null,
-          });
-        }
-      }
-    }
-
-    return map;
-  } catch {
-    return new Map();
-  }
-}
+import { readHermesConfigModels, type HermesConfigModelEntry } from "@/lib/hermes-config-sync";
+import { logApiError } from "@/lib/api-logger";
 
 interface Diff { field: string; before: unknown; after: unknown }
 
 function computeDiffs(
   model: { modelId: string; provider: string; baseUrl: string | null },
-  hermes: HermesModelSection,
+  hermes: HermesConfigModelEntry,
 ): { diffs: Diff[]; updates: Record<string, unknown> } {
   const diffs: Diff[] = [];
   const updates: Record<string, unknown> = {};
