@@ -1,7 +1,5 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
-
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import FallbackChainList from "@/components/models/FallbackChainList";
 import FallbackConfigPanel from "@/components/models/FallbackConfigPanel";
@@ -17,11 +15,14 @@ interface ModelsFallbackSectionProps {
   modelOptions: DefaultsModelOption[];
   busyTaskType: TaskType | null;
   syncingFallback: boolean;
+  fallbackConfigSaving?: boolean;
+  fallbackConfigDirty?: boolean;
+  fallbackConfigError?: string | null;
   importingFallback: boolean;
   editingFallbackEntry: FallbackChainEntry | null;
   editingFallbackUrl: string;
   savingFallbackUrl: boolean;
-  onFallbackConfigChange: Dispatch<SetStateAction<FallbackConfig>>;
+  onFallbackConfigChange: (config: FallbackConfig) => void;
   onReorder: (entryId: string, direction: "up" | "down") => Promise<void>;
   onToggle: (entryId: string, enabled: boolean) => Promise<void>;
   onDelete: (entryId: string) => Promise<void>;
@@ -46,6 +47,9 @@ export default function ModelsFallbackSection({
   modelOptions,
   busyTaskType,
   syncingFallback,
+  fallbackConfigSaving = false,
+  fallbackConfigDirty = false,
+  fallbackConfigError = null,
   importingFallback,
   editingFallbackEntry,
   editingFallbackUrl,
@@ -89,6 +93,9 @@ export default function ModelsFallbackSection({
           onSyncToHermes={onSyncToHermes}
           onImportFromConfig={onImportFromConfig}
           syncing={syncingFallback}
+          saving={fallbackConfigSaving}
+          dirty={fallbackConfigDirty}
+          saveError={fallbackConfigError}
           importing={importingFallback}
         />
       </CollapsibleSection>
