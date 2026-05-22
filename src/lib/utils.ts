@@ -3,6 +3,19 @@
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Parse a JSON string safely, returning a fallback value on error.
+ * Use for all JSON.parse calls where malformed data could exist (e.g. DB fields).
+ */
+export function safeJsonParse<T>(val: string | null | undefined, fallback: T): T {
+  if (!val) return fallback;
+  try {
+    return JSON.parse(val) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Parse a cron expression and return a human-readable label.
  * Handles common patterns: star-slash N, daily, weekly, etc.
  * Returns null if the expression doesn't match any known pattern.
