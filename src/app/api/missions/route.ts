@@ -21,7 +21,7 @@ import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
 import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
-import { createCronJob, deleteCronJob, pushJobToHermes } from "@/lib/cron-repository";
+import { createCronJob, deleteCronJob, importHermesJobs, pushJobToHermes } from "@/lib/cron-repository";
 import { getCategory } from "@/lib/mission-category-repository";
 import { listProfiles } from "@/lib/profiles-repository";
 import {
@@ -58,6 +58,8 @@ export async function GET(request: Request) {
   const id = url.searchParams.get("id");
 
   try {
+    // Pull latest cron job execution state from Hermes before reading
+    importHermesJobs();
     if (id) {
       const mission = getMission(id);
       if (!mission) {
