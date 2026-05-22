@@ -566,7 +566,18 @@ export function useMissionsPage() {
           await fetchData();
         }
       } else {
-        showToast("Failed to create mission", "error");
+        let msg = "Failed to create mission";
+        try {
+          const errBody = (await res.json()) as { error?: string; cronPushError?: string };
+          if (errBody.cronPushError) {
+            msg = errBody.cronPushError;
+          } else if (errBody.error) {
+            msg = errBody.error;
+          }
+        } catch {
+          /* keep default */
+        }
+        showToast(msg, "error");
         setDispatching(false);
       }
     } catch {

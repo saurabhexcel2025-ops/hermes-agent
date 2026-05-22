@@ -34,6 +34,17 @@ import {
 
 import { getDefaultModel } from "@/lib/models-repository";
 
+function cronSyncFailureResponse(
+  route: string,
+  pushResult: { ok: boolean; error?: string },
+): NextResponse {
+  logApiError(route, "pushJobToHermes", new Error(pushResult.error ?? "unknown"));
+  return NextResponse.json(
+    { error: "Failed to sync cron job to Hermes", cronPushError: pushResult.error ?? "unknown" },
+    { status: 502 },
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function recordToApiJob(job: CronJobRecord) {
@@ -238,12 +249,8 @@ export async function POST(request: NextRequest) {
     // Sync to Hermes
     const pushResult = pushJobToHermes(newJob.id);
     if (!pushResult.ok) {
-      logApiError("POST /api/cron", "pushJobToHermes", new Error(pushResult.error ?? "unknown"));
       deleteCronJob(newJob.id);
-      return NextResponse.json(
-        { error: "Failed to sync cron job to Hermes", cronPushError: pushResult.error ?? "unknown" },
-        { status: 502 }
-      );
+      return cronSyncFailureResponse("POST /api/cron", pushResult);
     }
     if (pushResult.hermesJobId && pushResult.hermesJobId !== newJob.id) {
       updateCronJob(newJob.id, { hermes_job_id: pushResult.hermesJobId });
@@ -290,7 +297,10 @@ export async function PUT(request: NextRequest) {
     // ── Pause ─────────────────────────────────────────────────
     if (action === "pause") {
       const updated = updateCronJob(id, { enabled: false, state: "paused" });
-      pushJobToHermes(id); // best-effort sync
+      const pushResult = pushJobToHermes(id);
+      if (!pushResult.ok) {
+        return cronSyncFailureResponse("PUT /api/cron pause", pushResult);
+      }
       appendAuditLine({ action: "cron.pause", resource: id, ok: true });
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
@@ -298,7 +308,10 @@ export async function PUT(request: NextRequest) {
     // ── Resume ────────────────────────────────────────────────
     if (action === "resume") {
       const updated = updateCronJob(id, { enabled: true, state: "scheduled" });
-      pushJobToHermes(id); // best-effort sync
+      const pushResult = pushJobToHermes(id);
+      if (!pushResult.ok) {
+        return cronSyncFailureResponse("PUT /api/cron resume", pushResult);
+      }
       appendAuditLine({ action: "cron.resume", resource: id, ok: true });
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
@@ -309,7 +322,10 @@ export async function PUT(request: NextRequest) {
         state: "run_requested",
         next_run_at: new Date().toISOString(),
       });
-      pushJobToHermes(id); // best-effort sync
+      const pushResult = pushJobToHermes(id);
+      if (!pushResult.ok) {
+        return cronSyncFailureResponse("PUT /api/cron run", pushResult);
+      }
       appendAuditLine({ action: "cron.run", resource: id, ok: true });
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
@@ -356,11 +372,7 @@ export async function PUT(request: NextRequest) {
     // Sync to Hermes
     const pushResult = pushJobToHermes(id);
     if (!pushResult.ok) {
-      logApiError("PUT /api/cron", "pushJobToHermes", new Error(pushResult.error ?? "unknown"));
-      return NextResponse.json(
-        { error: "Failed to sync cron job to Hermes", cronPushError: pushResult.error ?? "unknown" },
-        { status: 502 }
-      );
+      return cronSyncFailureResponse("PUT /api/cron", pushResult);
     }
 
     appendAuditLine({ action: "cron.update", resource: id, ok: true });

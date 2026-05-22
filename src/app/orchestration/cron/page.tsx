@@ -12,6 +12,7 @@ import {
   Cpu,
   Zap,
 } from "lucide-react";
+import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import Button from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/Input";
@@ -250,7 +251,7 @@ export default function CronPage() {
   // ── Render ────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-dark-950 grid-bg">
+    <AppPageShell>
       <PageHeader
         icon={Clock}
         title="Cron Jobs"
@@ -368,6 +369,6 @@ export default function CronPage() {
       />
 
       {toastElement}
-    </div>
+    </AppPageShell>
   );
 }
