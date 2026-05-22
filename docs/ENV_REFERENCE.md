@@ -14,7 +14,7 @@ Quick lookup for Control Hub and Hermes paths. Set values in `.env.local` (creat
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `HERMES_HOME` / `AGENT_HOME` | `~/.hermes` | Active Hermes install: `config.yaml`, profiles, cron, sessions, skills |
+| `HERMES_HOME` | `~/.hermes` | Hermes data root: `config.yaml`, profiles, cron, sessions, skills. Python package at `{HERMES_HOME}/hermes-agent/`. (`AGENT_HOME` is accepted as a deprecated alias in code.) |
 | `CH_DATA_DIR` / `CONTROL_HUB_DATA_DIR` | `~/control-hub/data` | Control Hub SQLite, missions JSON, templates, stories, hardware scripts |
 | `CH_SCRIPTS_DIR` | `{CH_DATA_DIR}/scripts` | System cron script prefix (must match crontab entries) |
 | `CH_HARDWARE_LOG_DIR` | `{CH_DATA_DIR}/logs` | Hardware cron log output |
@@ -55,7 +55,7 @@ Quick lookup for Control Hub and Hermes paths. Set values in `.env.local` (creat
 
 ## Debug artifact (not read by the app)
 
-After setup or `ch-deploy update`, `scripts/tooling/discover-agents.mjs` writes **`CH_DATA_DIR/hermes-detection.json`** with `valid`, `hermesHome`, `defaultRoot`, `isProfileHome`, and `hermesAgentPath`. Use it to verify path resolution on the host; the Next.js app does not load this file at runtime.
+After setup or `ch-deploy update`, `scripts/tooling/discover-agents.mjs` writes **`CH_DATA_DIR/hermes-detection.json`** (version 3) with `valid`, `hermesHome`, `defaultRoot`, `canonicalAgentPackage`, `legacyInstallDetected`, and related fields. Use it to verify path resolution on the host; the Next.js app does not load this file at runtime.
 
 ## Related docs
 

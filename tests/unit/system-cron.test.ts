@@ -11,7 +11,7 @@ describe("system-cron path helpers", () => {
   const scriptsDir = "/home/zoe/control-hub/data/scripts";
 
   it("crontabLineUsesScriptsDir is true when expanded line contains scripts dir + file", () => {
-    const line = `*/5 * * * * ${scriptsDir}/ch-watchdog.sh >> /tmp/x.log 2>&1`;
+    const line = `*/5 * * * * ${scriptsDir}/ch-backup.sh >> /tmp/x.log 2>&1`;
     expect(crontabLineUsesScriptsDir(line, scriptsDir)).toBe(true);
   });
 
@@ -20,7 +20,7 @@ describe("system-cron path helpers", () => {
     process.env.HOME = "/home/zoe";
     try {
       const line =
-        "*/5 * * * * $HOME/control-hub/data/scripts/ch-watchdog.sh >> /tmp/x.log 2>&1";
+        "*/5 * * * * $HOME/control-hub/data/scripts/ch-backup.sh >> /tmp/x.log 2>&1";
       expect(crontabLineUsesScriptsDir(line, "/home/zoe/control-hub/data/scripts")).toBe(true);
     } finally {
       process.env.HOME = prev;
@@ -29,7 +29,7 @@ describe("system-cron path helpers", () => {
 
   it("crontabLineUsesScriptsDir is false for ~/.hermes/scripts paths", () => {
     const line =
-      "*/5 * * * * /home/zoe/.hermes/scripts/ch-watchdog.sh >> /tmp/x.log 2>&1";
+      "*/5 * * * * /home/zoe/.hermes/scripts/ch-backup.sh >> /tmp/x.log 2>&1";
     expect(crontabLineUsesScriptsDir(line, scriptsDir)).toBe(false);
   });
 
@@ -38,12 +38,12 @@ describe("system-cron path helpers", () => {
   });
 
   it("accepts POST-style command string (script path only)", () => {
-    const cmd = `${scriptsDir}/ch-watchdog.sh`;
+    const cmd = `${scriptsDir}/ch-backup.sh`;
     expect(crontabLineUsesScriptsDir(cmd, scriptsDir)).toBe(true);
   });
 
   it("rejects POST-style command outside scripts dir", () => {
-    expect(crontabLineUsesScriptsDir("/home/zoe/.hermes/scripts/ch-watchdog.sh", scriptsDir)).toBe(
+    expect(crontabLineUsesScriptsDir("/home/zoe/.hermes/scripts/ch-backup.sh", scriptsDir)).toBe(
       false,
     );
   });

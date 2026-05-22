@@ -56,6 +56,8 @@ ENV_LOCAL="${REPO_ROOT}/.env.local"
 
 # ── Advanced env (optional; before Hermes detection) ─────────
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+ch_env_set "$ENV_LOCAL" "HERMES_HOME" "$HERMES_HOME"
+ch_print_hermes_install_paths
 if ! ch_noninteractive_install; then
     if [ "${CH_INSTALL_ADVANCED:-}" = "1" ]; then
         ADVANCED=yes
@@ -149,7 +151,9 @@ if command -v node &>/dev/null && [ -f "$REPO_ROOT/scripts/tooling/discover-agen
     CH_DATA_DIR="$CH_DATA_ROOT" node "$REPO_ROOT/scripts/tooling/discover-agents.mjs" || true
     if [ -f "$CH_DATA_ROOT/hermes-detection.json" ]; then
         if ! grep -q '"valid": true' "$CH_DATA_ROOT/hermes-detection.json" 2>/dev/null; then
-            echo "⚠  Hermes install not detected at HERMES_HOME — set HERMES_HOME in .env.local (see .env.example)"
+            echo "⚠  Hermes install not detected at HERMES_HOME."
+            echo "   Install: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+            echo "   Or set HERMES_HOME in .env.local to an existing install (see .env.example)."
         fi
     fi
 fi

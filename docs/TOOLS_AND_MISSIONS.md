@@ -13,7 +13,7 @@ Control Hub stores toolsets in SQLite (`agent_profiles.platform_toolsets`, `agen
 | **Push to Hermes** | Write assembled config from SQLite to `HERMES_HOME` or `profiles/<slug>/`. |
 | **Operations → Agents** | Push/pull all profile content (includes toolsets in full `config.yaml`). Push Bob re-applies Models registry defaults to root `config.yaml`. |
 
-`tool_plugins` in Control Hub is **not** used for Hermes runtime. `/api/tools` returns a read-only catalog of known toolset IDs.
+`/api/tools` (GET) returns a read-only catalog of known toolset IDs; POST is not supported.
 
 ## Missions — recommended toolsets
 

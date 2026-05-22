@@ -65,7 +65,7 @@ Some error responses also include `details` (Zod validation). Handlers must call
 | `/api/stories` | `POST` | Story Weaver — all operations via `action` (see [RPC-style routes](#rpc-style-routes)). |
 | `/api/sync` | `GET`, `POST` | Background sync control and status. |
 | `/api/templates` | `GET`, `POST` | Mission templates; mutations via `action` on `POST`. |
-| `/api/tools` | `GET` | Read-only Hermes toolset ID catalog. `POST` returns **410** (legacy tool registry removed). |
+| `/api/tools` | `GET` | Read-only Hermes toolset ID catalog. `POST` returns **410** (writes not supported). |
 | `/api/agent/profiles/[id]/toolsets` | `GET`, `PUT` | Read or update `platform_toolsets` for a profile (`default` = agent root). `GET` hydrates from DB → yaml → seed and may persist normalized JSON. `PUT` saves and pushes to Hermes disk. |
 | `/api/update` | `GET`, `POST` | Deploy: compare branches, branch list, deploy status; `POST` `restart` \| `rebuild` \| `update`. Requires `CH_ENABLE_DEPLOY_API`. |
 

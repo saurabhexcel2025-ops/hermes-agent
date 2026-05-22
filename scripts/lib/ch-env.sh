@@ -19,6 +19,32 @@ ch_env_set() {
   mv "$tmp" "$file"
 }
 
+# Default Hermes root from HERMES_HOME (profile-as-home → grandparent).
+ch_hermes_default_root() {
+  local h="${1:-${HERMES_HOME:-$HOME/.hermes}}"
+  if [[ "$(basename "$(dirname "$h")")" == "profiles" ]]; then
+    dirname "$(dirname "$h")"
+  elif [[ "$h" == "$HOME/.hermes" || "$h" == "$HOME/.hermes/"* ]]; then
+    echo "$HOME/.hermes"
+  else
+    echo "$h"
+  fi
+}
+
+# Operator banner: single canonical Hermes layout for Control Hub.
+ch_print_hermes_install_paths() {
+  local hm="${HERMES_HOME:-$HOME/.hermes}"
+  local root
+  root="$(ch_hermes_default_root "$hm")"
+  echo ""
+  echo "Control Hub uses Hermes at: $hm"
+  echo "  (default: $HOME/.hermes)"
+  echo "Agent package: $root/hermes-agent"
+  if [ -d "${HOME}/.local/share/hermes-agent" ]; then
+    echo "⚠  Legacy ~/.local/share/hermes-agent is ignored — use one install under ~/.hermes (hermes update or Nous installer)."
+  fi
+}
+
 # Print PORT value from .env.local or empty.
 ch_env_read_port() {
   local file="$1"

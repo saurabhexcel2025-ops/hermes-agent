@@ -68,7 +68,7 @@ describe("GET /api/cron/hardware", () => {
     mockExecSync.mockImplementation((cmd: unknown) => {
       if (String(cmd).includes("crontab -l")) {
         return [
-          "*/10 * * * * /tmp/ch-data/scripts/ch-watchdog.sh >> /tmp/ch-data/logs/ch-watchdog.log 2>&1",
+          "*/10 * * * * /tmp/ch-data/scripts/ch-backup.sh >> /tmp/ch-data/logs/ch-backup.log 2>&1",
           "",
         ].join("\n");
       }
@@ -82,15 +82,15 @@ describe("GET /api/cron/hardware", () => {
       data?: { jobs: Array<{ id: string; name: string }>; total: number };
     };
     expect(body.data?.total).toBe(1);
-    expect(body.data?.jobs[0]?.id).toBe("ch-watchdog");
-    expect(body.data?.jobs[0]?.name).toContain("Watchdog");
+    expect(body.data?.jobs[0]?.id).toBe("ch-backup");
+    expect(body.data?.jobs[0]?.name).toContain("Backup");
   });
 
   it("returns no jobs for crontab lines outside scripts dir", async () => {
     mockExecSync.mockImplementation((cmd: unknown) => {
       if (String(cmd).includes("crontab -l")) {
         return [
-          "*/10 * * * * /home/user/.hermes/scripts/ch-watchdog.sh >> /tmp/x.log 2>&1",
+          "*/10 * * * * /home/user/.hermes/scripts/ch-backup.sh >> /tmp/x.log 2>&1",
           "",
         ].join("\n");
       }
@@ -124,7 +124,7 @@ describe("POST /api/cron/hardware", () => {
     const { POST } = await import("@/app/api/cron/hardware/route");
     const req = mockRequest("http://127.0.0.1/api/cron/hardware", "POST", {
       schedule: "*/5 * * * *",
-      command: "/home/user/.hermes/scripts/ch-watchdog.sh",
+      command: "/home/user/.hermes/scripts/ch-backup.sh",
       name: "Bad path",
     });
     const res = await POST(req);
@@ -138,26 +138,26 @@ describe("POST /api/cron/hardware", () => {
     const { POST } = await import("@/app/api/cron/hardware/route");
     const req = mockRequest("http://127.0.0.1/api/cron/hardware", "POST", {
       schedule: "*/5 * * * *",
-      command: "/tmp/ch-data/scripts/ch-watchdog.sh",
-      name: "Watchdog",
+      command: "/tmp/ch-data/scripts/ch-backup.sh",
+      name: "Backup",
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data?: { id: string } };
-    expect(body.data?.id).toBe("ch-watchdog");
+    expect(body.data?.id).toBe("ch-backup");
 
     const crontabWrite = mockWriteFileSync.mock.calls.find((call) =>
       String(call[0]).includes("ch-crontab"),
     );
     expect(crontabWrite).toBeDefined();
-    expect(String(crontabWrite?.[1])).toContain("/tmp/ch-data/scripts/ch-watchdog.sh");
+    expect(String(crontabWrite?.[1])).toContain("/tmp/ch-data/scripts/ch-backup.sh");
     expect(mockExecSync).toHaveBeenCalled();
   });
 
   it("pauseAll returns success without requiring script paths", async () => {
     mockExecSync.mockImplementation((cmd: unknown) => {
       if (String(cmd).includes("crontab -l")) {
-        return "*/5 * * * * /tmp/ch-data/scripts/ch-health.sh >> /tmp/ch-data/logs/ch-health.log 2>&1\n";
+        return "*/5 * * * * /tmp/ch-data/scripts/ch-backup.sh >> /tmp/ch-data/logs/ch-backup.log 2>&1\n";
       }
       return "";
     });

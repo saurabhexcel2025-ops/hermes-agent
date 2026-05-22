@@ -239,8 +239,13 @@ export async function POST(request: NextRequest) {
     const pushResult = pushJobToHermes(newJob.id);
     if (!pushResult.ok) {
       logApiError("POST /api/cron", "pushJobToHermes", new Error(pushResult.error ?? "unknown"));
-    } else if (pushResult.hermesJobId && pushResult.hermesJobId !== newJob.id) {
-      // Update CH with the Hermes-assigned id
+      deleteCronJob(newJob.id);
+      return NextResponse.json(
+        { error: "Failed to sync cron job to Hermes", cronPushError: pushResult.error ?? "unknown" },
+        { status: 502 }
+      );
+    }
+    if (pushResult.hermesJobId && pushResult.hermesJobId !== newJob.id) {
       updateCronJob(newJob.id, { hermes_job_id: pushResult.hermesJobId });
     }
 
@@ -352,6 +357,10 @@ export async function PUT(request: NextRequest) {
     const pushResult = pushJobToHermes(id);
     if (!pushResult.ok) {
       logApiError("PUT /api/cron", "pushJobToHermes", new Error(pushResult.error ?? "unknown"));
+      return NextResponse.json(
+        { error: "Failed to sync cron job to Hermes", cronPushError: pushResult.error ?? "unknown" },
+        { status: 502 }
+      );
     }
 
     appendAuditLine({ action: "cron.update", resource: id, ok: true });

@@ -39,16 +39,11 @@ export function getProfileNameFromHermesHome(home: string): string | null {
 }
 
 /**
- * Root Hermes directory for profile listing (native ~/.hermes or Docker /opt/data).
- * Differs from getHermesHome() when env points at a profile-as-home path.
+ * Root Hermes directory from an explicit home path (profile-as-home or install root).
+ * Mirrors upstream hermes_constants.get_default_hermes_root().
  */
-export function getHermesDefaultRoot(): string {
-  const envHome = process.env.HERMES_HOME || process.env.AGENT_HOME;
-  if (!envHome || !String(envHome).trim()) {
-    return NATIVE_HERMES_HOME;
-  }
-
-  const envPath = resolve(norm(String(envHome).trim()));
+export function getHermesDefaultRootFromHome(home: string): string {
+  const envPath = resolve(norm(home));
 
   if (isPathUnderRoot(envPath, NATIVE_HERMES_HOME)) {
     return resolve(NATIVE_HERMES_HOME);
@@ -59,6 +54,18 @@ export function getHermesDefaultRoot(): string {
   }
 
   return envPath;
+}
+
+/**
+ * Root Hermes directory for profile listing (native ~/.hermes or Docker /opt/data).
+ * Differs from getHermesHome() when env points at a profile-as-home path.
+ */
+export function getHermesDefaultRoot(): string {
+  const envHome = process.env.HERMES_HOME || process.env.AGENT_HOME;
+  if (!envHome || !String(envHome).trim()) {
+    return NATIVE_HERMES_HOME;
+  }
+  return getHermesDefaultRootFromHome(String(envHome).trim());
 }
 
 /**
