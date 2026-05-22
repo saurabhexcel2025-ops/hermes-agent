@@ -39,6 +39,7 @@ import CategoryCombobox, {
   type CategoryOption,
 } from "@/components/missions/CategoryCombobox";
 import LocalDirRow from "@/components/missions/LocalDirRow";
+import { inputFieldClasses } from "@/lib/theme";
 import {
   categoryAccentColor,
   groupTemplatesByCategory,
@@ -436,7 +437,7 @@ export function TemplateEditorModal({
               value={templateName}
               onChange={(e) => onTemplateNameChange(e.target.value)}
               placeholder="e.g., My Custom Review"
-              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
+              className={inputFieldClasses("cyan")}
             />
           </div>
           <div>
@@ -447,7 +448,7 @@ export function TemplateEditorModal({
               value={templateDescription}
               onChange={(e) => onTemplateDescriptionChange(e.target.value)}
               placeholder="What this template does"
-              className="w-full bg-dark-800/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none focus:border-neon-cyan/50 font-mono"
+              className={inputFieldClasses("cyan")}
             />
           </div>
         </div>
@@ -586,7 +587,7 @@ export function TemplateEditorModal({
                   }
                 }}
                 placeholder="URL or file path…"
-                className="flex-1 bg-dark-800/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 outline-none focus:border-neon-pink/50 font-mono"
+                className={`flex-1 ${inputFieldClasses("pink")} py-1.5 text-xs`}
               />
               <button
                 type="button"

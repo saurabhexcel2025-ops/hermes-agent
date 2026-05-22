@@ -15,7 +15,8 @@ import {
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
-import { baseInputStyles } from "@/lib/theme";
+import { safeApiCall } from "@/lib/api-fetch";
+import { inputFieldClasses } from "@/lib/theme";
 import { parseSchedule } from "@/lib/utils";
 import CronScheduleInput from "@/components/cron/CronScheduleInput";
 
@@ -161,15 +162,15 @@ export default function JobFormModal({
         body.repeat = repeat;
       }
 
-      const res = await fetch("/api/cron", {
+      const { ok, error } = await safeApiCall("/api/cron", {
         method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body,
       });
 
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || (isEdit ? "Failed to update job" : "Failed to create job"));
+      if (!ok) {
+        setError(error ?? (isEdit ? "Failed to update job" : "Failed to create job"));
+        setSaving(false);
+        return;
       }
 
       onSaved();
@@ -222,7 +223,7 @@ export default function JobFormModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. daily-health-check"
-              className={baseInputStyles}
+              className={inputFieldClasses("orange")}
             />
           </div>
         )}
@@ -251,7 +252,7 @@ export default function JobFormModal({
             onChange={(e) => setPrompt(e.target.value)}
             rows={4}
             placeholder={isEdit ? undefined : "What should the agent do?"}
-            className={`${baseInputStyles} resize-y`}
+            className={`${inputFieldClasses("orange")} resize-y`}
           />
         </div>
 
@@ -278,7 +279,7 @@ export default function JobFormModal({
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder="Default model"
-              className={baseInputStyles}
+              className={inputFieldClasses("orange")}
             />
           </div>
         </div>
@@ -291,7 +292,7 @@ export default function JobFormModal({
             value={profile_name}
             onChange={(e) => setProfileName(e.target.value)}
             disabled={profilesLoading}
-            className={baseInputStyles}
+            className={inputFieldClasses("orange")}
           >
             {(() => {
               const options =

@@ -131,7 +131,8 @@ echo ""
 echo "== ch-backup.sh (mock bridge)"
 
 BKROOT="$(mktemp -d)"
-mkdir -p "$BKROOT/scripts" "$BKROOT/hermes-agent" "$BKROOT/out"
+mkdir -p "$BKROOT/scripts" "$BKROOT/hermes-agent/venv/bin" "$BKROOT/out"
+ln -sf "$(command -v python3)" "$BKROOT/hermes-agent/venv/bin/python3"
 cat >"$BKROOT/scripts/hindsight_bridge.py" <<'PY'
 #!/usr/bin/env python3
 import json
@@ -240,10 +241,27 @@ rm -rf "$FAKE_HOME" "$DEPLOY_TMP"
 export PATH="$ORIG_PATH"
 unset HOME CH_DEPLOY_STATUS_FILE TMPDIR
 
+# setup.sh preserves HERMES_HOME from existing .env.local
+echo ""
+echo "== setup.sh HERMES_HOME preservation"
+SETUP_REPO=$(mktemp -d)
+printf '%s\n' 'HERMES_HOME=/custom/hermes/from-dotenv' > "$SETUP_REPO/.env.local"
+# shellcheck source=../../scripts/lib/ch-dotenv-local.sh
+source "$REPO_ROOT/scripts/lib/ch-dotenv-local.sh"
+ch_load_control_hub_env_local "$SETUP_REPO"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+if [[ "$HERMES_HOME" == "/custom/hermes/from-dotenv" ]]; then
+  pass "ch_load_control_hub_env_local preserves custom HERMES_HOME before setup default"
+else
+  fail "expected /custom/hermes/from-dotenv, got $HERMES_HOME"
+fi
+rm -rf "$SETUP_REPO"
+
 # bash -n on touched scripts
 echo ""
 echo "== bash -n on scripts"
 for f in \
+  "$REPO_ROOT/scripts/bootstrap/setup.sh" \
   "$REPO_ROOT/scripts/bootstrap/install.sh" \
   "$REPO_ROOT/scripts/application/ch-deploy.sh" \
   "$REPO_ROOT/scripts/lib/ch-deploy-impl.sh" \

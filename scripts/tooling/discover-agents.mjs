@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Detect the local Hermes install and write CH_DATA_DIR/hermes-detection.json.
- * Resolves from HERMES_HOME / AGENT_HOME env vars, defaulting to ~/.hermes.
+ * Canonical layout: HERMES_HOME (default ~/.hermes) + HERMES_HOME/hermes-agent/
  */
 import { existsSync, mkdirSync, readdirSync } from "fs";
 import { homedir } from "os";
@@ -31,7 +31,7 @@ function isPathUnderRoot(child, root) {
   return rel.length > 0 && !rel.startsWith("..") && !rel.includes("..");
 }
 
-function getHermesDefaultRoot(home) {
+function getHermesDefaultRootFromHome(home) {
   const native = join(homedir(), ".hermes");
   const envPath = resolve(home);
   if (isPathUnderRoot(envPath, native)) return resolve(native);
@@ -45,32 +45,30 @@ function isProfileHermesHome(home) {
   return basename(resolve(home, "..")) === "profiles";
 }
 
-function resolveHermesAgentPackage(hermesHome) {
-  const override = process.env.HERMES_AGENT_ROOT?.trim();
-  const candidates = [];
-  if (override) candidates.push(override);
-  candidates.push(
-    join(hermesHome, "hermes-agent"),
-    resolve(hermesHome, "..", "hermes-agent"),
-    join(homedir(), ".local", "share", "hermes-agent")
-  );
-  const seen = new Set();
-  for (const c of candidates) {
-    const key = resolve(c);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (existsSync(join(key, "cron", "jobs.py"))) return key;
-  }
+function getHermesAgentPackageDir(home) {
+  const defaultRoot = getHermesDefaultRootFromHome(home);
+  return join(defaultRoot, "hermes-agent");
+}
+
+function resolveHermesAgentPackage(home) {
+  const pkg = getHermesAgentPackageDir(home);
+  if (existsSync(join(pkg, "cron", "jobs.py"))) return resolve(pkg);
   return null;
 }
 
+function legacyInstallDetected() {
+  return existsSync(join(homedir(), ".local", "share", "hermes-agent"));
+}
+
 const home = getHermesHome();
-const defaultRoot = getHermesDefaultRoot(home);
+const defaultRoot = getHermesDefaultRootFromHome(home);
+const canonicalAgentPackage = resolve(getHermesAgentPackageDir(home));
 const hasConfigYaml = existsSync(join(home, "config.yaml"));
 const hasHermesMd = existsSync(join(home, "HERMES.md"));
 const isValidHermesRoot = hasConfigYaml || hasHermesMd;
 const profileHome = isProfileHermesHome(home);
 const hermesAgentPath = resolveHermesAgentPackage(home);
+const legacyDetected = legacyInstallDetected();
 
 let profileCount = 0;
 const profilesDir = join(defaultRoot, "profiles");
@@ -88,20 +86,34 @@ const outDir = getChDataDir();
 mkdirSync(outDir, { recursive: true });
 const outPath = join(outDir, "hermes-detection.json");
 const doc = {
-  version: 2,
+  version: 3,
   generatedAt: new Date().toISOString(),
   hermesHome: home,
   defaultRoot,
+  canonicalAgentPackage,
   isProfileHome: profileHome,
   hermesAgentPath,
   valid: isValidHermesRoot,
   profileCount,
   hasConfigYaml,
   hasHermesMd,
+  legacyInstallDetected: legacyDetected,
 };
 
 const { writeFileSync } = await import("fs");
 writeFileSync(outPath, JSON.stringify(doc, null, 2), "utf8");
+
 console.log(
-  `Detected Hermes at ${home} (defaultRoot: ${defaultRoot}, valid: ${isValidHermesRoot}, profiles: ${profileCount}, agent: ${hermesAgentPath ?? "not found"})`
+  `Control Hub uses Hermes at: ${home} (defaultRoot: ${defaultRoot}, valid: ${isValidHermesRoot})`
 );
+console.log(`Agent package: ${canonicalAgentPackage}`);
+if (hermesAgentPath) {
+  console.log(`✓ hermes-agent cron module found`);
+} else {
+  console.log(`⚠  hermes-agent not found at ${canonicalAgentPackage} — install Hermes (see https://hermes-agent.nousresearch.com/docs/getting-started/installation)`);
+}
+if (legacyDetected) {
+  console.log(
+    `⚠  Legacy install at ~/.local/share/hermes-agent is ignored. Use a single install under ~/.hermes (run: hermes update or the Nous installer).`
+  );
+}

@@ -48,9 +48,9 @@ describe("GET /api/logs sanitisation", () => {
     expect(res.status).toBe(400);
   });
 
-  it("lists ch-health style names in availableLogs", async () => {
+  it("lists ch-backup style names in availableLogs", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockReaddirSync.mockReturnValue(["agent.log", "ch-health.log"]);
+    mockReaddirSync.mockReturnValue(["agent.log", "ch-backup.log"]);
     mockStatSync.mockReturnValue({ size: 10, mtime: new Date("2026-01-02") });
     mockReadFileSync.mockReturnValue("ok\n");
 
@@ -60,8 +60,8 @@ describe("GET /api/logs sanitisation", () => {
     const body = await res.json();
     const names = body.data.availableLogs.map((x: { name: string }) => x.name);
     expect(names).toContain("agent");
-    expect(names).toContain("ch-health");
-    const ch = body.data.availableLogs.find((x: { name: string }) => x.name === "ch-health");
+    expect(names).toContain("ch-backup");
+    const ch = body.data.availableLogs.find((x: { name: string }) => x.name === "ch-backup");
       expect(ch.group).toBe("system");
   });
 });
@@ -123,8 +123,8 @@ describe("GET /api/logs timestamp injection", () => {
   });
 
   it("does not inject timestamp for bracket-timestamp lines like [WATCHDOG]", async () => {
-    setupExistsForLog("ch-watchdog");
-    mockReaddirSync.mockReturnValue(["ch-watchdog.log"]);
+    setupExistsForLog("ch-backup");
+    mockReaddirSync.mockReturnValue(["ch-backup.log"]);
     mockStatSync.mockReturnValue({
       size: 50,
       mtime: new Date("2026-05-09T01:34:37.000Z"),
@@ -135,7 +135,7 @@ describe("GET /api/logs timestamp injection", () => {
 
     const { GET } = await import("@/app/api/logs/route");
     const res = await GET(
-      new Request("http://localhost/api/logs?name=ch-watchdog&lines=50"),
+      new Request("http://localhost/api/logs?name=ch-backup&lines=50"),
     );
     expect(res.status).toBe(200);
     const body = await res.json();
