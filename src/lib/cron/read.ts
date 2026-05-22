@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { db } from "../db";
+import { safeJsonParse } from "../utils";
 
 import type { CronJobRecord, CronJobRow } from "./types";
 
@@ -11,13 +12,13 @@ function rowToRecord(row: CronJobRow): CronJobRecord {
     id: row.id,
     name: row.name,
     prompt: row.prompt,
-    skills: JSON.parse(row.skills) as string[],
+    skills: safeJsonParse(row.skills, [] as string[]),
     model: row.model,
     provider: row.provider,
     base_url: row.base_url,
     schedule: row.schedule,
     schedule_display: row.schedule_display,
-    repeat: JSON.parse(row.repeat_json) as { times: number | null; completed: number },
+    repeat: safeJsonParse(row.repeat_json, { times: 1, completed: 0 }),
     enabled: row.enabled === 1,
     state: row.state,
     deliver: row.deliver,
