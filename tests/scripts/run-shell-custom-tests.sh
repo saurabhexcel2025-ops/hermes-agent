@@ -131,7 +131,8 @@ echo ""
 echo "== ch-backup.sh (mock bridge)"
 
 BKROOT="$(mktemp -d)"
-mkdir -p "$BKROOT/scripts" "$BKROOT/hermes-agent" "$BKROOT/out"
+mkdir -p "$BKROOT/scripts" "$BKROOT/hermes-agent/venv/bin" "$BKROOT/out"
+ln -sf "$(command -v python3)" "$BKROOT/hermes-agent/venv/bin/python3"
 cat >"$BKROOT/scripts/hindsight_bridge.py" <<'PY'
 #!/usr/bin/env python3
 import json
