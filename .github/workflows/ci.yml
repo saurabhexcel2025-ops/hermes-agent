@@ -1,5 +1,9 @@
 name: CI
 
+# Required for actions/checkout on pull_request merge refs (avoids intermittent auth failures).
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
