@@ -12,6 +12,8 @@
 
 import { spawn } from "child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { db, uuid, now } from "../db";
 import { getActiveHermesPaths } from "../hermes-agent-runtime";
 import { logApiError } from "../api-logger";
@@ -225,10 +227,10 @@ export function importHermesJobs(): {
       const ts = now();
       // For CH-sourced jobs, don't overwrite enabled/state — the UI controls those
       // For Hermes-sourced jobs, sync everything (they're mirrors)
-      const preserveEnabledState = existing.source === "ch";
-      const updateFields = preserveEnabledState
+      const preserveChIntent = existing.source === "ch";
+      const updateFields = preserveChIntent
         ? `name=?, prompt=?, skills=?, model=?, provider=?, base_url=?,
-            schedule=?, schedule_display=?, repeat_json=?,
+            schedule=?, schedule_display=?,
             deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
             orphan=0`
@@ -237,9 +239,9 @@ export function importHermesJobs(): {
             deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
             orphan=0`;
-      const updateParams = preserveEnabledState
+      const updateParams = preserveChIntent
         ? [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
-           row.schedule, row.schedule_display, row.repeat_json,
+           row.schedule, row.schedule_display,
            row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
            row.last_status, row.last_delivery_error, ts]
         : [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
@@ -316,7 +318,7 @@ sys.path.insert(0, %(hermes_agent_path)r)
 # Set HERMES_HOME so the cron module resolves paths correctly
 os.environ["HERMES_HOME"] = %(hermes_home)r
 
-from cron.jobs import load_jobs, save_jobs, create_job, update_job, remove_job
+from cron.jobs import load_jobs, save_jobs
 import json
 
 action = sys.argv[1] if len(sys.argv) > 1 else None
@@ -349,48 +351,6 @@ if action == "write_all":
 
     save_jobs(list(existing.values()))
     print("ok")
-elif action == "create":
-    import uuid
-    job_def = json.loads(sys.stdin.read())
-    job_id = job_def.get("id") or uuid.uuid4().hex[:12]
-    # Extract cron expression string from schedule JSON
-    # parseSchedule produces: {"kind":"cron","expr":"*/30 * * * *","display":"..."}
-    try:
-        sched_raw = json.loads(job_def["schedule"])
-        if isinstance(sched_raw, dict):
-            # The schedule may already be parsed (from CronJobRecord) or in raw form.
-            # Parsed form: {"kind":"interval","minutes":5,"display":"every 5m"}
-            #              {"kind":"cron","expr":"*/5 * * * *","display":"..."}
-            # Raw form: {"kind":"every 5m"}
-            kind = sched_raw.get("kind", "")
-            if kind == "interval" and "minutes" in sched_raw:
-                job_def["schedule"] = f"every {sched_raw['minutes']}m"
-            elif kind == "cron" and "expr" in sched_raw:
-                job_def["schedule"] = sched_raw["expr"]
-            elif kind in ("once",) and "run_at" in sched_raw:
-                job_def["schedule"] = sched_raw["run_at"]
-            else:
-                # Fallback: use kind itself (for raw "every 5m" kind) or display
-                job_def["schedule"] = sched_raw.get("expr") or sched_raw.get("display") or kind or job_def.get("schedule_display", "* * * * *")
-        else:
-            job_def["schedule"] = str(sched_raw)
-    except Exception:
-        job_def["schedule"] = job_def.get("schedule_display", "* * * * *")
-    # Extract repeat int from repeat JSON
-    try:
-        repeat_raw = json.loads(job_def.get("repeat_json", "{}"))
-        job_def["repeat"] = repeat_raw.get("times") if isinstance(repeat_raw, dict) else (repeat_raw or 1)
-    except Exception:
-        job_def["repeat"] = 1
-    # profile_name is stored in CH SQLite but Hermes create_job uses "profile" not "profile_name"
-    # name is intentionally passed through — without it create_job defaults name=prompt
-    result = create_job(**{k: v for k, v in job_def.items() if v is not None and k not in (
-        "schedule_display", "repeat_json", "ch_job_id", "id",
-        "enabled", "state", "hermes_job_id", "source", "orphan",
-        "created_at", "next_run_at", "last_run_at", "last_status",
-        "last_delivery_error", "profile_name"
-    )})
-    print(json.dumps({"ok": True, "job_id": result["id"]}))
 
 elif action == "delete":
     job_id = sys.argv[2] if len(sys.argv) > 2 else None
@@ -405,10 +365,14 @@ elif action == "delete":
 `;
 
 /** Build a substituted Python script from the template. Uses split+join (ES2020-safe). */
+function cronTempScriptPath(prefix: string): string {
+  return join(tmpdir(), `${prefix}_${process.pid}_${Date.now()}.py`);
+}
+
 function buildPythonScript(
   hermesAgentPath: string,
   hermesHome: string,
-  _action: "write_all" | "create" | "delete"
+  _action: "write_all" | "delete"
 ): string {
   return _tpl
     .split("%(hermes_agent_path)r")
@@ -455,7 +419,7 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
   }));
 
   const script = buildPythonScript(hermesAgentPath, hermesHome, "write_all");
-  const tmpScript = `/tmp/ch_cron_export_${process.pid}_${Date.now()}.py`;
+  const tmpScript = cronTempScriptPath("ch_cron_export");
 
   try {
     writeFileSync(tmpScript, script, "utf-8");
@@ -483,76 +447,25 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
 }
 
 /**
- * Push a single CH job to Hermes (create or update).
+ * Push CH cron state to Hermes by full-catalog merge (write_all).
+ * Replaces the broken per-job create path that appended duplicates and dropped enabled/state.
  */
 export async function pushJobToHermes(chJobId: string): Promise<{ ok: boolean; hermesJobId?: string; error?: string }> {
   const job = getCronJob(chJobId);
   if (!job) return { ok: false, error: `Job not found: ${chJobId}` };
 
-  const paths = getActiveHermesPaths();
-  const hermesHome = paths.root;
-
-  const runtime = resolveHermesCronRuntime(hermesHome);
-  if (!runtime.ok) return { ok: false, error: runtime.error };
-  const { hermesAgentPath, python } = runtime;
-
-  const jobPayload = {
-    id: job.hermes_job_id ?? job.id,
-    name: job.name,
-    prompt: job.prompt,
-    skills: job.skills,
-    model: job.model || undefined,
-    provider: job.provider || undefined,
-    base_url: job.base_url || undefined,
-    schedule: job.schedule,
-    schedule_display: job.schedule_display,
-    repeat_json: JSON.stringify(job.repeat),
-    enabled: job.enabled,
-    state: job.state,
-    deliver: job.deliver,
-    script: job.script,
-    profile_name: job.profile_name,
-    created_at: job.created_at,
-    next_run_at: job.next_run_at,
-    last_run_at: job.last_run_at,
-    last_status: job.last_status,
-  };
-
-  const tmpScript = `/tmp/ch_cron_push_${process.pid}_${Date.now()}.py`;
-
-  const script = buildPythonScript(hermesAgentPath, hermesHome, "create");
-
-  try {
-    writeFileSync(tmpScript, script, "utf-8");
-
-    const { stdout } = await spawnAsync(
-      python,
-      [tmpScript, "create"],
-      { input: JSON.stringify(jobPayload), timeout: 15_000, killSignal: "SIGTERM" as NodeJS.Signals }
-    );
-
-    try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-
-    let parsed: { ok: boolean; job_id?: string; error?: string } = { ok: false };
-    try {
-      parsed = JSON.parse(stdout ?? "{}");
-    } catch {
-      /* ignore parse errors */
-    }
-
-    const hermesJobId = parsed.job_id ?? job.hermes_job_id ?? job.id;
-
-    if (!job.hermes_job_id) {
-      updateCronJob(job.id, { hermes_job_id: hermesJobId });
-    }
-
-    return { ok: true, hermesJobId };
-  } catch (err: unknown) {
-    try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const e = err as { stderr?: string; stdout?: string; message?: string };
-    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
-    return { ok: false, error: String(message).slice(0, 500) };
+  if (!job.hermes_job_id) {
+    updateCronJob(job.id, { hermes_job_id: job.id });
   }
+
+  const result = await syncAllJobsToHermes();
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  const updated = getCronJob(chJobId);
+  const hermesJobId = updated?.hermes_job_id ?? job.hermes_job_id ?? job.id;
+  return { ok: true, hermesJobId };
 }
 
 /**
@@ -566,7 +479,7 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
   if (!runtime.ok) return { ok: false, error: runtime.error };
   const { hermesAgentPath, python } = runtime;
 
-  const tmpScript = `/tmp/ch_cron_del_${process.pid}_${Date.now()}.py`;
+  const tmpScript = cronTempScriptPath("ch_cron_del");
 
   const script = buildPythonScript(hermesAgentPath, hermesHome, "delete");
 

@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
 import { needsBaselineRebuild, rebuildToBaseline } from "./db/upgrade";
 import { applyProfilesToolsParityUpgrade } from "./db/apply-profiles-tools-upgrade";
+import { applyMissionRepeatMigration } from "./db/apply-mission-repeat-migration";
 
 // ── Ensure data directory exists ───────────────────────────────
 
@@ -149,6 +150,7 @@ function runMigrations(database: Database.Database): void {
   }
 
   applyProfilesToolsParityUpgrade(database, migrationsDir);
+  applyMissionRepeatMigration(database, migrationsDir);
 }
 
 // ── Bootstrap: ensure DB + schema exist ───────────────────────

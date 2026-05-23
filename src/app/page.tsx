@@ -40,7 +40,7 @@ import {
 import type { MissionCategory } from "@/lib/mission-category-repository";
 import TemplateCard from "@/components/ui/TemplateCard";
 import { useToast } from "@/components/ui/Toast";
-import type { SystemStatus, AccentColor, MonitorData, CronJobBrief, HermesProcess, MissionBrief } from "@/types/hermes";
+import type { SystemStatus, AccentColor, MonitorData, HermesProcess, MissionBrief } from "@/types/hermes";
 import { timeAgo, timeUntil, titleCase, parseSchedule } from "@/lib/utils";
 
 const MONITOR_FETCH_INIT: RequestInit = { cache: "no-store" };
