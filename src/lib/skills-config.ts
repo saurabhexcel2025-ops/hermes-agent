@@ -182,14 +182,15 @@ export function buildDisabledYamlLines(
 /**
  * Resolve config.yaml path for a given profile.
  */
-export function configPathForProfile(_home: string, profile: string): string {
+export function configPathForProfile(profile: string): string {
   return buildProfileHermesPathBundle(profile).config;
 }
 
 /**
- * Global skills catalog at default HERMES_HOME/skills (not per-profile mirrors).
+ * Global skills catalog at HERMES_HOME/skills (shared across all profiles).
+ * Per-profile customisation is handled via the disabled-skills config, not via separate roots.
  */
-export function skillsRootForProfile(_home: string, _profile: string): string {
+export function skillsRootForProfile(): string {
   return buildProfileHermesPathBundle("default").skills;
 }
 

@@ -20,7 +20,7 @@ export function listCatalogSkillKeys(): string[] {
     keys.add(row.skillKey);
   }
   const home = getActiveHermesHome();
-  for (const name of collectSkillDirectoryNames(skillsRootForProfile(home, "default"))) {
+    for (const name of collectSkillDirectoryNames(skillsRootForProfile())) {
     keys.add(name);
   }
   return [...keys].sort();
@@ -44,10 +44,10 @@ export function resolveEffectiveDisabledSkills(
 
   const useDisk =
     options?.refreshFromDisk === true ||
-    (fromDb.length === 0 && existsSync(configPathForProfile(home, profile)));
+    (fromDb.length === 0 && existsSync(configPathForProfile(profile)));
 
   if (useDisk) {
-    const configPath = configPathForProfile(home, profile);
+    const configPath = configPathForProfile(profile);
     if (existsSync(configPath)) {
       const yaml = readFileSync(configPath, "utf-8");
       fromDb = computeEffectiveDisabledFromYaml(yaml, catalogKeys);
@@ -59,5 +59,5 @@ export function resolveEffectiveDisabledSkills(
 
 export function catalogKeysForSkillsRoot(): string[] {
   const home = getActiveHermesHome();
-  return collectSkillDirectoryNames(skillsRootForProfile(home, "default"));
+  return collectSkillDirectoryNames(skillsRootForProfile());
 }
