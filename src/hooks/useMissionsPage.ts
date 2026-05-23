@@ -559,22 +559,29 @@ export function useMissionsPage() {
     }
   };
 
-  const handleEdit = (m: MissionRow) => {
-    setEditingId(m.id);
-    setNewName(m.name);
+  // ── Shared form population helpers ─────────────────────────────────
+
+  /**
+   * Populate form state from a mission.
+   * Used by both handleEdit (in-place edit) and handleDuplicateMission.
+   */
+  function populateFormFromMission(
+    m: MissionRow,
+    opts: { editing: boolean; namePrefix?: string },
+  ) {
     const parsed = parseMissionPrompt(m.prompt);
+    setNewName(opts.namePrefix ? `${m.name} ${opts.namePrefix}` : m.name);
     setNewInstruction(parsed.instruction);
     setNewContext(parsed.context);
     setNewOutputFormat(m.outputFormat ?? parsed.outputFormat ?? "");
     setNewConstraints(m.constraints ?? parsed.constraints ?? "");
     setNewGoals(m.goals?.join("\n") ?? "");
-    setDispatchAcknowledged(true);
+    setDispatchAcknowledged(opts.editing);
     setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences(m.references ?? []);
     setNewSkills(m.skills ?? []);
     setNewCategoryId(m.categoryId ?? null);
-
     setNewModel(m.modelId || m.model || "");
     setNewProvider(m.provider || "");
     if (m.profileName) setNewProfile(m.profileName);
@@ -583,20 +590,30 @@ export function useMissionsPage() {
     if (m.schedule) {
       setNewSchedule(m.schedule);
       const s = m.schedule.trim();
-      if (s.includes("*") || /^\d/.test(s)) {
-        setScheduleType("wall-clock");
-      } else {
-        setScheduleType("interval");
-      }
+      setScheduleType(s.includes("*") || /^\d/.test(s) ? "wall-clock" : "interval");
     } else {
       setNewSchedule("every 5m");
       setScheduleType("interval");
     }
-
-    if (m.status === "successful" || m.status === "failed") {
+    if (opts.editing && (m.status === "successful" || m.status === "failed")) {
       setNewDispatch("now");
     }
+  }
+
+  // ── Mission handlers ───────────────────────────────────────────────
+
+  const handleEdit = (m: MissionRow) => {
+    setEditingId(m.id);
+    populateFormFromMission(m, { editing: true });
     setShowCreate(true);
+  };
+
+  const handleDuplicateMission = (m: MissionRow) => {
+    setEditingId(null);
+    populateFormFromMission(m, { editing: false, namePrefix: "(copy)" });
+    setNewDispatch("save");
+    setShowCreate(true);
+    showToast("Mission duplicated as draft", "success");
   };
 
   const handleSaveAsTemplate = async () => {
@@ -712,7 +729,7 @@ export function useMissionsPage() {
         defaultModel: newModel,
         defaultProvider: newProvider,
         timeoutMinutes: newTimeout,
-        categoryId: newCategoryId ?? undefined,
+        categoryId: newCategoryId ?? null,
         dispatchMode: editingTemplateId ? undefined : newDispatch,
         schedule: editingTemplateId ? undefined : newSchedule,
       });
@@ -826,38 +843,9 @@ export function useMissionsPage() {
     }
   };
   const handleTemplateSelect = (t: MissionTemplate) => {
-    setNewName(t.name);
     applyTemplateToForm(t);
-    const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
-    setNewCategoryId(cid);
     setShowCreate(true);
     showToast(`Template loaded: ${t.name}`, "success");
-  };
-
-  const handleDuplicateMission = (m: MissionRow) => {
-    setEditingId(null);
-    setNewName(`${m.name} (copy)`);
-    const parsed = parseMissionPrompt(m.prompt);
-    setNewInstruction(parsed.instruction);
-    setNewContext(parsed.context);
-    setNewOutputFormat(m.outputFormat ?? parsed.outputFormat ?? "");
-    setNewConstraints(m.constraints ?? parsed.constraints ?? "");
-    setNewGoals(m.goals?.join("\n") ?? "");
-    setDispatchAcknowledged(false);
-    setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
-    setNewReferences(m.references ?? []);
-    setNewSkills(m.skills ?? []);
-    setNewCategoryId(m.categoryId ?? null);
-    setNewModel(m.modelId || m.model || "");
-    setNewProvider(m.provider || "");
-    if (m.profileName) setNewProfile(m.profileName);
-    if (typeof m.missionTimeMinutes === "number") {
-      setNewMissionTime(m.missionTimeMinutes);
-    }
-    if (typeof m.timeoutMinutes === "number") setNewTimeout(m.timeoutMinutes);
-    setNewDispatch("save");
-    setShowCreate(true);
-    showToast("Mission duplicated as draft", "success");
   };
 
   const handleDelete = async (id: string) => {

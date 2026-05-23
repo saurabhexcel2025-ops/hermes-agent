@@ -1,14 +1,20 @@
 // ═══════════════════════════════════════════════════════════════
-// useSystemCronJobs — Shared hook for system cron CRUD
+// useSystemCronJobs — System cron jobs
+// ═══════════════════════════════════════════════════════════════
+// Handles system cron job CRUD via /api/cron/hardware.
+// Shares patterns with useCronJobs but uses hardware-specific
+// toast messages and has handleSave (specific to hardware).
 // ═══════════════════════════════════════════════════════════════
 
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useApiData } from "@/hooks/useApiData";
 import { useToast } from "@/components/ui/Toast";
 import { safeApiCall } from "@/lib/api-fetch";
-import { useApiData } from "@/hooks/useApiData";
 import type { SystemCronJob } from "@/types/hermes";
+
+const HARDWARE_ENDPOINT = "/api/cron/hardware";
 
 interface SystemCronData {
   jobs: SystemCronJob[];
@@ -17,9 +23,11 @@ interface SystemCronData {
 
 export function useSystemCronJobs() {
   const { showToast } = useToast();
-  const { data, loading, refetch: loadJobs } = useApiData<SystemCronData>("/api/cron/hardware", {
-    transform: (raw) => raw as SystemCronData,
-  });
+
+  const { data, loading, refetch: loadJobs } = useApiData<SystemCronData>(
+    HARDWARE_ENDPOINT,
+    { transform: (raw) => raw as SystemCronData },
+  );
 
   const jobs = useMemo(() => data?.jobs ?? [], [data?.jobs]);
 
@@ -28,7 +36,7 @@ export function useSystemCronJobs() {
       const job = jobs.find((j) => j.id === id);
       if (!job) return;
       const newEnabled = !job.enabled;
-      const { ok, error } = await safeApiCall("/api/cron/hardware", {
+      const { ok, error } = await safeApiCall(HARDWARE_ENDPOINT, {
         method: "PUT",
         body: { id, enabled: newEnabled },
       });
@@ -44,7 +52,7 @@ export function useSystemCronJobs() {
 
   const handleDelete = useCallback(
     async (id: string) => {
-      const { ok, error } = await safeApiCall(`/api/cron/hardware?id=${id}`, {
+      const { ok, error } = await safeApiCall(`${HARDWARE_ENDPOINT}?id=${id}`, {
         method: "DELETE",
       });
       if (ok) {
@@ -61,14 +69,14 @@ export function useSystemCronJobs() {
     async (job: Partial<SystemCronJob>) => {
       try {
         if (job.id) {
-          const { ok, error } = await safeApiCall("/api/cron/hardware", {
+          const { ok, error } = await safeApiCall(HARDWARE_ENDPOINT, {
             method: "PUT",
             body: job,
           });
           if (!ok) throw new Error(error || "Failed to update system cron job");
           showToast("System cron job updated");
         } else {
-          const { ok, error } = await safeApiCall("/api/cron/hardware", {
+          const { ok, error } = await safeApiCall(HARDWARE_ENDPOINT, {
             method: "POST",
             body: job,
           });
@@ -87,30 +95,18 @@ export function useSystemCronJobs() {
   );
 
   const handlePauseAll = useCallback(async () => {
-    const { ok, error, data } = await safeApiCall<{ pausedCount?: number }>("/api/cron/hardware", {
-      method: "POST",
-      body: { action: "pauseAll" },
-    });
+    const { ok, error, data: resData } = await safeApiCall<{ pausedCount?: number }>(
+      HARDWARE_ENDPOINT,
+      {
+        method: "POST",
+        body: { action: "pauseAll" },
+      },
+    );
     if (!ok) {
       showToast(error || "Failed to pause system cron jobs", "error");
     } else {
-      showToast(
-        `Paused ${data?.pausedCount ?? 0} system cron job(s)`,
-      );
+      showToast(`Paused ${resData?.pausedCount ?? 0} system cron job(s)`);
       loadJobs();
-    }
-  }, [showToast, loadJobs]);
-
-  const handleSync = useCallback(async () => {
-    const { ok, error } = await safeApiCall("/api/cron/hardware", {
-      method: "POST",
-      body: { action: "sync" },
-    });
-    if (ok) {
-      showToast("System cron jobs synced");
-      loadJobs();
-    } else {
-      showToast(error || "System cron sync failed", "error");
     }
   }, [showToast, loadJobs]);
 
@@ -122,6 +118,5 @@ export function useSystemCronJobs() {
     handleDelete,
     handleSave,
     handlePauseAll,
-    handleSync,
   };
 }
