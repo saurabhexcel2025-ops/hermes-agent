@@ -4,7 +4,6 @@
 
 "use client";
 
-import { useState } from "react";
 import {
   Play,
   Pause,
@@ -16,7 +15,8 @@ import {
   ChevronUp,
   Zap,
 } from "lucide-react";
-import { describeSchedule } from "@/components/cron/CronScheduleInput";
+import { describeSchedule } from "@/lib/schedule/types";
+import { useExpandable } from "@/hooks/useExpandable";
 
 export interface CronJob {
   id: string;
@@ -53,7 +53,7 @@ export default function JobCard({
   onRun,
   onEdit,
 }: JobCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const { expanded, toggle: setExpanded } = useExpandable();
   const handleDelete = async () => {
     if (!confirm("Delete this cron job?")) return;
     await onDelete(job.id);
