@@ -3,7 +3,7 @@ import * as fs from "fs";
 import { exec, execSync, ExecSyncOptions } from "child_process";
 
 import { logApiError } from "@/lib/api-logger";
-import { requireAuth } from "@/lib/api-auth";
+import { requireAuth, parseJsonBody } from "@/lib/api-auth";
 import { toError } from "@/lib/api-fetch";
 import { crontabLineUsesScriptsDir } from "@/lib/hardware-cron";
 import { getChScriptsDir, getChHardwareLogDir, CH_DATA_DIR } from "@/lib/paths";
@@ -185,10 +185,12 @@ export async function POST(request: NextRequest) {
   if (auth) return auth;
 
   try {
-    const body = await request.json();
+    const bodyResult = await parseJsonBody(request);
+    if (bodyResult instanceof NextResponse) return bodyResult;
+    const body = bodyResult;
 
     // ── pauseAll action ────────────────────────────────────────────────
-    if (body && typeof body === "object" && (body as Record<string, unknown>).action === "pauseAll") {
+    if ((body as Record<string, unknown>).action === "pauseAll") {
       const disabledIds = loadDisabledIds();
       const crontab = await readCrontab();
       const lines = crontab.split("\n");
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
     // ── Sync action ───────────────────────────────────────────────────
     // Re-read crontab and return all detected hardware cron jobs.
     // This picks up any jobs added or modified outside Control Hub.
-    if (body && typeof body === "object" && (body as Record<string, unknown>).action === "sync") {
+    if ((body as Record<string, unknown>).action === "sync") {
       const { jobs } = await readAndParseCrontab();
       return NextResponse.json({ data: { jobs, total: jobs.length } });
     }
@@ -301,7 +303,10 @@ export async function PUT(request: NextRequest) {
   if (auth) return auth;
 
   try {
-    const body = await request.json();
+    const bodyResult = await parseJsonBody(request);
+    if (bodyResult instanceof NextResponse) return bodyResult;
+    const body = bodyResult;
+
     const { id, schedule, command, name, logFile, enabled } = body as {
       id?: string;
       schedule?: string;

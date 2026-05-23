@@ -395,28 +395,41 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
 
   const allJobs = listCronJobs();
 
-  const jobsForPython = allJobs.map((j) => ({
-    id: j.hermes_job_id ?? j.id,
-    name: j.name,
-    prompt: j.prompt,
-    skills: j.skills,
-    model: j.model || undefined,
-    provider: j.provider || undefined,
-    base_url: j.base_url || undefined,
-    schedule: j.schedule,
-    schedule_display: j.schedule_display,
-    repeat_json: JSON.stringify(j.repeat),
-    enabled: j.enabled,
-    state: j.state,
-    deliver: j.deliver,
-    script: j.script,
-    profile_name: j.profile_name,
-    created_at: j.created_at,
-    next_run_at: j.next_run_at,
-    last_run_at: j.last_run_at,
-    last_status: j.last_status,
-    hermes_job_id: j.hermes_job_id,
-  }));
+  const jobsForPython = allJobs.map((j) => {
+    // j.schedule is a JSON string from SQLite — parse it to an object for Python
+    let scheduleObj: Record<string, unknown>;
+    try {
+      scheduleObj = { kind: "unknown", ...JSON.parse(j.schedule) };
+    } catch {
+      scheduleObj = { kind: j.schedule || "unknown" };
+    }
+    if (j.schedule_display) {
+      scheduleObj.display = j.schedule_display;
+    }
+    // j.repeat is a parsed object — stringify it for Python's json.loads()
+    const repeatObj = j.repeat ?? { times: 1, completed: 0 };
+    return {
+      id: j.hermes_job_id ?? j.id,
+      name: j.name,
+      prompt: j.prompt,
+      skills: j.skills,
+      model: j.model || undefined,
+      provider: j.provider || undefined,
+      base_url: j.base_url || undefined,
+      schedule: scheduleObj,
+      repeat_json: JSON.stringify(repeatObj),
+      enabled: j.enabled,
+      state: j.state,
+      deliver: j.deliver,
+      script: j.script,
+      profile_name: j.profile_name,
+      created_at: j.created_at,
+      next_run_at: j.next_run_at,
+      last_run_at: j.last_run_at,
+      last_status: j.last_status,
+      hermes_job_id: j.hermes_job_id,
+    };
+  });
 
   const script = buildPythonScript(hermesAgentPath, hermesHome, "write_all");
   const tmpScript = cronTempScriptPath("ch_cron_export");
