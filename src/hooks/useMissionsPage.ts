@@ -354,35 +354,8 @@ export function useMissionsPage() {
             (tmpl: MissionTemplate) => tmpl.id === templateId,
           );
           if (t) {
-            setNewName(t.name);
-            setNewInstruction(t.instruction);
-            setNewContext(t.context);
-            setNewGoals(t.goals.join("\n"));
-            setNewOutputFormat(
-              (t as MissionTemplate & { outputFormat?: string }).outputFormat ??
-                "",
-            );
-            setNewConstraints(
-              (t as MissionTemplate & { constraints?: string }).constraints ??
-                "",
-            );
-            if (t.profile) setNewProfile(t.profile);
-            if (t.defaultModel) setNewModel(t.defaultModel);
-            if (t.defaultProvider) setNewProvider(t.defaultProvider);
-            setNewLocalDirs(
-              normalizeLocalDirsInput(
-                (t as MissionTemplate & { localDirs?: unknown }).localDirs,
-              ),
-            );
-            setNewReferences(
-              (t as MissionTemplate & { references?: string[] }).references ??
-                [],
-            );
-            setNewSkills(t.suggestedSkills || []);
-            const cid =
-              (t as MissionTemplate & { categoryId?: string }).categoryId ??
-              null;
-            setNewCategoryId(cid);
+            const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
+            applyTemplateToForm(t, cid);
             if (cid) {
               try {
                 localStorage.setItem(LAST_CATEGORY_KEY, cid);
@@ -649,9 +622,8 @@ export function useMissionsPage() {
 
     setTemplateSaving(true);
     try {
-      const action = existingTemplate ? "update" : "create";
       const payload = buildTemplatePayload({
-        action,
+        action: existingTemplate ? "update" : "create",
         templateId: existingTemplate?.id,
         name,
         icon: templateIcon,
@@ -720,9 +692,8 @@ export function useMissionsPage() {
     if (!templateName.trim()) return;
     setTemplateSaving(true);
     try {
-      const action = editingTemplateId ? "update" : "create";
       const payload = buildTemplatePayload({
-        action,
+        action: editingTemplateId ? "update" : "create",
         templateId: editingTemplateId ?? undefined,
         name: templateName,
         icon: templateIcon,
@@ -741,7 +712,7 @@ export function useMissionsPage() {
         defaultModel: newModel,
         defaultProvider: newProvider,
         timeoutMinutes: newTimeout,
-        categoryId: newCategoryId,
+        categoryId: newCategoryId ?? undefined,
         dispatchMode: editingTemplateId ? undefined : newDispatch,
         schedule: editingTemplateId ? undefined : newSchedule,
       });
@@ -794,8 +765,11 @@ export function useMissionsPage() {
       context?: string;
       dispatchMode?: string;
       schedule?: string;
+      name?: string;
     },
+    categoryIdOverride?: string | null,
   ) => {
+    setNewName(t.name ?? "");
     setNewInstruction(t.instruction || "");
     setNewContext(t.context || "");
     setNewGoals((t.goals || []).join("\n"));
@@ -821,8 +795,11 @@ export function useMissionsPage() {
     setNewToolsets(
       (t as MissionTemplate & { suggestedToolsets?: string[] }).suggestedToolsets ?? [],
     );
-    const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
-    setNewCategoryId(cid);
+    setNewCategoryId(
+      categoryIdOverride !== undefined
+        ? categoryIdOverride
+        : (t as MissionTemplate & { categoryId?: string }).categoryId ?? null
+    );
     const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
     if (typeof tm === "number" && Number.isFinite(tm)) {
       setNewTimeout(tm);

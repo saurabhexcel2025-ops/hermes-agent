@@ -4,6 +4,7 @@ import { exec, execSync, ExecSyncOptions } from "child_process";
 
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
+import { toError } from "@/lib/api-fetch";
 import { crontabLineUsesScriptsDir } from "@/lib/hardware-cron";
 import { getChScriptsDir, getChHardwareLogDir, CH_DATA_DIR } from "@/lib/paths";
 
@@ -134,13 +135,9 @@ function writeCrontab(content: string): { ok: boolean; error?: string } {
     fs.unlinkSync(tmpFile);
     return { ok: true };
   } catch (e: unknown) {
-    try { fs.unlinkSync(tmpFile); } catch {}
-    return { ok: false, error: errorMessage(e) };
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    return { ok: false, error: toError(e).message };
   }
-}
-
-function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 // ── Shared crontab read+parse helper ─────────────────────────
@@ -179,7 +176,7 @@ export async function GET() {
     return NextResponse.json({ data: { jobs, total: jobs.length } });
   } catch (e: unknown) {
     logApiError("GET /api/cron/hardware", "read crontab", e);
-    return NextResponse.json({ error: `Failed to read crontab: ${errorMessage(e)}` }, { status: 500 });
+    return NextResponse.json({ error: `Failed to read crontab: ${toError(e).message}` }, { status: 500 });
   }
 }
 
@@ -295,7 +292,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (e: unknown) {
     logApiError("POST /api/cron/hardware", "create hardware cron", e);
-    return NextResponse.json({ error: `Failed to create hardware cron job: ${errorMessage(e)}` }, { status: 500 });
+    return NextResponse.json({ error: `Failed to create hardware cron job: ${toError(e).message}` }, { status: 500 });
   }
 }
 
@@ -400,7 +397,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ data: { id, schedule, command, name, logFile, enabled } });
   } catch (e: unknown) {
     logApiError("PUT /api/cron/hardware", "update hardware cron", e);
-    return NextResponse.json({ error: `Failed to update hardware cron job: ${errorMessage(e)}` }, { status: 500 });
+    return NextResponse.json({ error: `Failed to update hardware cron job: ${toError(e).message}` }, { status: 500 });
   }
 }
 
@@ -454,6 +451,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ data: { id } });
   } catch (e: unknown) {
     logApiError("DELETE /api/cron/hardware", "delete hardware cron", e);
-    return NextResponse.json({ error: `Failed to delete hardware cron job: ${errorMessage(e)}` }, { status: 500 });
+    return NextResponse.json({ error: `Failed to delete hardware cron job: ${toError(e).message}` }, { status: 500 });
   }
 }

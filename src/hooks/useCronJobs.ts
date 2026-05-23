@@ -17,7 +17,7 @@ interface CronData {
 
 export function useCronJobs() {
   const { showToast } = useToast();
-  const { data, loading, error: _apiError, refetch: loadJobs } = useApiData<CronData>("/api/cron", {
+  const { data, loading, refetch: loadJobs } = useApiData<CronData>("/api/cron", {
     transform: (raw) => raw as CronData,
   });
 
