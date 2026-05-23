@@ -15,9 +15,15 @@ jest.mock("fs", () => ({
 }));
 
 const mockExecSync = jest.fn();
+const mockExec = jest.fn((cmd: string, _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+  // Route through mockExecSync for test compatibility (passes the command string)
+  cb(null, mockExecSync(cmd) as string);
+  return { on: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+});
 
 jest.mock("child_process", () => ({
   execSync: (...args: unknown[]) => mockExecSync(...args),
+  exec: (...args: unknown[]) => mockExec(...args),
 }));
 
 jest.mock("@/lib/paths", () => ({

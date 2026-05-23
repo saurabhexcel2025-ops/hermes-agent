@@ -32,6 +32,10 @@ import {
   type CronJobRecord,
 } from "@/lib/cron-repository";
 
+import {
+  parseScheduleToJson,
+} from "@/lib/cron/write";
+
 import { getDefaultModel } from "@/lib/models-repository";
 
 function cronSyncFailureResponse(
@@ -242,7 +246,7 @@ export async function POST(request: NextRequest) {
       provider: resolvedProvider,
       base_url: (base_url as string | null) ?? null,
       schedule,
-      schedule_display: parsedSchedule.display,
+      schedule_display: "display" in parsedSchedule ? (parsedSchedule as { display: string }).display : schedule,
       repeat: repeatObj,
       enabled: true,
       state: "scheduled",
@@ -354,12 +358,13 @@ export async function PUT(request: NextRequest) {
     if (updates.state !== undefined) updatePayload.state = updates.state as string;
 
     if (updates.schedule !== undefined) {
-      const parsed = parseSchedule(updates.schedule as string);
-      if (parsed.kind === "invalid") {
-        return NextResponse.json({ error: parsed.message }, { status: 400 });
+      const rawParsed = parseSchedule(updates.schedule as string);
+      if (rawParsed.kind === "invalid") {
+        return NextResponse.json({ error: rawParsed.message }, { status: 400 });
       }
+      const schedParsed = parseScheduleToJson(updates.schedule as string);
       updatePayload.schedule = updates.schedule as string;
-      updatePayload.schedule_display = (parsed as { display?: string }).display ?? (updates.schedule as string);
+      updatePayload.schedule_display = schedParsed.scheduleDisplay;
     }
 
     if (updates.repeat !== undefined) {
