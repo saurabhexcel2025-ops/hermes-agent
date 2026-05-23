@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, existsSync, statSync } from "fs";
+import { join } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
+import { getSession } from "@/lib/session-repository";
+import { PATHS } from "@/lib/paths";
 import {
   getMaxSessionFileBytes,
   sessionsRateLimitResponse,
@@ -38,10 +41,59 @@ export async function GET(
   } else if (existsSync(fullPath + ".jsonl")) {
     filePath = fullPath + ".jsonl";
   } else {
-      return NextResponse.json(
-        { error: `Session "${sanitizedId}" not found` },
-        { status: 404 }
-      );
+    // No file on disk — try the DB record for mission-born sessions
+    const dbSession = getSession(sanitizedId);
+    if (dbSession && (dbSession.source === "mission" || dbSession.source === "cron")) {
+      // Check for a mission output file
+      if (dbSession.missionId) {
+        const missionFile = join(PATHS.missions, `${dbSession.missionId}.session`);
+        const missionLog = join(PATHS.missions, `${dbSession.missionId}.output.log`);
+        const sessionPath = existsSync(missionFile) ? missionFile : existsSync(missionLog) ? missionLog : null;
+        if (sessionPath) {
+          const content = readFileSync(sessionPath, "utf-8");
+          const lines = content.split("\n").filter((l) => l.trim());
+          const messages = lines.map((line, i) => ({
+            index: i,
+            role: "assistant",
+            content: line,
+          }));
+          const st = statSync(sessionPath);
+          return NextResponse.json({
+            data: {
+              id: sanitizedId,
+              filename: sessionPath.split("/").pop(),
+              format: dbSession.missionId ? "mission-output" : "db",
+              title: dbSession.title || sanitizedId,
+              model: dbSession.modelId || "",
+              source: dbSession.source,
+              messages,
+              messageCount: messages.length,
+              size: st.size,
+              created: dbSession.startedAt,
+            },
+          });
+        }
+      }
+      return NextResponse.json({
+        data: {
+          id: sanitizedId,
+          filename: sanitizedId,
+          format: "db",
+          title: dbSession.title || sanitizedId,
+          model: dbSession.modelId || "",
+          source: dbSession.source,
+          messages: [],
+          messageCount: 0,
+          size: dbSession.size,
+          created: dbSession.startedAt,
+          note: "Session transcript is stored in Hermes Agent — not available as a file in Control Hub.",
+        },
+      });
+    }
+    return NextResponse.json(
+      { error: `Session "${sanitizedId}" not found` },
+      { status: 404 }
+    );
   }
 
   try {

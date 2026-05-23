@@ -40,7 +40,7 @@ import {
 import type { MissionCategory } from "@/lib/mission-category-repository";
 import TemplateCard from "@/components/ui/TemplateCard";
 import { useToast } from "@/components/ui/Toast";
-import type { SystemStatus, AccentColor } from "@/types/hermes";
+import type { SystemStatus, AccentColor, MonitorData, HermesProcess, MissionBrief } from "@/types/hermes";
 import { timeAgo, timeUntil, titleCase, parseSchedule } from "@/lib/utils";
 
 const MONITOR_FETCH_INIT: RequestInit = { cache: "no-store" };
@@ -48,29 +48,6 @@ import AppPageShell from "@/components/layout/AppPageShell";
 import { shellHeaderBarClasses } from "@/lib/theme";
 import { StatPillSkeleton } from "@/components/skeletons";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-
-interface HermesProcess {
-  id: string;
-  type: "cron" | "gateway" | "manual" | "subagent";
-  name: string;
-  status: "running" | "idle";
-  startedAt: string | null;
-  lastActivity: string | null;
-  model: string;
-  pid: number | null;
-  turns: number;
-}
-
-interface MissionBrief {
-  id: string;
-  name: string;
-  status: string;
-  dispatchMode: string;
-  createdAt: string;
-  cronJobId?: string;
-  cronJob?: { state: string; enabled: boolean; lastRun: string | null; lastStatus: string | null };
-  latestSession?: { id: string; modified: string } | null;
-}
 
 // ── Live Clock (isolated re-render) ───────────────────────────
 
@@ -92,64 +69,50 @@ const LiveClock = reactMemo(function LiveClock() {
   );
 });
 
-// ── Status Badge ──────────────────────────────────────────────
-function MissionStatusBadge({ status }: { status: string }) {
-  const styles: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-    queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-3 h-3 flex-shrink-0" /> },
-    dispatched: { bg: "bg-neon-cyan/10", text: "text-neon-cyan", icon: <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" /> },
-    successful: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> },
-    failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-3 h-3 flex-shrink-0" /> },
-  };
-  const s = styles[status] || styles.queued;
+// ── Status Badge (unified — used by both missions and cron) ──
+interface StatusBadgeDef {
+  bg: string;
+  text: string;
+  icon: React.ReactNode;
+  label: string;
+}
+
+function StatusBadge({ def }: { def: StatusBadgeDef }) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${s.bg} ${s.text} flex-shrink-0`}>
-      {s.icon} {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${def.bg} ${def.text} flex-shrink-0`}>
+      {def.icon} {def.label}
     </span>
   );
 }
 
-interface CronJob {
-  id: string;
-  name: string;
-  state: string;
-  enabled: boolean;
-  schedule: string;
-  lastRun: string | null;
-  nextRun: string | null;
-  lastStatus: string | null;
-}
+const MISSION_BADGE_STYLES: Record<string, StatusBadgeDef> = {
+  queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-3 h-3" />, label: "Queued" },
+  dispatched: { bg: "bg-neon-cyan/10", text: "text-neon-cyan", icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Dispatched" },
+  successful: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-3 h-3" />, label: "Successful" },
+  failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-3 h-3" />, label: "Failed" },
+};
 
-interface MonitorData {
-  cron: { total: number; active: number; paused: number; jobs: CronJob[] };
-  sessions: { total: number; recent: Array<{ id: string; modified: string; size: number }> };
-  gateway: { platforms: Record<string, boolean>; connectedCount: number };
-  memory: { factCount: number; dbSize: string; provider: string };
-  errors: Array<{ source: string; message: string; timestamp: string; severity: string }>;
-  system: { uptime: string; configPresent: boolean; soulPresent: boolean };
-  sync: { lastRun: string | null; allSuccessful: boolean; sourceStatuses: Record<string, string> };
+const CRON_BADGE_STYLES: Record<string, StatusBadgeDef> = {
+  running: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Loader2 className="w-2.5 h-2.5 animate-spin" />, label: "Running" },
+  scheduled: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Play className="w-2.5 h-2.5" />, label: "Active" },
+  queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-2.5 h-2.5" />, label: "Queued" },
+  completed: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-2.5 h-2.5" />, label: "Done" },
+  failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-2.5 h-2.5" />, label: "Failed" },
+};
+
+function MissionStatusBadge({ status }: { status: string }) {
+  const def = MISSION_BADGE_STYLES[status] || MISSION_BADGE_STYLES.queued;
+  return <StatusBadge def={{ ...def, label: status.charAt(0).toUpperCase() + status.slice(1) }} />;
 }
 
 function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }) {
   if (!enabled) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-white/40 flex-shrink-0">
-        <Pause className="w-2.5 h-2.5 flex-shrink-0" /> Paused
-      </span>
+      <StatusBadge def={{ bg: "bg-white/5", text: "text-white/40", icon: <Pause className="w-2.5 h-2.5" />, label: "Paused" }} />
     );
   }
-  const styles: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
-    running: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Loader2 className="w-2.5 h-2.5 animate-spin flex-shrink-0" />, label: "Running" },
-    scheduled: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <Play className="w-2.5 h-2.5 flex-shrink-0" />, label: "Active" },
-    queued: { bg: "bg-neon-orange/10", text: "text-neon-orange", icon: <Clock className="w-2.5 h-2.5 flex-shrink-0" />, label: "Queued" },
-    completed: { bg: "bg-neon-green/10", text: "text-neon-green", icon: <CheckCircle2 className="w-2.5 h-2.5 flex-shrink-0" />, label: "Done" },
-    failed: { bg: "bg-red-500/10", text: "text-red-400", icon: <XCircle className="w-2.5 h-2.5 flex-shrink-0" />, label: "Failed" },
-  };
-  const s = styles[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: state.charAt(0).toUpperCase() + state.slice(1) };
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono ${s.bg} ${s.text} flex-shrink-0`}>
-      {s.icon} {s.label}
-    </span>
-  );
+  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null as unknown as React.ReactNode, label: state.charAt(0).toUpperCase() + state.slice(1) };
+  return <StatusBadge def={def} />;
 }
 
 // ── Compact Stat Pill ─────────────────────────────────────────
@@ -331,24 +294,16 @@ export default function Dashboard() {
       if (!putRes.ok) {
         const body = await putRes.json().catch(() => null);
         showToast(body?.error || "Failed to update cron schedule", "error");
-        const res = await fetch("/api/monitor", MONITOR_FETCH_INIT);
-        const d = await res.json();
-        if (d.data) setData({ monitor: d.data });
         return;
       }
-      const res = await fetch("/api/monitor", MONITOR_FETCH_INIT);
-      const d = await res.json();
-      if (d.data) setData({ monitor: d.data });
       showToast("Schedule updated", "success");
     } catch {
       showToast("Failed to update cron schedule", "error");
-      const res = await fetch("/api/monitor", MONITOR_FETCH_INIT).catch(() => null);
-      if (res?.ok) {
-        const d = await res.json().catch(() => null);
-        if (d?.data) setData({ monitor: d.data });
-      }
+    } finally {
+      // Refresh monitor to reconcile optimistic update with actual state
+      await refreshMonitor();
     }
-  }, [showToast, setData]);
+  }, [showToast, setDataFields, refreshMonitor]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -405,42 +360,56 @@ export default function Dashboard() {
     };
     initialLoad();
 
-    // Polling: monitor (10s), processes (15s), missions (15s)
-    const monitorInterval = setInterval(async () => {
-      if (!signal.aborted) {
-        const res = await fetch("/api/monitor", { ...MONITOR_FETCH_INIT, signal }).catch(() => null);
-        if (res?.ok) {
-          const d = await res.json().catch(() => null);
-          if (d?.data) setData({ monitor: d.data });
-        }
-      }
-    }, 10000);
+    // ── Polling: consolidated — runs each interval on schedule ──────────
+    interface PollConfig {
+      url: string;
+      ms: number;
+      extract: (d: { data?: unknown }) => Record<string, unknown> | null;
+      init?: RequestInit;
+    }
 
-    const processesInterval = setInterval(async () => {
-      if (!signal.aborted) {
-        const res = await fetch("/api/agents", { signal }).catch(() => null);
-        if (res?.ok) {
-          const d = await res.json().catch(() => null);
-          if (d?.data) setData({ processes: d.data.processes || [] });
-        }
-      }
-    }, 15000);
+    const polls: PollConfig[] = [
+      {
+        url: "/api/monitor",
+        ms: 10000,
+        extract: (d) => {
+          if (!d?.data) return null;
+          return { monitor: d.data as unknown as MonitorData } as unknown as Record<string, unknown>;
+        },
+      },
+      {
+        url: "/api/agents",
+        ms: 15000,
+        extract: (d) => {
+          if (!d?.data) return null;
+          return { processes: (d.data as unknown as { processes?: HermesProcess[] }).processes || [] };
+        },
+      },
+      {
+        url: "/api/missions",
+        ms: 15000,
+        extract: (d) => {
+          if (!d?.data) return null;
+          return { missions: (d.data as unknown as { missions?: MissionBrief[] }).missions || [] };
+        },
+      },
+    ];
 
-    const missionsInterval = setInterval(async () => {
-      if (!signal.aborted) {
-        const res = await fetch("/api/missions", { signal }).catch(() => null);
-        if (res?.ok) {
-          const d = await res.json().catch(() => null);
-          if (d?.data) setData({ missions: d.data.missions || [] });
-        }
-      }
-    }, 15000);
+    const pollIntervals = polls.map(({ url, ms, extract, init }) =>
+      setInterval(async () => {
+        if (signal.aborted) return;
+        const res = await fetch(url, { ...init, signal }).catch(() => null);
+        if (!res?.ok) return;
+        const d = await res.json().catch(() => null);
+        if (!d) return;
+        const update = extract(d);
+        if (update) setData(update);
+      }, ms),
+    );
 
     return () => {
       controller.abort();
-      clearInterval(monitorInterval);
-      clearInterval(processesInterval);
-      clearInterval(missionsInterval);
+      pollIntervals.forEach(clearInterval);
     };
   }, [setData]);
 

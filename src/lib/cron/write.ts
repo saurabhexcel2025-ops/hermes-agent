@@ -23,7 +23,8 @@ function parseScheduleToJson(
   };
 }
 
-function parseRepeatJson(
+/** Serialize repeat for SQLite storage (exported for tests). */
+export function parseRepeatJson(
   repeat?: { times: number | null; completed?: number }
 ): string {
   if (repeat === undefined) {
