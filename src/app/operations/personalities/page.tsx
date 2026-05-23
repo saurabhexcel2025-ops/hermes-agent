@@ -176,8 +176,8 @@ function EditPersonalityModal({
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: isEdit
-          ? JSON.stringify({ originalName: personality.name, name: name.trim(), prompt: prompt.trim() })
-          : JSON.stringify({ name: name.trim(), prompt: prompt.trim() }),
+          ? JSON.stringify({ profile: name.trim(), prompt: prompt.trim() })
+          : JSON.stringify({ profile: name.trim(), prompt: prompt.trim() }),
       });
       if (!res.ok) {
         const body = await res.json();

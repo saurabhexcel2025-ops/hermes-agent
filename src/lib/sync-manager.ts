@@ -177,73 +177,12 @@ export function pushModelToHermes(modelId: string): SyncActionResult {
   }
 }
 
-// ── Credential pull (Hermes .env → Control Hub) ──────────────
-
-/**
- * Read a credential value for a provider from the Hermes .env file.
- * Returns the raw value so the caller can display or store it.
- */
-export function pullCredentialFromEnv(provider: string): SyncActionResult & { value?: string } {
-  if (!isHermesProvider(provider as HermesProvider)) {
-    return {
-      success: false,
-      backupPath: null,
-      details: [{ action: "error", detail: `Unknown provider: ${provider}` }],
-    };
-  }
-  const envVar = envVarForProvider(provider as HermesProvider);
-  if (!envVar) {
-    return {
-      success: false,
-      backupPath: null,
-      details: [{ action: "error", detail: `Provider "${provider}" uses OAuth — no env var to read` }],
-    };
-  }
-  const paths = getActiveHermesPaths();
-  if (!existsSync(paths.env)) {
-    return {
-      success: false,
-      backupPath: null,
-      details: [{ action: "error", detail: "No .env file found" }],
-    };
-  }
-  try {
-    const raw = readFileSync(paths.env, "utf-8");
-    const lines = raw.split(/\r?\n/);
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("#") || !trimmed.includes("=")) continue;
-      const [key, ...rest] = trimmed.split("=");
-      if (key === envVar) {
-        const value = rest.join("=");
-        return {
-          success: true,
-          backupPath: null,
-          details: [{ action: "pulled", detail: `Read credential for ${provider} from .env` }],
-          value,
-        };
-      }
-    }
-    return {
-      success: false,
-      backupPath: null,
-      details: [{ action: "not_found", detail: `No env var ${envVar} in .env for ${provider}` }],
-    };
-  } catch (err) {
-    return {
-      success: false,
-      backupPath: null,
-      details: [{ action: "error", detail: String(err instanceof Error ? err.message : err) }],
-    };
-  }
-}
-
 // ── Credential push (Control Hub → Hermes .env) ──────────────
 
 /**
  * Push a credential (provider + apiKey) to the Hermes .env file.
  */
-export function pushCredentialToHermesEnv(provider: string, apiKey: string): SyncActionResult {
+function pushCredentialToHermesEnv(provider: string, apiKey: string): SyncActionResult {
   if (!isHermesProvider(provider as HermesProvider)) {
     return {
       success: false,
@@ -295,89 +234,4 @@ export function pushCredential(credentialId: string): SyncActionResult {
     };
   }
   return pushCredentialToHermesEnv(cred.provider, cred.apiKey);
-}
-
-// ── Full push (models + credentials + fallbacks → Hermes) ─────
-
-export interface FullPushResult {
-  modelResults: SyncActionResult[];
-  credentialResults: SyncActionResult[];
-  fallbackResult: SyncActionResult | null;
-}
-
-/**
- * Push all default models (agent + 11 auxiliary), all credentials, and the
- * fallback chain to Hermes files. Uses syncDefaultsToHermesConfig which
- * writes the full set of 12 task-slot defaults to config.yaml's model.*
- * and auxiliary.* sections.
- */
-export function pushAllToHermes(): FullPushResult {
-  const modelResults: SyncActionResult[] = [];
-  const credentialResults: SyncActionResult[] = [];
-
-  // Push all default models (agent + 11 auxiliary) via syncDefaultsToHermesConfig
-  try {
-    const { backupPath } = syncDefaultsToHermesConfig();
-    modelResults.push({
-      success: true,
-      backupPath,
-      details: [{ action: "pushed", detail: "All default models synced to config.yaml" }],
-    });
-  } catch (err) {
-    modelResults.push({
-      success: false,
-      backupPath: null,
-      details: [{ action: "error", detail: String(err instanceof Error ? err.message : err) }],
-    });
-  }
-
-  // Push every credential
-  const credentials = listCredentials();
-  for (const cred of credentials) {
-    const full = getCredentialWithKey(cred.id);
-    if (!full) continue;
-    const result = pushCredentialToHermesEnv(full.provider, full.apiKey);
-    if (result.success) {
-      credentialResults.push(result);
-    }
-  }
-
-  // Push fallback chain + behaviour config
-  let fallbackResult: FullPushResult["fallbackResult"] = null;
-  try {
-    const chain = listFallbackChain().filter((e) => e.enabled);
-    const config = getFallbackConfig();
-    const synced = syncFallbacksToHermesConfig(
-      chain.map((e) => ({
-        modelId: e.modelIdString,
-        provider: e.provider,
-        baseUrl: null,
-        overrideBaseUrl: e.overrideBaseUrl,
-        apiKey: null,
-      })),
-      {
-        restorePrimaryOnFallback: config.restorePrimaryOnFallback,
-        fallbackNotification: config.fallbackNotification,
-        apiMaxRetries: config.apiMaxRetries,
-      }
-    );
-    fallbackResult = {
-      success: true,
-      backupPath: synced.backupPath,
-      details: [{ action: "pushed", detail: `Fallback chain synced to ${synced.configPath}` }],
-    };
-  } catch (err) {
-    fallbackResult = {
-      success: false,
-      backupPath: null,
-      details: [
-        {
-          action: "error",
-          detail: err instanceof Error ? err.message : "Fallback sync failed",
-        },
-      ],
-    };
-  }
-
-  return { modelResults, credentialResults, fallbackResult };
 }

@@ -4,7 +4,7 @@ import { useMissionsApi } from "@/hooks/useMissionsApi";
 import type { LocalDirEntry, Mission } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import { parseMissionPrompt } from "@/lib/build-mission-prompt";
-import { flattenProfileToolsets } from "@/lib/hermes-toolset-catalog";
+import { unionToolsetsFromPlatforms } from "@/lib/hermes-toolset-unify";
 import type { PlatformToolsets } from "@/lib/profile-config-builder";
 import type { MissionFormState } from "@/components/missions/MissionCreateForm";
 import type { MissionTemplate } from "@/components/missions/TemplateModals";
@@ -245,7 +245,7 @@ export function useMissionsPage() {
             .map((s) => s.name),
         );
         const toolsetIds = new Set(
-          flattenProfileToolsets(
+          unionToolsetsFromPlatforms(
             (toolsetsData.data?.platformToolsets ?? {}) as PlatformToolsets,
           ),
         );

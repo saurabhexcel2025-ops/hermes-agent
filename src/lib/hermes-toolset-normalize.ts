@@ -5,6 +5,7 @@
 // Store compact lists: dedupe per platform; drop entries subsumed by hermes-cli.
 
 import type { PlatformToolsets } from "./profile-config-builder";
+import { dedupeSorted } from "./hermes-toolset-unify";
 
 /** Toolset names commonly expanded when hermes-cli is saved from `hermes tools`. */
 const HERMES_CLI_SUBSUMED = new Set([
@@ -28,10 +29,6 @@ const HERMES_CLI_SUBSUMED = new Set([
 ]);
 
 const PLATFORM_BUNDLE_PREFIX = "hermes-";
-
-function dedupeSorted(items: string[]): string[] {
-  return [...new Set(items.map((item) => item.trim()).filter(Boolean))].sort();
-}
 
 function normalizePlatformList(toolsets: string[]): string[] {
   const deduped = dedupeSorted(toolsets);
