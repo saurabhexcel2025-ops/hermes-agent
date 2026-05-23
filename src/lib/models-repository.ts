@@ -106,8 +106,6 @@ function rowToModel(row: ModelRow): ModelRecord {
   };
 }
 
-
-
 // ── Read ───────────────────────────────────────────────────────
 
 export function listModels(): ModelRecord[] {
@@ -146,7 +144,9 @@ export function getDefaultModel(taskType: TaskType): ModelRecord | null {
 }
 
 export function getModelDefaults(): ModelDefaults {
-  const defaults = emptyModelDefaults() as unknown as ModelDefaults;
+  // emptyModelDefaults() returns Record<TaskType, string | null> which is
+  // structurally identical to ModelDefaults — the cast is safe.
+  const defaults = emptyModelDefaults() as ModelDefaults;
   
   const rows = db()
     .prepare("SELECT task_type, model_id FROM model_defaults")

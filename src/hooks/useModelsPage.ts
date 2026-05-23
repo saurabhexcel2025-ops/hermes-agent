@@ -13,7 +13,7 @@ import type { FallbackChainEntry, FallbackConfig } from "@/types/hermes";
 import type { SyncActionResult } from "@/lib/sync-manager";
 import { emptyModelDefaults } from "@/lib/utils";
 
-import type { ApiCredential, ApiModel, ApiModelDefaults, SyncDrift } from "@/components/models/types";
+import type { ApiCredential, ApiModel, SyncDrift } from "@/components/models/types";
 
 export function useModelsPage() {
   const [models, setModels] = useState<ApiModel[]>([]);
@@ -72,7 +72,7 @@ export function useModelsPage() {
 
       const m = (await mRes.json()) as { data?: { models?: ApiModel[] } };
       const c = (await cRes.json()) as { data?: { credentials?: ApiCredential[] } };
-      const d = (await dRes.json()) as { data?: { defaults?: ApiModelDefaults } };
+      const d = (await dRes.json()) as { data?: { defaults?: Record<TaskType, string | null> } };
       const driftData = driftRes.ok
         ? ((await driftRes.json()) as { data?: SyncDrift })
         : { data: null };
