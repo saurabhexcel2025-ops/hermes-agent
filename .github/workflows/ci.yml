@@ -20,14 +20,14 @@ jobs:
   shell-custom-scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-with-retry
       - name: Hermes profile helpers + dotenv (isolated /tmp HERMES_HOME)
         run: bash tests/scripts/run-shell-custom-tests.sh
 
   build-test-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-with-retry
       - uses: actions/setup-node@v5
         with:
           node-version: "20"
@@ -57,7 +57,7 @@ jobs:
   build-test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-with-retry
       - uses: actions/setup-node@v5
         with:
           node-version: "20"
@@ -81,7 +81,7 @@ jobs:
   e2e-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-with-retry
       - uses: actions/setup-node@v5
         with:
           node-version: "20"
@@ -113,7 +113,7 @@ jobs:
   docker-image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-with-retry
       - name: Build production Docker image
         run: docker build -f Dockerfile -t control-hub:ci .
       - name: Dashboard deploy API — restart smoke (Docker)
