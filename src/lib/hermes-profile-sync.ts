@@ -125,10 +125,6 @@ function ensureProfileDirs(root: string): void {
       mkdirSync(dir, { recursive: true });
     }
   }
-  const memories = root + "/memories";
-  if (!existsSync(memories)) {
-    mkdirSync(memories, { recursive: true });
-  }
 }
 
 function ensureAuthJson(profileRoot: string, defaultRoot: string): void {

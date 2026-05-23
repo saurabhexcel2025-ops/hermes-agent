@@ -2,20 +2,10 @@
 // /config/models — API row shapes used by the models page
 // ═══════════════════════════════════════════════════════════════
 
-export interface ApiModelDefaults {
-  agent: string | null;
-  hindsight: string | null;
-  compression: string | null;
-  vision: string | null;
-  web_extract: string | null;
-  session_search: string | null;
-  title_generation: string | null;
-  skills_hub: string | null;
-  mcp: string | null;
-  triage_specifier: string | null;
-  approval: string | null;
-  delegation: string | null;
-}
+import type { ModelDefaults } from "@/lib/models-repository";
+
+// Re-export for use in frontend code
+export type ApiModelDefaults = ModelDefaults;
 
 export interface ApiModel {
   id: string;
