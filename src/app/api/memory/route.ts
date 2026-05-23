@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getMemoryProviderType } from "@/lib/memory-providers";
 import { logApiError } from "@/lib/api-logger";
-import type { ApiResponse, MemoryData } from "@/types/hermes";
+import type { ApiResponse } from "@/types/hermes";
+import type { MemoryData } from "@/lib/memory-providers";
 
 // ── Shared Error Responses ──────────────────────────────────────
 

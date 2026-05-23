@@ -61,24 +61,12 @@ function recordToApiJob(job: CronJobRecord) {
     model: job.model,
     provider: job.provider,
     base_url: job.base_url,
-    // Prefer schedule_display unless it's the Hermes "?" fallback — fall back to the raw schedule JSON
-    const safeScheduleDisplay =
-      job.schedule_display && job.schedule_display !== "?" ? job.schedule_display : null;
-    const safeSchedule =
-      job.schedule_display && job.schedule_display !== "?"
-        ? job.schedule_display
-        : job.schedule && job.schedule !== "?" ? job.schedule : null;
-
-  return {
-    id: job.id,
-    name: job.name,
-    prompt: job.prompt,
-    skills: job.skills,
-    model: job.model,
-    provider: job.provider,
-    base_url: job.base_url,
-    schedule: safeSchedule ?? job.schedule_display ?? job.schedule ?? null,
-    schedule_display: safeScheduleDisplay ?? job.schedule_display ?? null,
+    schedule: job.schedule_display && job.schedule_display !== "?"
+      ? job.schedule_display
+      : job.schedule && job.schedule !== "?" ? job.schedule : null,
+    schedule_display: job.schedule_display && job.schedule_display !== "?"
+      ? job.schedule_display
+      : null,
     enabled: job.enabled,
     state: job.state,
     deliver: job.deliver,

@@ -9,7 +9,8 @@ import { Brain } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import AppPageShell from "@/components/layout/AppPageShell";
-import type { MemoryProviderType, MemoryData } from "@/types/hermes";
+import type { MemoryProviderType } from "@/lib/memory-providers";
+import type { MemoryData } from "@/lib/memory-providers";
 import { timeAgo } from "@/lib/utils";
 
 // Lazy load provider-specific components

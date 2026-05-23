@@ -148,38 +148,6 @@ export interface SessionsData {
   total: number;
 }
 
-// ── Memory ─────────────────────────────────────────────────────
-
-export type MemoryProviderType = "holographic" | "hindsight" | "none";
-
-export interface MemoryFact {
-  id: number;
-  content: string;
-  category: string;
-  tags: string;
-  trust: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MemoryBank {
-  bank_name: string;
-  fact_count: number;
-  updated_at: string;
-}
-
-export interface MemoryData {
-  facts: MemoryFact[];
-  total: number;
-  dbSize: number;
-  available: boolean;
-  provider: MemoryProviderType;
-  error?: string;
-  message?: string;
-  entities?: number;
-  banks?: MemoryBank[];
-}
-
 // ── Agent Profiles ────────────────────────────────────────────
 
 export interface ProfileFile {
