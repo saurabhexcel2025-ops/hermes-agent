@@ -166,7 +166,7 @@ export async function GET(
           messageCount: 0,
           size: dbSession.size,
           created: dbSession.startedAt,
-          note: "Session transcript is stored in Hermes Agent state.db — loaded above if available.",
+          note: "No session output file found. The agent ran but produced no output file.",
         },
       });
     }

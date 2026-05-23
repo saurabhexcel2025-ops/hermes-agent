@@ -239,9 +239,16 @@ export function importHermesJobs(): {
             deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
             orphan=0`;
+      // Guard against Hermes returning "?" (fallback from _schedule_display_for_job)
+      // which would overwrite a valid CH value on import.
+      const safeScheduleDisplay =
+        row.schedule_display && row.schedule_display !== "?" ? row.schedule_display : existing.schedule_display;
+      const safeSchedule =
+        row.schedule && row.schedule !== "?" ? row.schedule : existing.schedule;
+
       const updateParams = preserveChIntent
         ? [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
-           row.schedule, row.schedule_display,
+           safeSchedule, safeScheduleDisplay,
            row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
            row.last_status, row.last_delivery_error, ts]
         : [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
