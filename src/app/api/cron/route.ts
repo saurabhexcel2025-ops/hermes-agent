@@ -71,8 +71,6 @@ function recordToApiJob(job: CronJobRecord) {
     profile_name: job.profile_name,
     next_run_at: job.next_run_at,
     last_run_at: job.last_run_at,
-    nextRun: job.next_run_at,
-    lastRun: job.last_run_at,
     last_status: job.last_status,
     hermes_job_id: job.hermes_job_id,
     source: job.source,
