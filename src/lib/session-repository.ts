@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { db, uuid, now } from "./db";
+import Database from "better-sqlite3";
 import { getActiveHermesPaths } from "./hermes-agent-runtime";
 import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
@@ -244,64 +245,97 @@ interface HermesSessionFile {
 }
 
 /**
- * Read Hermes's session directory and return lightweight metadata for each file.
- * Does NOT parse the JSON content — only filename patterns + stat().
+ * Read session metadata directly from Hermes's state.db SQLite database.
+ * Hermes (v0.14+) stores all sessions here instead of flat JSON files.
+ * Returns lightweight session metadata suitable for the sessions table.
  */
-function scanHermesSessionDir(): HermesSessionFile[] {
-  const sessionsPath = getActiveHermesPaths().sessions;
-  if (!existsSync(sessionsPath)) return [];
+function readHermesSessionsFromStateDb(): HermesSessionFile[] {
+  const root = getActiveHermesPaths().root;
+  const stateDbPath = join(root, "state.db");
+  if (!existsSync(stateDbPath)) return [];
 
   try {
-    return readdirSync(sessionsPath)
-      .filter((f) => f.endsWith(".json") || f.endsWith(".jsonl"))
-      .map((file) => {
-        const fullPath = join(sessionsPath, file);
-        const stats = statSync(fullPath);
-        const id = file.replace(/\.(json|jsonl)$/, "");
-        let title = "";
-        let source: SessionSource = "cli";
+    const hermesDb = new Database(stateDbPath, { readonly: true });
+    // Ensure sessions table exists
+    const tables = hermesDb
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+      .all();
+    if (tables.length === 0) {
+      hermesDb.close();
+      return [];
+    }
 
-        if (file.startsWith("session_cron_")) {
-          source = "cron";
-          const parts = file.replace(/\.(json|jsonl)$/, "").split("_");
-          if (parts.length >= 4) {
-            title = `Cron: ${parts[2]} — ${parts.slice(3).join(" ")}`;
-          }
-        } else if (file.startsWith("session_")) {
-          source = "cli";
-          title = file.replace(/_/g, " ").replace(/\.(json|jsonl)$/, "");
+    const rows = hermesDb
+      .prepare(
+        `SELECT id, source, model, title, started_at, ended_at, message_count, api_call_count
+         FROM sessions ORDER BY started_at DESC LIMIT 5000`,
+      )
+      .all() as Array<{
+      id: string;
+      source: string;
+      model: string;
+      title: string | null;
+      started_at: number;
+      ended_at: number | null;
+      message_count: number | null;
+      api_call_count: number | null;
+    }>;
+    hermesDb.close();
+
+    return rows.map((row) => {
+      const startedAt = row.started_at
+        ? new Date(row.started_at * 1000).toISOString()
+        : new Date().toISOString();
+      const endedAt = row.ended_at
+        ? new Date(row.ended_at * 1000).toISOString()
+        : null;
+      const size = Math.max(
+        (row.message_count ?? 0) * 200 + (row.api_call_count ?? 0) * 50,
+        0,
+      );
+
+      // Derive title from session id or stored title
+      let title = row.title ?? row.id;
+      let source: SessionSource = "cli";
+      if (row.source === "cron") {
+        source = "cron";
+        // Format: cron_<jobid>_<date>_<time>
+        const parts = row.id.replace(/^cron_/, "").split("_");
+        if (parts.length >= 3) {
+          title = `Cron: ${parts[0]} — ${parts.slice(1).join(" ")}`;
         }
+      } else if (row.source === "api_server") {
+        source = "cli";
+      }
 
-        return {
-          filename: file,
-          id,
-          title: title || file,
-          source,
-          size: stats.size,
-          created: stats.birthtime.toISOString(),
-          modified: stats.mtime.toISOString(),
-        };
-      });
+      return {
+        filename: row.id,
+        id: row.id,
+        title,
+        source,
+        size,
+        created: startedAt,
+        modified: endedAt ?? startedAt,
+      };
+    });
   } catch {
     return [];
   }
 }
 
 /**
- * Sync Hermes session files into the sessions table.
+ * Sync Hermes sessions into the sessions table.
  *
- * Strategy: for each file in Hermes's sessions dir, UPSERT into the DB
- * (INSERT OR REPLACE). This means Hermes CLI/cron sessions are tracked in
- * Control Hub's registry alongside mission-born sessions, giving a single
- * unified view.
+ * Reads session metadata directly from Hermes's state.db (v0.14+),
+ * which is the canonical source for all Hermes-born sessions
+ * (CLI, cron, API). Upserts into the sessions table so Control Hub
+ * has a unified view of all agent activity.
  *
- * Only hermes sessions with source='cli' or source='cron' are synced.
- * Sessions that have already been upserted are refreshed (title, size, modified).
- * Sessions that no longer exist on disk are NOT deleted from the DB — that would
- * lose the record of completed sessions.
+ * Sessions that no longer exist in Hermes are NOT deleted from the DB —
+ * completed sessions remain in the record.
  */
 export function syncHermesSessionsToDb(): { synced: number } {
-  const files = scanHermesSessionDir();
+  const files = readHermesSessionsFromStateDb();
   const database = db();
   const upsert = database.prepare(/* sql */ `
     INSERT INTO sessions (
@@ -311,7 +345,8 @@ export function syncHermesSessionsToDb(): { synced: number } {
     )
     ON CONFLICT(id) DO UPDATE SET
       title   = excluded.title,
-      size    = excluded.size
+      size    = excluded.size,
+      started_at = excluded.started_at
   `);
 
   const tx = database.transaction(() => {
