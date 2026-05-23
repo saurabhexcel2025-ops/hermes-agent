@@ -339,14 +339,6 @@ export interface ConfigFieldDef {
   max?: number;
 }
 
-export interface ConfigSectionDef {
-  key: string;
-  label: string;
-  icon: string;
-  color: AccentColor;
-  fields: ConfigFieldDef[];
-}
-
 // ── Accent Color ───────────────────────────────────────────────
 
 export type AccentColor =

@@ -102,14 +102,19 @@ export const PROVIDER_ENV_VAR: Record<HermesProvider, string> = {
   nous: "",
 };
 
-export function isHermesProvider(value: unknown): value is HermesProvider {
-  return typeof value === "string" && (HERMES_PROVIDERS as readonly string[]).includes(value);
+export function isHermesProvider(provider: string): provider is HermesProvider {
+  return (HERMES_PROVIDERS as readonly string[]).includes(provider);
 }
 
 export function isTaskType(value: unknown): value is TaskType {
   return typeof value === "string" && (TASK_TYPES as readonly string[]).includes(value);
 }
 
-export function envVarForProvider(provider: HermesProvider): string {
-  return PROVIDER_ENV_VAR[provider];
+/**
+ * Returns the env var name for a given provider, or null if the provider
+ * is not recognised by Hermes.
+ */
+export function envVarForProvider(provider: string): string | null {
+  if (!isHermesProvider(provider)) return null;
+  return PROVIDER_ENV_VAR[provider] ?? null;
 }

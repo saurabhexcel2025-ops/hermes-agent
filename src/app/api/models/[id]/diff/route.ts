@@ -9,6 +9,7 @@ import { getModelWithKey } from "@/lib/models-repository";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { existsSync, readFileSync } from "fs";
 import * as yaml from "js-yaml";
+import { envVarForProvider, isHermesProvider } from "@/lib/hermes-providers";
 
 interface DiffEntry {
   id: string;
@@ -16,36 +17,20 @@ interface DiffEntry {
   detail: string;
 }
 
-interface HermesModelSection {
+interface ConfigModelSection {
   default?: string;
   provider?: string;
   base_url?: string;
   context_length?: number;
 }
 
-function getEnvVarForProvider(provider: string): string | null {
-  const map: Record<string, string> = {
-    anthropic: "ANTHROPIC_API_KEY",
-    openai: "OPENAI_API_KEY",
-    openrouter: "OPENROUTER_API_KEY",
-    gemini: "GOOGLE_GENERATIVE_AI_API_KEY",
-    deepseek: "DEEPSEEK_API_KEY",
-    mistral: "MISTRAL_API_KEY",
-    groq: "GROQ_API_KEY",
-    huggingface: "HF_TOKEN",
-    minimax: "MINIMAX_API_KEY",
-    qwen: "DASHSCOPE_API_KEY",
-  };
-  return map[provider] ?? null;
-}
-
-function readHermesModelSection(): HermesModelSection | null {
+function readHermesModelSection(): ConfigModelSection | null {
   const paths = getActiveHermesPaths();
   if (!existsSync(paths.config)) return null;
   try {
     const raw = readFileSync(paths.config, "utf-8");
     const config = yaml.load(raw) as Record<string, unknown> | null;
-    return (config?.model as HermesModelSection) ?? null;
+    return (config?.model as ConfigModelSection) ?? null;
   } catch {
     return null;
   }
@@ -98,7 +83,7 @@ export async function POST(
 
       // Credential
       if (model.credentialsId && model.apiKey) {
-        const envVar = getEnvVarForProvider(model.provider);
+        const envVar = isHermesProvider(model.provider) ? envVarForProvider(model.provider) : null;
         if (envVar) {
           const hint = model.apiKey.slice(0, 4) + "..." + model.apiKey.slice(-4);
           diffs.push({

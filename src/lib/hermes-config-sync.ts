@@ -186,7 +186,7 @@ export function removeCredentialFromHermesEnv(provider: HermesProvider): { backu
   const original = readFileSync(paths.env, "utf-8");
   const prior = parseEnvFile(original);
   const next = new Map(prior);
-  next.delete(envVarForProvider(provider));
+  next.delete(envVarForProvider(provider)!);
 
   atomicWriteFile(paths.env, serializeEnvFile(prior, next, original));
   return { backupPath };
@@ -476,7 +476,7 @@ export function removeSingleCredentialFromHermesEnv(
   const original = readFileSync(envPath, "utf-8");
   const prior = parseEnvFile(original);
   const next = new Map(prior);
-  next.delete(envVarForProvider(provider));
+  next.delete(envVarForProvider(provider)!);
 
   atomicWriteFile(envPath, serializeEnvFile(prior, next, original));
   return { backupPath };

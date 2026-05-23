@@ -517,6 +517,38 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
   }
 }
 
+// ── Gateway trigger (run now) ─────────────────────────────────
+
+const GATEWAY_BASE = "http://127.0.0.1:8642";
+
+/**
+ * Trigger a job to run immediately via the Hermes gateway's run endpoint.
+ * This calls POST /api/jobs/{job_id}/run which calls trigger_job() in Hermes,
+ * setting state=scheduled and next_run_at=now in jobs.json — signalling the
+ * scheduler to run the job on its next tick.
+ */
+export async function triggerJobViaGateway(
+  hermesJobId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `${GATEWAY_BASE}/api/jobs/${encodeURIComponent(hermesJobId)}/run`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: `Gateway returned ${res.status}: ${text}`.slice(0, 500) };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err).slice(0, 500) };
+  }
+}
+
 // ── Bidirectional sync ────────────────────────────────────────
 
 /**

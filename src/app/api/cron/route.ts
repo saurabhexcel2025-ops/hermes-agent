@@ -29,6 +29,7 @@ import {
   removeJobFromHermes,
   importHermesJobs,
   syncCronWithHermes,
+  triggerJobViaGateway,
   type CronJobRecord,
 } from "@/lib/cron-repository";
 
@@ -333,15 +334,30 @@ export async function PUT(request: NextRequest) {
 
     // ── Run now ──────────────────────────────────────────────
     if (action === "run") {
+      // Push job state to Hermes jobs.json first
+      const pushResult = await pushJobToHermes(id);
+      appendAuditLine({ action: "cron.run.push", resource: id, ok: pushResult.ok, detail: pushResult.ok ? undefined : pushResult.error });
+      if (!pushResult.ok) {
+        return cronSyncFailureResponse("PUT /api/cron run (push)", pushResult);
+      }
+
+      // Get the hermes_job_id to trigger via gateway
+      const job = getCronJob(id);
+      const hermesJobId = job?.hermes_job_id ?? job?.id ?? id;
+
+      // Trigger via gateway — this calls trigger_job in Hermes which sets
+      // state=scheduled + next_run_at=now, signalling the scheduler
+      const triggerResult = await triggerJobViaGateway(hermesJobId);
+      appendAuditLine({ action: "cron.run.trigger", resource: id, ok: triggerResult.ok, detail: triggerResult.ok ? undefined : triggerResult.error });
+      if (!triggerResult.ok) {
+        return cronSyncFailureResponse("PUT /api/cron run (trigger)", triggerResult);
+      }
+
+      // Update CH state to reflect the triggered run
       const updated = updateCronJob(id, {
         state: "run_requested",
         next_run_at: new Date().toISOString(),
       });
-      const pushResult = await pushJobToHermes(id);
-      appendAuditLine({ action: "cron.run", resource: id, ok: pushResult.ok, detail: pushResult.ok ? undefined : pushResult.error });
-      if (!pushResult.ok) {
-        return cronSyncFailureResponse("PUT /api/cron run", pushResult);
-      }
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
 
