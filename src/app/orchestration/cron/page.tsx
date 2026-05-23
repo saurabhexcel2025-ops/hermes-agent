@@ -243,9 +243,11 @@ export default function CronPage() {
 
   // ── Derived state ─────────────────────────────────────────
 
-  const enabledCount = agent.data?.jobs.filter((j) => j.enabled).length || 0;
+  const enabledCount = agent.data?.jobs.filter((j) => j.enabled).length ?? 0;
+  const hardwareEnabled = hardware.jobs.filter((j) => j.enabled).length;
+  const hardwareTotal = hardware.jobs.length;
   const pageSubtitle = agent.data
-    ? `Agent: ${enabledCount}/${agent.data.total}  •  System: ${hardware.jobs.filter((j) => j.enabled).length}/${hardware.jobs.length || 0}`
+    ? `Agent: ${enabledCount}/${agent.data.total}  •  System: ${hardwareEnabled}/${hardwareTotal || 0}`
     : "Scheduled tasks";
 
   // ── Render ────────────────────────────────────────────────
@@ -267,11 +269,7 @@ export default function CronPage() {
             <ActionButtons
               color={activeTab === "agent" ? "orange" : "cyan"}
               pauseBusy={activeTab === "agent" ? pauseAllBusy : false}
-              hasJobs={
-                activeTab === "agent"
-                  ? !!agent.data?.total
-                  : hardware.jobs.length > 0
-              }
+              hasJobs={activeTab === "agent" ? !!agent.data?.total : hardwareTotal > 0}
               onPauseAll={async () => {
                 if (activeTab === "agent") {
                   setPauseAllBusy(true);

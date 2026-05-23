@@ -1,4 +1,4 @@
-import { buildMissionPrompt } from "@/lib/mission-repository";
+import { buildMissionPrompt } from "@/lib/build-mission-prompt";
 
 describe("buildMissionPrompt localDirs branches", () => {
   it("renders branch hint for LocalDirEntry", () => {

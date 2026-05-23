@@ -17,22 +17,9 @@ import HindsightBrowser from "@/components/memory/HindsightBrowser";
 
 // Holographic browser (inline for holographic provider)
 function HolographicBrowser({ initialData }: {
-  initialData?: MemoryData | null;
+  initialData: MemoryData;
 }) {
-  const [data, setData] = useState<MemoryData | null>(() => initialData ?? null);
-  const [loading, setLoading] = useState(!initialData);
-
-  useEffect(() => {
-    // Only fetch if no initial data was provided by the parent
-    if (initialData) return;
-    fetch("/api/memory")
-      .then((r) => r.json())
-      .then((d) => setData(d.data))
-      .catch(() => { /* silently handled by data.available check */ })
-      .finally(() => setLoading(false));
-  }, [initialData]);
-
-  if (loading) return <LoadingSpinner text="Loading memory..." />;
+  const data = initialData;
 
   if (!data?.available) {
     return (

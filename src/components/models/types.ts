@@ -1,21 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
 // /config/models — API row shapes used by the models page
 // ═══════════════════════════════════════════════════════════════
+//
+// Shared types for the models page. TaskType lives in
+// hermes-providers.ts as the single source of truth.
 
-export interface ApiModelDefaults {
-  agent: string | null;
-  hindsight: string | null;
-  compression: string | null;
-  vision: string | null;
-  web_extract: string | null;
-  session_search: string | null;
-  title_generation: string | null;
-  skills_hub: string | null;
-  mcp: string | null;
-  triage_specifier: string | null;
-  approval: string | null;
-  delegation: string | null;
-}
+import type { TaskType } from "@/lib/hermes-providers";
 
 export interface ApiModel {
   id: string;
@@ -25,7 +15,7 @@ export interface ApiModel {
   baseUrl: string | null;
   contextLength: number | null;
   credentialsId: string | null;
-  defaults: ApiModelDefaults;
+  defaults: Record<TaskType, string | null>;
   createdAt: string;
   updatedAt: string;
 }

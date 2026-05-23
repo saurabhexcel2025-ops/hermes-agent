@@ -15,63 +15,7 @@ import { listCronJobs } from "@/lib/cron-repository";
 import { listSessions } from "@/lib/session-repository";
 import { logApiError } from "@/lib/api-logger";
 import { getGatewayPlatforms, db } from "@/lib/db";
-
-// ── Types ───────────────────────────────────────────────────
-
-interface CronJobBrief {
-  id: string;
-  name: string;
-  state: string;
-  enabled: boolean;
-  schedule: string;
-  lastRun: string | null;
-  nextRun: string | null;
-  lastStatus: string | null;
-}
-
-interface SessionBrief {
-  id: string;
-  modified: string;
-  size: number;
-}
-
-interface MonitorData {
-  cron: {
-    total: number;
-    active: number;
-    paused: number;
-    jobs: CronJobBrief[];
-  };
-  sessions: {
-    total: number;
-    recent: SessionBrief[];
-  };
-  gateway: {
-    platforms: Record<string, boolean>;
-    connectedCount: number;
-  };
-  memory: {
-    factCount: number;
-    dbSize: string;
-    provider: string;
-  };
-  errors: Array<{
-    source: string;
-    message: string;
-    timestamp: string;
-    severity: string;
-  }>;
-  system: {
-    uptime: string;
-    configPresent: boolean;
-    soulPresent: boolean;
-  };
-  sync: {
-    lastRun: string | null;
-    allSuccessful: boolean;
-    sourceStatuses: Record<string, string>;
-  };
-}
+import type { CronJobBrief, SessionBrief, MonitorData } from "@/types/hermes";
 
 // ── Helpers ─────────────────────────────────────────────────
 

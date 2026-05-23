@@ -106,8 +106,6 @@ function rowToModel(row: ModelRow): ModelRecord {
   };
 }
 
-
-
 // ── Read ───────────────────────────────────────────────────────
 
 export function listModels(): ModelRecord[] {
@@ -131,6 +129,30 @@ export function getModelWithKey(id: string): ModelWithKey | null {
   return { ...model, apiKey };
 }
 
+/**
+ * Resolve a registry row by provider model id string (e.g. anthropic/claude-sonnet-4).
+ * When multiple providers share the same model_id, prefer the agent default slot.
+ */
+export function findModelByModelId(modelId: string): ModelRecord | null {
+  const trimmed = modelId.trim();
+  if (!trimmed) return null;
+
+  const rows = db()
+    .prepare("SELECT * FROM models WHERE model_id = ?")
+    .all(trimmed) as ModelRow[];
+
+  if (rows.length === 0) return null;
+  if (rows.length === 1) return rowToModel(rows[0]);
+
+  const agentDefault = getDefaultModel("agent");
+  if (agentDefault) {
+    const match = rows.find((r) => r.id === agentDefault.id);
+    if (match) return rowToModel(match);
+  }
+
+  return rowToModel(rows[0]);
+}
+
 // ── Defaults (now in model_defaults table) ─────────────────────────
 
 export function getDefaultModel(taskType: TaskType): ModelRecord | null {
@@ -146,7 +168,9 @@ export function getDefaultModel(taskType: TaskType): ModelRecord | null {
 }
 
 export function getModelDefaults(): ModelDefaults {
-  const defaults = emptyModelDefaults() as unknown as ModelDefaults;
+  // emptyModelDefaults() returns Record<TaskType, string | null> which is
+  // structurally identical to ModelDefaults — the cast is safe.
+  const defaults = emptyModelDefaults() as ModelDefaults;
   
   const rows = db()
     .prepare("SELECT task_type, model_id FROM model_defaults")

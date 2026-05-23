@@ -2,6 +2,10 @@
 
 jest.mock("child_process", () => ({
   execSync: jest.fn(() => ""),
+  exec: jest.fn((_cmd, _opts, cb: (err: Error | null, stdout: string) => void) => {
+    cb(null, "");
+    return { on: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+  }),
 }));
 
 jest.mock("fs", () => ({

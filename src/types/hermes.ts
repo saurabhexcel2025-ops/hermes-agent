@@ -15,6 +15,85 @@ export interface ApiResponse<T> {
 
 // ── Dashboard ─────────────────────────────────────────────────
 
+export interface CronJobBrief {
+  id: string;
+  name: string;
+  state: string;
+  enabled: boolean;
+  schedule: string;
+  lastRun: string | null;
+  nextRun: string | null;
+  lastStatus: string | null;
+}
+
+export interface SessionBrief {
+  id: string;
+  modified: string;
+  size: number;
+}
+
+export interface MonitorData {
+  cron: {
+    total: number;
+    active: number;
+    paused: number;
+    jobs: CronJobBrief[];
+  };
+  sessions: {
+    total: number;
+    recent: SessionBrief[];
+  };
+  gateway: {
+    platforms: Record<string, boolean>;
+    connectedCount: number;
+  };
+  memory: {
+    factCount: number;
+    dbSize: string;
+    provider: string;
+  };
+  errors: Array<{
+    source: string;
+    message: string;
+    timestamp: string;
+    severity: string;
+  }>;
+  system: {
+    uptime: string;
+    configPresent: boolean;
+    soulPresent: boolean;
+  };
+  sync: {
+    lastRun: string | null;
+    allSuccessful: boolean;
+    sourceStatuses: Record<string, string>;
+  };
+}
+
+export interface HermesProcess {
+  id: string;
+  type: "cron" | "gateway" | "manual" | "subagent";
+  name: string;
+  status: "running" | "idle";
+  startedAt: string | null;
+  lastActivity: string | null;
+  model: string;
+  pid: number | null;
+  turns: number;
+}
+
+export interface MissionBrief {
+  id: string;
+  name: string;
+  status: string;
+  dispatchMode: string;
+  createdAt: string;
+  queuedForRun?: boolean;
+  cronJobId?: string;
+  cronJob?: { state: string; enabled: boolean; lastRun: string | null; lastStatus: string | null };
+  latestSession?: { id: string; modified: string } | null;
+}
+
 export interface SystemStatus {
   soulFile: boolean;
   configFile: boolean;
@@ -306,6 +385,7 @@ export interface Mission {
   categoryId?: string | null;
   outputFormat?: string;
   constraints?: string;
+  queuedForRun?: boolean;
   createdAt: string;
   updatedAt: string;
 }

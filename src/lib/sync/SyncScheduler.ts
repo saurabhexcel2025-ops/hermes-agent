@@ -25,6 +25,8 @@ const DEFAULT_STALENESS_MS: Record<string, number> = {
   logs: 60_000,
   processes: 15_000,
   memory: 30_000,
+  missions: 15_000,
+  "mission-queue": 15_000,
 };
 
 // ── SyncScheduler ────────────────────────────────────────────

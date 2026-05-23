@@ -23,6 +23,11 @@ import {
   CATEGORY_ACTIVE_CLASSES,
   STATUS_CONFIG,
 } from "./mission-page-constants";
+import {
+  isMissionDraft,
+  isMissionQueuedForRun,
+  missionBoardColumn,
+} from "@/lib/mission-board";
 import MissionEditorPanel from "./MissionEditorPanel";
 
 export interface MissionsListProps {
@@ -232,7 +237,7 @@ export default function MissionsList({ vm }: MissionsListProps) {
         )}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1 bg-dark-900/50 rounded-lg border border-white/10 p-1">
-            {["all", "queued", "dispatched", "successful", "failed"].map(
+            {(["all", "draft", "queued", "dispatched", "successful", "failed"] as const).map(
               (f) => (
                 <button
                   type="button"
@@ -281,10 +286,10 @@ export default function MissionsList({ vm }: MissionsListProps) {
         </div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-4 overflow-x-auto pb-2">
-          {(["queued", "dispatched", "successful", "failed"] as const).map(
+          {(["draft", "queued", "dispatched", "successful", "failed"] as const).map(
             (status) => {
               const columnMissions = filtered.filter(
-                (m) => m.status === status,
+                (m) => missionBoardColumn(m) === status,
               );
               const sc = STATUS_CONFIG[status];
               const isCollapsible =
@@ -310,7 +315,9 @@ export default function MissionsList({ vm }: MissionsListProps) {
                           ? "Completed"
                           : status === "failed"
                             ? "Failed"
-                            : titleCase(status)}
+                            : status === "draft"
+                              ? "Drafts"
+                              : titleCase(status)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -391,11 +398,16 @@ export default function MissionsList({ vm }: MissionsListProps) {
                                     </div>
                                     <div className="flex items-center gap-2 mt-1.5 text-[10px] font-mono text-white/25 flex-wrap">
                                       <span className="flex items-center gap-0.5">
-                                        {mission.status === "queued" ? (
+                                        {isMissionDraft(mission) ? (
+                                          <>
+                                            <Clock className="w-2.5 h-2.5 text-white/30" />
+                                            <span className="text-white/40">Draft</span>
+                                          </>
+                                        ) : isMissionQueuedForRun(mission) ? (
                                           <>
                                             <Clock className="w-2.5 h-2.5 text-neon-orange" />
                                             <span className="text-neon-orange/60">
-                                              Queued
+                                              Waiting to run
                                             </span>
                                           </>
                                         ) : (

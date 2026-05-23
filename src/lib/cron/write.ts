@@ -8,7 +8,7 @@ import { parseSchedule } from "../utils";
 import type { CronJobRecord, CronJobRow, CreateCronJobInput, UpdateCronJobInput } from "./types";
 import { getCronJob } from "./read";
 
-function parseScheduleToJson(
+export function parseScheduleToJson(
   schedule: string
 ): { scheduleJson: string; scheduleDisplay: string } {
   const parsed = parseSchedule(schedule);
@@ -23,7 +23,8 @@ function parseScheduleToJson(
   };
 }
 
-function parseRepeatJson(
+/** Serialize repeat for SQLite storage (exported for tests). */
+export function parseRepeatJson(
   repeat?: { times: number | null; completed?: number }
 ): string {
   if (repeat === undefined) {

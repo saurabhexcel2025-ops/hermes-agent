@@ -17,7 +17,7 @@ import type {
 } from "../agent-backend/types";
 import type { AgentBackend, MissionCancelResult } from "../agent-backend";
 import { logApiError } from "../api-logger";
-import { getDefaultModel } from "../models-repository";
+import { findModelByModelId, getDefaultModel } from "../models-repository";
 import { getCredentialWithKey } from "../credentials-repository";
 
 interface BuildHermesChatArgvInput {
@@ -49,12 +49,27 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-async function resolveMissionModel(input: {
+export async function resolveMissionModel(input: {
   modelId?: string;
   provider?: string;
 }): Promise<{ modelId: string; provider: string; apiKey: string | null }> {
-  if (input.modelId && input.provider) {
-    return { modelId: input.modelId, provider: input.provider, apiKey: null };
+  const trimmedId = input.modelId?.trim() ?? "";
+  const trimmedProvider = input.provider?.trim() ?? "";
+
+  if (trimmedId && trimmedProvider) {
+    return { modelId: trimmedId, provider: trimmedProvider, apiKey: null };
+  }
+
+  if (trimmedId) {
+    const model = findModelByModelId(trimmedId);
+    if (model) {
+      let apiKey: string | null = null;
+      if (model.credentialsId) {
+        const cred = getCredentialWithKey(model.credentialsId);
+        apiKey = cred?.apiKey ?? null;
+      }
+      return { modelId: model.modelId, provider: model.provider, apiKey };
+    }
   }
 
   try {

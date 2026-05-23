@@ -13,6 +13,13 @@
  *   const { data } = await apiFetch("/api/monitor");
  *   await apiFetch("/api/missions", { method: "POST", body: JSON.stringify({...}) });
  */
+// ── Error helpers ────────────────────────────────────────────────
+
+/** Coerce an unknown value to an Error (preserving Error instances). */
+export function toError(e: unknown): Error {
+  return e instanceof Error ? e : new Error(String(e));
+}
+
 /** Build a user-visible message from an API error JSON body. */
 export function formatApiError(
   json: { error?: unknown; cronPushError?: unknown },

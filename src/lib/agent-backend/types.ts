@@ -40,6 +40,8 @@ export interface Mission {
   categoryId?: string | null;
   outputFormat?: string;
   constraints?: string;
+  /** True when dispatchMode=queue and waiting for MissionQueueSync; false for save drafts. */
+  queuedForRun?: boolean;
 }
 
 export interface DispatchMissionInput {

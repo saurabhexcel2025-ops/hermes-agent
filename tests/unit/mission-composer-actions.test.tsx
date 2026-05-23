@@ -51,6 +51,30 @@ describe("dispatch modes", () => {
     expect(dispatchSubmitLabel("now")).toBe("Dispatch now");
     expect(dispatchSubmitLabel("cron")).toBe("Schedule mission");
   });
+
+  it("maps draft edit labels from dispatch choice", () => {
+    expect(
+      dispatchSubmitLabel("now", { isDraftEdit: true }),
+    ).toBe("Dispatch now");
+    expect(
+      dispatchSubmitLabel("queue", { isDraftEdit: true }),
+    ).toBe("Queue mission");
+  });
+
+  it("maps running edit to Update Mission", () => {
+    expect(
+      dispatchSubmitLabel("now", { isRunningEdit: true }),
+    ).toBe("Update Mission");
+  });
+
+  it("maps queued-waiting edit labels", () => {
+    expect(
+      dispatchSubmitLabel("save", { isQueuedEdit: true }),
+    ).toBe("Move to drafts");
+    expect(
+      dispatchSubmitLabel("now", { isQueuedEdit: true }),
+    ).toBe("Dispatch now");
+  });
 });
 
 describe("MissionComposerActions", () => {

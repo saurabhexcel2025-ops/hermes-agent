@@ -7,6 +7,7 @@ import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
 import { appendAuditLine } from "@/lib/audit-log";
 import { db } from "@/lib/db";
+import { CONFIG_SECTIONS } from "@/lib/config-schema";
 
 const CACHE_TTL_MS = 15_000; // 15 seconds
 
@@ -66,8 +67,6 @@ function invalidateConfigCache(): void {
     // Cache invalidation failure is non-critical
   }
 }
-
-import { CONFIG_SECTIONS } from "@/lib/config-schema";
 
 // Dynamically derive writable sections from the schema
 // Only YAML sections with editable fields are writable

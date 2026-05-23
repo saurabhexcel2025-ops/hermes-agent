@@ -37,6 +37,7 @@ interface MissionRow {
   category_id: string | null;
   output_format: string | null;
   constraints: string | null;
+  queued_for_run?: number | null;
 }
 
 function rowToMission(row: MissionRow | undefined): Mission | null {
@@ -68,6 +69,7 @@ function rowToMission(row: MissionRow | undefined): Mission | null {
     categoryId: row.category_id ?? undefined,
     outputFormat: row.output_format ?? undefined,
     constraints: row.constraints ?? undefined,
+    queuedForRun: row.queued_for_run != null ? row.queued_for_run === 1 : undefined,
   };
 }
 
@@ -78,6 +80,33 @@ export type { BuildPromptOptions } from "@/lib/build-mission-prompt";
 export { buildMissionPrompt } from "@/lib/build-mission-prompt";
 
 // ── CRUD ─────────────────────────────────────────────────────
+
+/** Oldest mission waiting for background queue dispatch. */
+export function getNextQueuedMission(): Mission | null {
+  const row = db()
+    .prepare(
+      `SELECT * FROM missions
+       WHERE deleted_at IS NULL
+         AND status = 'queued'
+         AND COALESCE(queued_for_run, 0) = 1
+       ORDER BY created_at ASC
+       LIMIT 1`,
+    )
+    .get() as MissionRow | undefined;
+  return rowToMission(row);
+}
+
+/** True if any mission is currently running (dispatched). */
+export function hasDispatchedMission(): boolean {
+  const row = db()
+    .prepare(
+      `SELECT 1 FROM missions
+       WHERE deleted_at IS NULL AND status = 'dispatched'
+       LIMIT 1`,
+    )
+    .get();
+  return Boolean(row);
+}
 
 export function listMissions(opts?: { categoryId?: string | null }): Mission[] {
   let sql =
@@ -151,6 +180,7 @@ export function createMission(data: {
 export function updateMission(
   id: string,
   updates: {
+    name?: string;
     status?: MissionStatus;
     result?: string;
     sessionId?: string;
@@ -170,6 +200,7 @@ export function updateMission(
     categoryId?: string | null;
     outputFormat?: string | null;
     constraints?: string | null;
+    queuedForRun?: boolean;
   }
 ): Mission | null {
   const existing = getMission(id);
@@ -180,6 +211,10 @@ export function updateMission(
     const sets: string[] = ["updated_at = ?"];
     const vals: unknown[] = [ts];
 
+    if (updates.name !== undefined) {
+      sets.push("name = ?");
+      vals.push(updates.name);
+    }
     if (updates.status !== undefined) {
       sets.push("status = ?");
       vals.push(updates.status);
@@ -255,6 +290,10 @@ export function updateMission(
     if (updates.constraints !== undefined) {
       sets.push("constraints = ?");
       vals.push(updates.constraints);
+    }
+    if (updates.queuedForRun !== undefined) {
+      sets.push("queued_for_run = ?");
+      vals.push(updates.queuedForRun ? 1 : 0);
     }
 
     vals.push(id);

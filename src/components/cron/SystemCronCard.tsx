@@ -7,7 +7,6 @@
 
 "use client";
 
-import { useState } from "react";
 import {
   Cpu,
   Clock,
@@ -20,7 +19,8 @@ import {
   ChevronUp,
   Terminal,
 } from "lucide-react";
-import { describeSchedule } from "@/components/cron/CronScheduleInput";
+import { describeSchedule } from "@/lib/schedule/types";
+import { useExpandable } from "@/hooks/useExpandable";
 import type { SystemCronJob } from "@/types/hermes";
 
 interface SystemCronCardProps {
@@ -36,7 +36,7 @@ export default function SystemCronCard({
   onDelete,
   onEdit,
 }: SystemCronCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const { expanded, toggle: setExpanded } = useExpandable();
 
   const handleDelete = () => {
     if (!confirm("Delete this system cron job?")) return;

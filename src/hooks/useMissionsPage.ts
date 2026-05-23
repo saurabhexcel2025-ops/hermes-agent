@@ -4,7 +4,7 @@ import { useMissionsApi } from "@/hooks/useMissionsApi";
 import type { LocalDirEntry, Mission } from "@/types/hermes";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
 import { parseMissionPrompt } from "@/lib/build-mission-prompt";
-import { flattenProfileToolsets } from "@/lib/hermes-toolset-catalog";
+import { unionToolsetsFromPlatforms } from "@/lib/hermes-toolset-unify";
 import type { PlatformToolsets } from "@/lib/profile-config-builder";
 import type { MissionFormState } from "@/components/missions/MissionCreateForm";
 import type { MissionTemplate } from "@/components/missions/TemplateModals";
@@ -14,6 +14,19 @@ import {
 } from "@/lib/mission-categories";
 import type { ManagedCategory } from "@/components/missions/CategoryManagerModal";
 import { buildTemplatePayload } from "@/lib/mission-form-utils";
+import {
+  isMissionActive,
+  isMissionDraft,
+  isMissionQueuedForRun,
+  missionBoardColumn,
+} from "@/lib/mission-board";
+
+function submitToastForDispatch(mode: "save" | "now" | "cron" | "queue"): string {
+  if (mode === "save") return "Saving draft...";
+  if (mode === "queue") return "Queueing mission...";
+  if (mode === "cron") return "Scheduling mission...";
+  return "Dispatching mission...";
+}
 
 export type MissionRow = Mission & {
   cronJob?: {
@@ -245,7 +258,7 @@ export function useMissionsPage() {
             .map((s) => s.name),
         );
         const toolsetIds = new Set(
-          flattenProfileToolsets(
+          unionToolsetsFromPlatforms(
             (toolsetsData.data?.platformToolsets ?? {}) as PlatformToolsets,
           ),
         );
@@ -332,6 +345,63 @@ export function useMissionsPage() {
     }
   }, [showCreate, editingId, newCategoryId]);
 
+  // ── Shared form population helpers ─────────────────────────────────
+
+  /**
+   * Populate form state from a mission template.
+   * Used by handleTemplateSelect, handleTemplateEdit, and fetchData.
+   */
+  const applyTemplateToForm = (
+    t: MissionTemplate & {
+      instruction?: string;
+      context?: string;
+      dispatchMode?: string;
+      schedule?: string;
+      name?: string;
+    },
+    categoryIdOverride?: string | null,
+  ) => {
+    setNewName(t.name ?? "");
+    setNewInstruction(t.instruction || "");
+    setNewContext(t.context || "");
+    setNewGoals((t.goals || []).join("\n"));
+    setNewOutputFormat(
+      (t as MissionTemplate & { outputFormat?: string }).outputFormat ?? "",
+    );
+    setNewConstraints(
+      (t as MissionTemplate & { constraints?: string }).constraints ?? "",
+    );
+    setNewProfile(t.profile || "");
+    setNewModel(t.defaultModel || "");
+    setNewProvider(t.defaultProvider || "");
+    setNewLocalDirs(
+      normalizeLocalDirsInput(
+        (t as MissionTemplate & { localDirs?: unknown }).localDirs,
+      ),
+    );
+    setLocalDirDraft({ path: "", branch: null });
+    setNewReferences(
+      (t as MissionTemplate & { references?: string[] }).references ?? [],
+    );
+    setNewSkills(t.suggestedSkills || []);
+    setNewToolsets(
+      (t as MissionTemplate & { suggestedToolsets?: string[] }).suggestedToolsets ?? [],
+    );
+    setNewCategoryId(
+      categoryIdOverride !== undefined
+        ? categoryIdOverride
+        : (t as MissionTemplate & { categoryId?: string }).categoryId ?? null
+    );
+    const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
+    if (typeof tm === "number" && Number.isFinite(tm)) {
+      setNewTimeout(tm);
+    }
+    if (t.dispatchMode) {
+      setNewDispatch(t.dispatchMode as "save" | "now" | "cron" | "queue");
+    }
+    if (t.schedule) setNewSchedule(t.schedule);
+  };
+
   const fetchData = useCallback(async () => {
     try {
       const list = await fetchMissions();
@@ -354,35 +424,8 @@ export function useMissionsPage() {
             (tmpl: MissionTemplate) => tmpl.id === templateId,
           );
           if (t) {
-            setNewName(t.name);
-            setNewInstruction(t.instruction);
-            setNewContext(t.context);
-            setNewGoals(t.goals.join("\n"));
-            setNewOutputFormat(
-              (t as MissionTemplate & { outputFormat?: string }).outputFormat ??
-                "",
-            );
-            setNewConstraints(
-              (t as MissionTemplate & { constraints?: string }).constraints ??
-                "",
-            );
-            if (t.profile) setNewProfile(t.profile);
-            if (t.defaultModel) setNewModel(t.defaultModel);
-            if (t.defaultProvider) setNewProvider(t.defaultProvider);
-            setNewLocalDirs(
-              normalizeLocalDirsInput(
-                (t as MissionTemplate & { localDirs?: unknown }).localDirs,
-              ),
-            );
-            setNewReferences(
-              (t as MissionTemplate & { references?: string[] }).references ??
-                [],
-            );
-            setNewSkills(t.suggestedSkills || []);
-            const cid =
-              (t as MissionTemplate & { categoryId?: string }).categoryId ??
-              null;
-            setNewCategoryId(cid);
+            const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
+            applyTemplateToForm(t, cid);
             if (cid) {
               try {
                 localStorage.setItem(LAST_CATEGORY_KEY, cid);
@@ -465,12 +508,16 @@ export function useMissionsPage() {
     try {
       if (editingId) {
         const existingMission = missions.find((m) => m.id === editingId);
-        const isActive =
+        const isCompleted =
           existingMission &&
-          (existingMission.status === "queued" ||
-            existingMission.status === "dispatched");
+          (existingMission.status === "successful" ||
+            existingMission.status === "failed");
+        const isRunning = existingMission?.status === "dispatched";
+        const isPromotable =
+          existingMission &&
+          (isMissionDraft(existingMission) || isMissionQueuedForRun(existingMission));
 
-        if (isActive) {
+        if (isRunning) {
           showToast("Updating mission...", "info");
           const res = await fetch("/api/missions", {
             method: "POST",
@@ -493,6 +540,58 @@ export function useMissionsPage() {
           } else {
             showToast("Failed to update mission", "error");
           }
+          setDispatching(false);
+          return;
+        }
+
+        if (isPromotable) {
+          showToast(submitToastForDispatch(newDispatch), "info");
+          const res = await fetch("/api/missions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "promote",
+              missionId: editingId,
+              name: newName,
+              ...dispatchPayload({
+                dispatchMode: newDispatch,
+                schedule: newDispatch === "cron" ? newSchedule : undefined,
+              }),
+            }),
+          });
+          if (res.ok) {
+            if (newDispatch === "save") {
+              showToast("Mission saved as draft", "success");
+            } else if (newDispatch === "queue") {
+              showToast("Mission saved to queue", "success");
+            } else if (newDispatch === "now") {
+              showToast("Mission dispatched", "success");
+            } else {
+              showToast(`Mission scheduled: ${newSchedule}`, "success");
+            }
+            setEditingId(null);
+            setShowCreate(false);
+            resetForm();
+            await fetchData();
+            if (expandedId === editingId) fetchDetail(editingId);
+          } else {
+            let msg = "Failed to update mission";
+            try {
+              const errBody = (await res.json()) as {
+                error?: string;
+                cronPushError?: string;
+              };
+              msg = errBody.cronPushError ?? errBody.error ?? msg;
+            } catch {
+              /* keep default */
+            }
+            showToast(msg, "error");
+          }
+          setDispatching(false);
+          return;
+        }
+
+        if (!isCompleted) {
           setDispatching(false);
           return;
         }
@@ -525,7 +624,7 @@ export function useMissionsPage() {
         return;
       }
 
-      showToast("Dispatching mission...", "info");
+      showToast(submitToastForDispatch(newDispatch), "info");
 
       const res = await fetch("/api/missions", {
         method: "POST",
@@ -586,22 +685,29 @@ export function useMissionsPage() {
     }
   };
 
-  const handleEdit = (m: MissionRow) => {
-    setEditingId(m.id);
-    setNewName(m.name);
+  // ── Shared form population helpers ─────────────────────────────────
+
+  /**
+   * Populate form state from a mission.
+   * Used by both handleEdit (in-place edit) and handleDuplicateMission.
+   */
+  function populateFormFromMission(
+    m: MissionRow,
+    opts: { editing: boolean; namePrefix?: string },
+  ) {
     const parsed = parseMissionPrompt(m.prompt);
+    setNewName(opts.namePrefix ? `${m.name} ${opts.namePrefix}` : m.name);
     setNewInstruction(parsed.instruction);
     setNewContext(parsed.context);
     setNewOutputFormat(m.outputFormat ?? parsed.outputFormat ?? "");
     setNewConstraints(m.constraints ?? parsed.constraints ?? "");
     setNewGoals(m.goals?.join("\n") ?? "");
-    setDispatchAcknowledged(true);
+    setDispatchAcknowledged(opts.editing);
     setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
     setLocalDirDraft({ path: "", branch: null });
     setNewReferences(m.references ?? []);
     setNewSkills(m.skills ?? []);
     setNewCategoryId(m.categoryId ?? null);
-
     setNewModel(m.modelId || m.model || "");
     setNewProvider(m.provider || "");
     if (m.profileName) setNewProfile(m.profileName);
@@ -610,20 +716,40 @@ export function useMissionsPage() {
     if (m.schedule) {
       setNewSchedule(m.schedule);
       const s = m.schedule.trim();
-      if (s.includes("*") || /^\d/.test(s)) {
-        setScheduleType("wall-clock");
-      } else {
-        setScheduleType("interval");
-      }
+      setScheduleType(s.includes("*") || /^\d/.test(s) ? "wall-clock" : "interval");
     } else {
       setNewSchedule("every 5m");
       setScheduleType("interval");
     }
-
-    if (m.status === "successful" || m.status === "failed") {
-      setNewDispatch("now");
+    if (opts.editing) {
+      if (m.status === "successful" || m.status === "failed") {
+        setNewDispatch("now");
+      } else if (isMissionQueuedForRun(m)) {
+        setNewDispatch("queue");
+      } else if (m.status === "queued") {
+        setNewDispatch("save");
+      } else if (m.cronJobId) {
+        setNewDispatch("cron");
+      } else if (m.status === "dispatched") {
+        setNewDispatch("now");
+      }
     }
+  }
+
+  // ── Mission handlers ───────────────────────────────────────────────
+
+  const handleEdit = (m: MissionRow) => {
+    setEditingId(m.id);
+    populateFormFromMission(m, { editing: true });
     setShowCreate(true);
+  };
+
+  const handleDuplicateMission = (m: MissionRow) => {
+    setEditingId(null);
+    populateFormFromMission(m, { editing: false, namePrefix: "(copy)" });
+    setNewDispatch("save");
+    setShowCreate(true);
+    showToast("Mission duplicated as draft", "success");
   };
 
   const handleSaveAsTemplate = async () => {
@@ -649,9 +775,8 @@ export function useMissionsPage() {
 
     setTemplateSaving(true);
     try {
-      const action = existingTemplate ? "update" : "create";
       const payload = buildTemplatePayload({
-        action,
+        action: existingTemplate ? "update" : "create",
         templateId: existingTemplate?.id,
         name,
         icon: templateIcon,
@@ -720,9 +845,8 @@ export function useMissionsPage() {
     if (!templateName.trim()) return;
     setTemplateSaving(true);
     try {
-      const action = editingTemplateId ? "update" : "create";
       const payload = buildTemplatePayload({
-        action,
+        action: editingTemplateId ? "update" : "create",
         templateId: editingTemplateId ?? undefined,
         name: templateName,
         icon: templateIcon,
@@ -741,7 +865,7 @@ export function useMissionsPage() {
         defaultModel: newModel,
         defaultProvider: newProvider,
         timeoutMinutes: newTimeout,
-        categoryId: newCategoryId,
+        categoryId: newCategoryId ?? null,
         dispatchMode: editingTemplateId ? undefined : newDispatch,
         schedule: editingTemplateId ? undefined : newSchedule,
       });
@@ -788,50 +912,6 @@ export function useMissionsPage() {
     setShowTemplateEditor(true);
   };
 
-  const applyTemplateToForm = (
-    t: MissionTemplate & {
-      instruction?: string;
-      context?: string;
-      dispatchMode?: string;
-      schedule?: string;
-    },
-  ) => {
-    setNewInstruction(t.instruction || "");
-    setNewContext(t.context || "");
-    setNewGoals((t.goals || []).join("\n"));
-    setNewOutputFormat(
-      (t as MissionTemplate & { outputFormat?: string }).outputFormat ?? "",
-    );
-    setNewConstraints(
-      (t as MissionTemplate & { constraints?: string }).constraints ?? "",
-    );
-    setNewProfile(t.profile || "");
-    setNewModel(t.defaultModel || "");
-    setNewProvider(t.defaultProvider || "");
-    setNewLocalDirs(
-      normalizeLocalDirsInput(
-        (t as MissionTemplate & { localDirs?: unknown }).localDirs,
-      ),
-    );
-    setLocalDirDraft({ path: "", branch: null });
-    setNewReferences(
-      (t as MissionTemplate & { references?: string[] }).references ?? [],
-    );
-    setNewSkills(t.suggestedSkills || []);
-    setNewToolsets(
-      (t as MissionTemplate & { suggestedToolsets?: string[] }).suggestedToolsets ?? [],
-    );
-    const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
-    setNewCategoryId(cid);
-    const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
-    if (typeof tm === "number" && Number.isFinite(tm)) {
-      setNewTimeout(tm);
-    }
-    if (t.dispatchMode)
-      setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
-    if (t.schedule) setNewSchedule(t.schedule);
-  };
-
   const handleDeleteTemplate = async (templateId: string) => {
     if (!confirm("Delete this template?")) return;
     const res = await fetch("/api/templates", {
@@ -849,38 +929,9 @@ export function useMissionsPage() {
     }
   };
   const handleTemplateSelect = (t: MissionTemplate) => {
-    setNewName(t.name);
     applyTemplateToForm(t);
-    const cid = (t as MissionTemplate & { categoryId?: string }).categoryId ?? null;
-    setNewCategoryId(cid);
     setShowCreate(true);
     showToast(`Template loaded: ${t.name}`, "success");
-  };
-
-  const handleDuplicateMission = (m: MissionRow) => {
-    setEditingId(null);
-    setNewName(`${m.name} (copy)`);
-    const parsed = parseMissionPrompt(m.prompt);
-    setNewInstruction(parsed.instruction);
-    setNewContext(parsed.context);
-    setNewOutputFormat(m.outputFormat ?? parsed.outputFormat ?? "");
-    setNewConstraints(m.constraints ?? parsed.constraints ?? "");
-    setNewGoals(m.goals?.join("\n") ?? "");
-    setDispatchAcknowledged(false);
-    setNewLocalDirs(normalizeLocalDirsInput(m.localDirs));
-    setNewReferences(m.references ?? []);
-    setNewSkills(m.skills ?? []);
-    setNewCategoryId(m.categoryId ?? null);
-    setNewModel(m.modelId || m.model || "");
-    setNewProvider(m.provider || "");
-    if (m.profileName) setNewProfile(m.profileName);
-    if (typeof m.missionTimeMinutes === "number") {
-      setNewMissionTime(m.missionTimeMinutes);
-    }
-    if (typeof m.timeoutMinutes === "number") setNewTimeout(m.timeoutMinutes);
-    setNewDispatch("save");
-    setShowCreate(true);
-    showToast("Mission duplicated as draft", "success");
   };
 
   const handleDelete = async (id: string) => {
@@ -956,7 +1007,10 @@ export function useMissionsPage() {
   const filtered = useMemo(
     () =>
       missions.filter((m) => {
-        if (filter !== "all" && m.status !== filter) return false;
+        if (filter !== "all") {
+          const column = missionBoardColumn(m);
+          if (filter !== column) return false;
+        }
         if (missionCategoryFilter !== "all") {
           if (missionCategoryFilter === "__uncategorized__") {
             if (m.categoryId) return false;
@@ -977,12 +1031,52 @@ export function useMissionsPage() {
 
   const missionCounts = useMemo(
     () => ({
-      active: missions.filter((m) => m.status === "queued" || m.status === "dispatched").length,
+      active: missions.filter((m) => isMissionActive(m)).length,
       completed: missions.filter((m) => m.status === "successful").length,
       failed: missions.filter((m) => m.status === "failed").length,
+      drafts: missions.filter((m) => isMissionDraft(m)).length,
+      queued: missions.filter((m) => isMissionQueuedForRun(m)).length,
     }),
     [missions],
   );
+
+  useEffect(() => {
+    if (!showCreate || editingId) return;
+    if (newModel.trim()) return;
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const [defaultsRes, modelsRes] = await Promise.all([
+          fetch("/api/models/defaults", { signal: controller.signal }),
+          fetch("/api/models", { signal: controller.signal }),
+        ]);
+        if (!defaultsRes.ok || !modelsRes.ok) return;
+
+        const defaultsBody = (await defaultsRes.json()) as {
+          data?: { defaults?: { agent?: string | null } };
+        };
+        const modelsBody = (await modelsRes.json()) as {
+          data?: {
+            models?: Array<{ id: string; modelId: string; provider: string }>;
+          };
+        };
+
+        const agentRegistryId = defaultsBody.data?.defaults?.agent;
+        if (!agentRegistryId) return;
+
+        const match = modelsBody.data?.models?.find((m) => m.id === agentRegistryId);
+        if (!match) return;
+
+        setNewModel(match.modelId);
+        setNewProvider(match.provider);
+      } catch {
+        /* aborted or network */
+      }
+    })();
+
+    return () => controller.abort();
+  }, [showCreate, editingId, newModel]);
 
   const templateCategoryPills = useMemo(() => {
     const counts: Record<string, number> = {};

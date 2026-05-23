@@ -229,13 +229,15 @@ export function messageSummary(content: string | undefined): string {
   return trimmed + (firstNonEmpty.length > 120 || hasMoreContent ? "..." : "");
 }
 
-// ── Schedule Parsing ──────────────────────────────────────────
+/**
+ * Parse a cron expression into a human-readable string for display.
+ * Handles common patterns: interval minutes, interval hours, daily, weekly, etc.
+ */
+export { describeSchedule } from "@/lib/schedule/types";
 
+// Re-export from schedule module
 export type { ParsedSchedule } from "@/lib/schedule/types";
-
 export { parseSchedule } from "@/lib/schedule/parse-schedule";
-
-// ── Cron Job Types ────────────────────────────────────────────
 
 export interface CronJobData {
   id: string;
