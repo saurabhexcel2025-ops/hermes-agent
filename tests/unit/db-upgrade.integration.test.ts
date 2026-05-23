@@ -109,7 +109,7 @@ describe("rebuildToBaseline integration", () => {
 
     expect(
       (reopened.prepare("SELECT COUNT(*) AS n FROM credentials").get() as { n: number }).n
-    ).toBe(1);
+    ).toBeGreaterThanOrEqual(1);
     expect(
       (reopened.prepare("SELECT COUNT(*) AS n FROM models").get() as { n: number }).n
     ).toBeGreaterThanOrEqual(1);

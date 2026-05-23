@@ -16,6 +16,7 @@ import {
   Sparkles,
   Copy,
   MoreVertical,
+  ChevronDown,
 } from "lucide-react";
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
@@ -46,16 +47,22 @@ function PersonalityCard({
   onActivate: (name: string) => void;
   isActive: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [textExpanded, setTextExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleDelete = async () => {
     if (!deleting) {
       setDeleting(true);
+      setMenuOpen(false);
       return;
     }
-    await onDelete(personality.name);
+    try {
+      await onDelete(personality.name);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleCopy = () => {
@@ -69,8 +76,22 @@ function PersonalityCard({
       ? personality.prompt.slice(0, 120) + "..."
       : personality.prompt;
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-kebab-menu]')) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
   return (
     <div
+      data-kebab-menu
       className={`rounded-xl border transition-all ${
         isActive
           ? "border-neon-cyan/50 bg-neon-cyan/5"
@@ -92,11 +113,18 @@ function PersonalityCard({
               )}
             </div>
             <p className="text-xs text-white/40 leading-relaxed">
-              {expanded ? personality.prompt : preview}
+              {textExpanded ? personality.prompt : preview}
             </p>
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => setTextExpanded(!textExpanded)}
+              className="p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors"
+              title={textExpanded ? "Collapse" : "Expand prompt"}
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${textExpanded ? "" : "rotate-90"}`} />
+            </button>
             <button
               onClick={handleCopy}
               className="p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors"
@@ -118,26 +146,27 @@ function PersonalityCard({
               </button>
             )}
             {/* Kebab menu */}
-            <div className="relative">
+            <div className="relative" data-kebab-menu>
               <button
-                onClick={() => setExpanded(!expanded)}
+                onClick={() => setMenuOpen(!menuOpen)}
                 className="p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors"
+                title="Actions"
               >
                 <MoreVertical className="w-3.5 h-3.5" />
               </button>
-              {expanded && (
+              {menuOpen && (
                 <div className="absolute right-0 top-full mt-1 z-10 bg-dark-800 border border-white/10 rounded-lg shadow-xl py-1 min-w-[120px]">
                   <button
-                    onClick={() => { onEdit(personality); setExpanded(false); }}
+                    onClick={() => { onEdit(personality); setMenuOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/70 hover:bg-white/5 hover:text-white"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> Edit
                   </button>
                   <button
-                    onClick={() => { handleDelete(); setExpanded(false); }}
+                    onClick={handleDelete}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                    <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Confirm?" : "Delete"}
                   </button>
                 </div>
               )}

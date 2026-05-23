@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, existsSync, statSync } from "fs";
+import Database from "better-sqlite3";
+import { existsSync } from "fs";
 import { join } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
@@ -19,21 +20,97 @@ export async function GET(
   if (limited) return limited;
 
   const { id } = await params;
-  const sessionsPath = getActiveHermesPaths().sessions;
 
-  // Security: prevent path traversal by resolving and checking prefix
+  // Security: prevent path traversal
   const sanitizedId = id.replace(/[^a-zA-Z0-9_.-]/g, "");
   if (sanitizedId !== id || sanitizedId.includes("..")) {
-    return NextResponse.json(
-      { error: "Invalid session ID" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid session ID" }, { status: 400 });
   }
 
-  const fullPath = sessionsPath + "/" + sanitizedId;
+  // ── Step 1: Try Hermes state.db (v0.14+ — canonical source) ──────────
+  const root = getActiveHermesPaths().root;
+  const stateDbPath = join(root, "state.db");
 
-  // Try both .json and .jsonl extensions
+  if (existsSync(stateDbPath)) {
+    try {
+      const hermesDb = new Database(stateDbPath, { readonly: true });
+
+      // Check if this session exists in Hermes state.db
+      const sessionRow = hermesDb
+        .prepare("SELECT id, source, model, title, started_at, ended_at, end_reason, message_count, api_call_count FROM sessions WHERE id = ?")
+        .get(sanitizedId) as {
+          id: string; source: string; model: string; title: string | null;
+          started_at: number; ended_at: number | null; end_reason: string | null;
+          message_count: number | null; api_call_count: number | null;
+        } | undefined;
+
+      if (sessionRow) {
+        // Read messages for this session
+        const messageRows = hermesDb
+          .prepare(
+            `SELECT role, content, tool_name, tool_calls, tool_call_id, finish_reason, reasoning, timestamp
+             FROM messages WHERE session_id = ? ORDER BY timestamp ASC`,
+          )
+          .all(sanitizedId) as Array<{
+            role: string; content: string | null; tool_name: string | null;
+            tool_calls: string | null; tool_call_id: string | null;
+            finish_reason: string | null; reasoning: string | null; timestamp: number;
+          }>;
+        hermesDb.close();
+
+        const messages = messageRows.map((m, i) => {
+          let toolCalls = null;
+          if (m.tool_calls) {
+            try { toolCalls = JSON.parse(m.tool_calls); } catch { /* not JSON */ }
+          }
+          return {
+            index: i,
+            role: m.role,
+            content: m.content ?? "",
+            tool_calls: toolCalls,
+            tool_name: m.tool_name ?? null,
+            tool_call_id: m.tool_call_id ?? null,
+            finish_reason: m.finish_reason ?? null,
+            reasoning: m.reasoning ?? null,
+            timestamp: m.timestamp,
+          };
+        });
+
+        const size = Math.max(
+          (sessionRow.message_count ?? 0) * 200 + (sessionRow.api_call_count ?? 0) * 50,
+          messages.length * 300,
+        );
+
+        return NextResponse.json({
+          data: {
+            id: sanitizedId,
+            filename: sanitizedId,
+            format: "db",
+            title: sessionRow.title ?? sanitizedId,
+            model: sessionRow.model ?? "",
+            source: sessionRow.source,
+            messages,
+            messageCount: messages.length,
+            size,
+            created: sessionRow.started_at
+              ? new Date(sessionRow.started_at * 1000).toISOString()
+              : null,
+          },
+        });
+      }
+
+      hermesDb.close();
+    } catch (err) {
+      logApiError("GET /api/sessions/[id]", "reading Hermes state.db for " + sanitizedId, err);
+      // Non-fatal — fall through to file-based lookup
+    }
+  }
+
+  // ── Step 2: Legacy file-based sessions (~/.hermes/sessions/) ──────────
+  const sessionsPath = getActiveHermesPaths().sessions;
+  const fullPath = sessionsPath + "/" + sanitizedId;
   let filePath = "";
+
   if (existsSync(fullPath)) {
     filePath = fullPath;
   } else if (existsSync(fullPath + ".json")) {
@@ -50,9 +127,10 @@ export async function GET(
         const missionLog = join(PATHS.missions, `${dbSession.missionId}.output.log`);
         const sessionPath = existsSync(missionFile) ? missionFile : existsSync(missionLog) ? missionLog : null;
         if (sessionPath) {
+          const { readFileSync, statSync } = require("fs");
           const content = readFileSync(sessionPath, "utf-8");
-          const lines = content.split("\n").filter((l) => l.trim());
-          const messages = lines.map((line, i) => ({
+          const lines = content.split("\n").filter((l: string) => l.trim());
+          const messages = lines.map((line: string, i: number) => ({
             index: i,
             role: "assistant",
             content: line,
@@ -86,7 +164,7 @@ export async function GET(
           messageCount: 0,
           size: dbSession.size,
           created: dbSession.startedAt,
-          note: "Session transcript is stored in Hermes Agent — not available as a file in Control Hub.",
+          note: "Session transcript is stored in Hermes Agent state.db — loaded above if available.",
         },
       });
     }
@@ -97,6 +175,7 @@ export async function GET(
   }
 
   try {
+    const { statSync, readFileSync } = require("fs");
     const st = statSync(filePath);
     const maxBytes = getMaxSessionFileBytes();
     if (st.size > maxBytes) {
@@ -122,8 +201,8 @@ export async function GET(
       // Parse JSONL — one JSON object per line
       const messages = content
         .split("\n")
-        .filter((line) => line.trim())
-        .map((line, index) => {
+        .filter((line: string) => line.trim())
+        .map((line: string, index: number) => {
           try {
             const msg = JSON.parse(line);
             return { index, ...msg };

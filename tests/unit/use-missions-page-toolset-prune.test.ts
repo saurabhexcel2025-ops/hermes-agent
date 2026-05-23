@@ -10,6 +10,6 @@ describe("useMissionsPage profile toolset prune", () => {
     const content = readFileSync(hookPath, "utf-8");
     expect(content).toContain("/api/agent/profiles/${slug}/toolsets");
     expect(content).toContain("setNewToolsets((prev) => prev.filter((t) => toolsetIds.has(t)))");
-    expect(content).toContain("flattenProfileToolsets");
+    expect(content).toContain("unionToolsetsFromPlatforms(");
   });
 });
