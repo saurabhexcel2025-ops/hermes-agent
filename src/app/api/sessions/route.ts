@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
+import { requireAuth } from "@/lib/api-auth";
 import {
   createSession,
   updateSession,
@@ -106,6 +107,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
 
   try {
     const body = await request.json() as {

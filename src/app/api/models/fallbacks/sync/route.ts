@@ -41,13 +41,17 @@ export async function POST(request: NextRequest) {
 
     appendAuditLine({ action: "fallback.sync", resource: "hermes", ok: true });
 
+    const hermesHome = result?.hermesHome ?? null;
+    const configPath = result?.configPath ?? null;
+    const backupPath = result?.backupPath ?? null;
+
     return NextResponse.json({
       data: {
         success: true,
         config,
-        hermesHome: result.hermesHome,
-        configPath: result.configPath,
-        backupPath: result.backupPath,
+        hermesHome,
+        configPath,
+        backupPath,
       },
     });
   } catch (error) {

@@ -5,6 +5,7 @@ import { join } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
+import { requireAuth } from "@/lib/api-auth";
 import { getSession } from "@/lib/session-repository";
 import { PATHS } from "@/lib/paths";
 import {
@@ -18,6 +19,8 @@ export async function GET(
 ) {
   const limited = sessionsRateLimitResponse(request, "GET /api/sessions/[id]");
   if (limited) return limited;
+  const auth = requireAuth(request);
+  if (auth) return auth;
 
   const { id } = await params;
 

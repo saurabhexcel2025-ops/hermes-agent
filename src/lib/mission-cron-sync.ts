@@ -11,6 +11,7 @@ import {
 } from "@/lib/cron-repository";
 import { removeJobFromHermes } from "@/lib/cron/hermes-sync";
 import { logApiError } from "@/lib/api-logger";
+import { inTransaction } from "@/lib/db";
 import type { Mission } from "@/lib/agent-backend/types";
 
 export interface MissionCronJobBrief {
@@ -88,13 +89,18 @@ export async function pauseMissionCron(missionId: string): Promise<boolean> {
 export async function deleteMissionCron(missionId: string): Promise<boolean> {
   const mission = getMission(missionId);
   if (!mission?.cronJobId) return true;
-  const job = getCronJob(mission.cronJobId);
+  const cronJobId: string = (mission as { cronJobId: string }).cronJobId;
+  const job = getCronJob(cronJobId);
+
   try {
-    if (job?.hermes_job_id) {
-      await removeJobFromHermes(job.hermes_job_id);
-    }
-    deleteCronJob(mission.cronJobId);
-    updateMission(missionId, { cronJobId: null });
+    await inTransaction(() => {
+      if (job?.hermes_job_id) {
+        // Fire-and-forget Hermes removal — non-critical, best-effort
+        void removeJobFromHermes(job.hermes_job_id);
+      }
+      deleteCronJob(cronJobId);
+      updateMission(missionId, { cronJobId: null });
+    });
     return true;
   } catch (err) {
     logApiError("deleteMissionCron", missionId, err);
