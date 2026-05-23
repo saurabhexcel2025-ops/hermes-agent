@@ -88,6 +88,7 @@ export interface MissionBrief {
   status: string;
   dispatchMode: string;
   createdAt: string;
+  queuedForRun?: boolean;
   cronJobId?: string;
   cronJob?: { state: string; enabled: boolean; lastRun: string | null; lastStatus: string | null };
   latestSession?: { id: string; modified: string } | null;
@@ -384,6 +385,7 @@ export interface Mission {
   categoryId?: string | null;
   outputFormat?: string;
   constraints?: string;
+  queuedForRun?: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -12,7 +12,12 @@ import { readHermesConfigModels, type HermesConfigModelEntry } from "@/lib/herme
 interface Diff { field: string; before: unknown; after: unknown }
 
 function computeDiffs(
-  model: { modelId: string; provider: string; baseUrl: string | null },
+  model: {
+    modelId: string;
+    provider: string;
+    baseUrl: string | null;
+    contextLength: number | null;
+  },
   hermes: HermesConfigModelEntry,
 ): { diffs: Diff[]; updates: Record<string, unknown> } {
   const diffs: Diff[] = [];
@@ -29,6 +34,17 @@ function computeDiffs(
   if (hermes.baseUrl !== model.baseUrl) {
     diffs.push({ field: "baseUrl", before: model.baseUrl, after: hermes.baseUrl ?? "" });
     updates.baseUrl = hermes.baseUrl;
+  }
+  if (
+    hermes.contextLength != null &&
+    hermes.contextLength !== model.contextLength
+  ) {
+    diffs.push({
+      field: "contextLength",
+      before: model.contextLength,
+      after: hermes.contextLength,
+    });
+    updates.contextLength = hermes.contextLength;
   }
 
   return { diffs, updates };

@@ -2,6 +2,32 @@ import "@testing-library/jest-dom";
 
 // Polyfill globals required by Next.js 14 server route imports.
 // These are referenced during module evaluation in next/dist/server/web/spec-extension/
+if (typeof globalThis.Response === "undefined") {
+  class PolyfillResponse {
+    readonly body: BodyInit | null;
+    readonly status: number;
+    readonly headers: Headers;
+    readonly ok: boolean;
+
+    constructor(body?: BodyInit | null, init?: ResponseInit) {
+      this.body = body ?? null;
+      this.status = init?.status ?? 200;
+      this.headers = new Headers(init?.headers);
+      this.ok = this.status >= 200 && this.status < 300;
+    }
+
+    async json(): Promise<unknown> {
+      if (typeof this.body === "string") {
+        return JSON.parse(this.body) as unknown;
+      }
+      return this.body;
+    }
+  }
+
+  (globalThis as Record<string, unknown>).Response =
+    PolyfillResponse as unknown as typeof Response;
+}
+
 // Add Response.json static method if jsdom's Response doesn't have it.
 // jsdom defines Response but not Response.json(), which NextResponse.json() calls.
 // We only augment — we do NOT replace the existing Response object.
@@ -21,13 +47,30 @@ if (_Response && typeof _Response.json !== "function") {
 }
 if (typeof globalThis.Request === "undefined") {
   (globalThis as Record<string, unknown>).Request = class Request {
+    private readonly _url: string;
+    private readonly _method: string;
+    private readonly _headers: Headers;
+
     constructor(input: RequestInfo | URL, init?: RequestInit) {
-      const url = typeof input === "string" ? input : (input as URL).href ?? String(input);
-      Object.assign(this, { url, method: init?.method ?? "GET", headers: new Headers(init?.headers) });
+      this._url =
+        typeof input === "string"
+          ? input
+          : (input as URL).href ?? String(input);
+      this._method = init?.method ?? "GET";
+      this._headers = new Headers(init?.headers);
     }
-    get url() { return (this as Record<string, unknown>)._url as string; }
-    get method() { return (this as Record<string, unknown>)._method as string; }
-    get headers() { return (this as Record<string, unknown>)._headers as Headers; }
+
+    get url() {
+      return this._url;
+    }
+
+    get method() {
+      return this._method;
+    }
+
+    get headers() {
+      return this._headers;
+    }
   } as unknown as typeof Request;
 }
 

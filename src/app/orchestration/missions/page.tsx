@@ -142,7 +142,9 @@ export default function MissionsPage() {
         }
       />
 
-      <MissionsList vm={vm} />
+      <div className="max-w-screen-xl mx-auto w-full px-4 sm:px-6">
+        <MissionsList vm={vm} />
+      </div>
 
       <Sheet
         open={showCreate}
@@ -168,7 +170,7 @@ export default function MissionsPage() {
           />
         }
       >
-        <div className="px-6 py-5">
+        <div className="max-w-screen-xl mx-auto w-full px-6 py-5">
           <MissionCreateForm
             embedded
             editingId={editingId}

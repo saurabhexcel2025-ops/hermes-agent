@@ -63,16 +63,20 @@ describe("Baseline — mission settings columns", () => {
   it("API dispatch route passes new fields to createMission", () => {
     const p = join(repoRoot, "src", "app", "api", "missions", "route.ts");
     const content = readFileSync(p, "utf-8");
-    expect(content).toContain("modelId: modelId ?? null");
-    expect(content).toContain("provider: provider ?? null");
-    expect(content).toContain("profileName: profileName ?? null");
+    expect(content).toMatch(/modelId:\s*modelId\s*\?\?\s*(undefined|null)/);
+    expect(content).toMatch(/provider:\s*provider\s*\?\?\s*(undefined|null)/);
+    expect(content).toContain("profileName: profileName ?? undefined");
   });
 
-  it("API update route persists new fields", () => {
-    const p = join(repoRoot, "src", "app", "api", "missions", "route.ts");
-    const content = readFileSync(p, "utf-8");
-    expect(content).toContain("updates.modelId = modelId");
-    expect(content).toContain("updates.provider = provider");
+  it("API update route persists new fields via buildMissionFieldPatch", () => {
+    const routePath = join(repoRoot, "src", "app", "api", "missions", "route.ts");
+    const routeContent = readFileSync(routePath, "utf-8");
+    expect(routeContent).toContain("buildMissionFieldPatch");
+
+    const patchPath = join(repoRoot, "src", "lib", "mission-field-updates.ts");
+    const patchContent = readFileSync(patchPath, "utf-8");
+    expect(patchContent).toContain("if (input.modelId !== undefined) updates.modelId = input.modelId");
+    expect(patchContent).toContain("if (input.provider !== undefined) updates.provider = input.provider");
   });
 
   it("Missions page handleEdit restores model/provider/settings", () => {

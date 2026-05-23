@@ -14,6 +14,10 @@ import {
 import Button from "@/components/ui/Button";
 import { timeAgo, titleCase } from "@/lib/utils";
 import type { MissionDetail, MissionRow } from "@/hooks/useMissionsPage";
+import {
+  isMissionDraft,
+  isMissionQueuedForRun,
+} from "@/lib/mission-board";
 
 export interface MissionEditorPanelProps {
   detail: MissionDetail | null;
@@ -282,30 +286,27 @@ export default function MissionEditorPanel({
                 Duplicate
               </Button>
             )}
-            {(mission.status === "queued" ||
-              mission.status === "dispatched") && (
+            {isMissionDraft(mission) ? (
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => onEdit(mission)}
               >
-                <Edit3 className="w-3 h-3" /> Edit
+                <Edit3 className="w-3 h-3" /> Edit draft
               </Button>
-            )}
-            {(mission.status === "successful" ||
-              mission.status === "failed") && (
+            ) : (
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => onEdit(mission)}
               >
                 <Edit3 className="w-3 h-3" />
-                {" "}
-                Re-dispatch
+                {mission.status === "successful" || mission.status === "failed"
+                  ? " Re-dispatch"
+                  : " Edit"}
               </Button>
             )}
-            {(mission.status === "queued" ||
-              mission.status === "dispatched") && (
+            {(mission.status === "dispatched" || isMissionQueuedForRun(mission)) && (
               <Button
                 variant="danger"
                 size="sm"
@@ -314,7 +315,11 @@ export default function MissionEditorPanel({
                 onClick={() => onCancel(mission.id)}
               >
                 {!isCancelling ? <StopCircle className="w-3 h-3" /> : null}
-                {isCancelling ? "Cancelling…" : "Cancel"}
+                {isCancelling
+                  ? "Cancelling…"
+                  : mission.status === "dispatched"
+                    ? "Cancel"
+                    : "Remove from queue"}
               </Button>
             )}
             <Button

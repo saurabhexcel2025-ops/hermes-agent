@@ -423,7 +423,15 @@ export default function Dashboard() {
       ? `${registryAgentModelLabel} · Models registry (push Bob to write config.yaml)`
       : "-";
   const activeProcesses = useMemo(() => processes.filter((p) => p.status === "running"), [processes]);
-  const activeMissions = useMemo(() => missions.filter((m) => m.status === "queued" || m.status === "dispatched"), [missions]);
+  const activeMissions = useMemo(
+    () =>
+      missions.filter(
+        (m) =>
+          m.status === "dispatched" ||
+          (m.status === "queued" && m.queuedForRun === true),
+      ),
+    [missions],
+  );
 
   // Snapshot current time for render — capture once on mount
   const [now] = useState(() => Date.now());

@@ -12,14 +12,11 @@ import {
   deleteMission,
   buildMissionPrompt,
 } from "@/lib/mission-repository";
-import { parseMissionPrompt } from "@/lib/build-mission-prompt";
-import { createSession, updateSession } from "@/lib/session-repository";
+import { updateSession } from "@/lib/session-repository";
 import { normalizeLocalDirsInput } from "@/lib/local-dir-entry";
-import type { LocalDirEntry } from "@/types/hermes";
 import { requireAuth } from "@/lib/api-auth";
 import { logApiError } from "@/lib/api-logger";
 import { appendAuditLine } from "@/lib/audit-log";
-import type { MissionStatus } from "@/lib/agent-backend/types";
 import { agentBackend } from "@/lib/backends";
 import { createCronJob, deleteCronJob, importHermesJobs, pushJobToHermes } from "@/lib/cron-repository";
 import { getCategory } from "@/lib/mission-category-repository";
@@ -30,27 +27,11 @@ import {
   pauseMissionCron,
   syncMissionToCronJob,
 } from "@/lib/mission-cron-sync";
-
-// ── Shared helpers ─────────────────────────────────────────────────
-
-/**
- * Wait for the Hermes backend to surface a sessionId for a freshly
- * dispatched mission. Polls up to 10 times with 800ms back-off.
- * Falls back gracefully if the backend does not support this.
- */
-async function pollForSessionId(
-  missionId: string,
-  agentBackend: typeof import("@/lib/backends").agentBackend,
-): Promise<string | undefined> {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    await new Promise((r) => setTimeout(r, 800));
-    try {
-      const sid = await agentBackend.getMissionSessionId?.(missionId);
-      if (sid) return sid;
-    } catch { /* keep polling */ }
-  }
-  return undefined;
-}
+import { dispatchMissionNow } from "@/lib/mission-dispatch";
+import { buildMissionFieldPatch } from "@/lib/mission-field-updates";
+import { promoteMission } from "@/lib/mission-promote-handler";
+import { runMissionQueueTick } from "@/lib/mission-queue-tick";
+import { ensureSyncLayer } from "@/lib/sync";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -75,6 +56,7 @@ function parseCategoryId(
 // ── GET ───────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
+  ensureSyncLayer();
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
 
@@ -110,6 +92,8 @@ export async function GET(request: Request) {
 export async function POST(request: NextRequest) {
   const auth = requireAuth(request);
   if (auth) return auth;
+
+  ensureSyncLayer();
 
   try {
     const body = await request.json();
@@ -225,8 +209,15 @@ export async function POST(request: NextRequest) {
         constraints: constraints?.trim() || undefined,
       });
 
-      const isSaveMode = dispatchMode === "save" || dispatchMode === "queue";
+      const isSaveMode = dispatchMode === "save";
+      const isQueueMode = dispatchMode === "queue";
       const isCronMode = dispatchMode === "cron" && scheduleVal;
+
+      if (isSaveMode) {
+        updateMission(mission.id, { queuedForRun: false });
+      } else if (isQueueMode) {
+        updateMission(mission.id, { queuedForRun: true });
+      }
 
       if (isCronMode) {
         // ── Recurring mission: create a cron job + dispatch first run immediately ──
@@ -272,54 +263,11 @@ export async function POST(request: NextRequest) {
           }
 
           // ── Immediate first-run dispatch ──
-          // Don't wait for the cron scheduler — start the first run now.
-          updateMission(mission.id, { status: "dispatched" });
-
-          let sessionIdFromDb: string | undefined;
-          try {
-            const session = createSession({
-              source: "mission",
-              missionId: mission.id,
-              profileName: profileName ?? null,
-              modelId: modelId ?? null,
-              provider: provider ?? null,
-              title: mission.name,
-              status: "active",
-            });
-            sessionIdFromDb = session.id;
-          } catch (err) {
-            logApiError("POST /api/missions", "createSession (cron)", err);
-          }
-
-          try {
-            const dispatched = await agentBackend.dispatchMission({
-              missionId: mission.id,
-              name: mission.name,
-              prompt: mission.prompt,
-              profileId: mission.profileId,
-              profileName,
-              modelId,
-              provider,
-            });
-
-            let sessionId: string | undefined = dispatched.sessionId ?? sessionIdFromDb;
-            if (!sessionId && sessionIdFromDb) {
-              sessionId = sessionIdFromDb;
-            } else if (!sessionId) {
-              sessionId = await pollForSessionId(mission.id, agentBackend);
-            }
-
-            updateMission(mission.id, {
-              sessionId,
-              status: "dispatched",
-            });
-          } catch (err) {
-            logApiError("POST /api/missions", "immediate dispatch (cron)", err);
-            if (sessionIdFromDb) {
-              updateSession(sessionIdFromDb, { status: "failed", endedAt: new Date().toISOString() });
-            }
-            updateMission(mission.id, { status: "failed" });
-          }
+          await dispatchMissionNow(mission.id, {
+            profileName: profileName as string | undefined,
+            modelId: modelId as string | undefined,
+            provider: provider as string | undefined,
+          });
 
           appendAuditLine({ action: "mission.cron_dispatch", resource: mission.id, ok: true });
           return NextResponse.json(
@@ -334,64 +282,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!isSaveMode) {
-        updateMission(mission.id, { status: "dispatched" });
-
-        // Pre-register the session in Control Hub's unified registry.
-        // This links the mission to its session before hermes even starts,
-        // so the Sessions page shows it immediately after dispatch.
-        let sessionIdFromDb: string | undefined;
-        try {
-          const session = createSession({
-            source: "mission",
-            missionId: mission.id,
-            profileName: profileName ?? null,
-            modelId: modelId ?? null,
-            provider: provider ?? null,
-            title: mission.name,
-            status: "active",
-          });
-          sessionIdFromDb = session.id;
-        } catch (err) {
-          logApiError("POST /api/missions", "createSession", err);
-        }
-
-        try {
-          // Pass mission.id so dispatchMission writes all output files
-          // (.session, .status.json, .output.log) under the same ID the
-          // API returned to the caller. Without this, the backend generates
-          // its own UUID and files are never matched to the DB record.
-          const dispatched = await agentBackend.dispatchMission({
-            missionId: mission.id,
-            name: mission.name,
-            prompt: mission.prompt,
-            profileId: mission.profileId,
-            profileName,
-            modelId,
-            provider,
-          });
-
-          // Capture session ID from the running hermes process.
-          // Prefer the hermes-reported session ID; fall back to our pre-registered one.
-          let sessionId: string | undefined = dispatched.sessionId ?? sessionIdFromDb;
-          if (!sessionId && sessionIdFromDb) {
-            sessionId = sessionIdFromDb;
-          } else if (!sessionId) {
-            sessionId = await pollForSessionId(mission.id, agentBackend);
-          }
-
-          updateMission(mission.id, {
-            sessionId,
-            status: "dispatched",
-          });
-        } catch (err) {
-          logApiError("POST /api/missions", "dispatch", err);
-          // Mark the session as failed
-          if (sessionIdFromDb) {
-            updateSession(sessionIdFromDb, { status: "failed", endedAt: new Date().toISOString() });
-          }
-          updateMission(mission.id, { status: "failed" });
-        }
+      if (!isSaveMode && !isQueueMode) {
+        await dispatchMissionNow(mission.id, {
+          profileName: profileName as string | undefined,
+          modelId: modelId as string | undefined,
+          provider: provider as string | undefined,
+        });
+      } else if (isQueueMode) {
+        void runMissionQueueTick();
       }
 
       appendAuditLine({ action: "mission.dispatch", resource: mission.id, ok: true });
@@ -401,13 +299,114 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Promote draft / queued-waiting mission ─────────────────
+    if (action === "promote") {
+      const missionIdFinal = resolveMissionId(body as Record<string, unknown>);
+      if (!missionIdFinal) {
+        return NextResponse.json({ error: "Mission id is required" }, { status: 400 });
+      }
+
+      const {
+        dispatchMode,
+        name,
+        instruction,
+        context,
+        localDirs,
+        references,
+        skills,
+        suggestedToolsets,
+        goals,
+        modelId,
+        provider,
+        profileName,
+        missionTimeMinutes,
+        timeoutMinutes,
+        schedule: scheduleVal,
+        categoryId: categoryIdRaw,
+        outputFormat,
+        constraints,
+      } = body as {
+        dispatchMode?: string;
+        name?: string;
+        instruction?: string;
+        context?: string;
+        localDirs?: unknown;
+        references?: string[];
+        skills?: string[];
+        suggestedToolsets?: string[];
+        goals?: string[];
+        modelId?: string;
+        provider?: string;
+        profileName?: string;
+        missionTimeMinutes?: number;
+        timeoutMinutes?: number;
+        schedule?: string;
+        categoryId?: string | null;
+        outputFormat?: string;
+        constraints?: string;
+      };
+
+      if (!dispatchMode) {
+        return NextResponse.json({ error: "dispatchMode is required" }, { status: 400 });
+      }
+
+      const categoryParsed = parseCategoryId(categoryIdRaw);
+      if (!categoryParsed.ok) {
+        return NextResponse.json({ error: categoryParsed.error }, { status: 400 });
+      }
+
+      if (
+        instruction !== undefined &&
+        (typeof instruction !== "string" || !instruction.trim())
+      ) {
+        return NextResponse.json({ error: "instruction cannot be empty" }, { status: 400 });
+      }
+
+      const result = await promoteMission({
+        missionId: missionIdFinal,
+        dispatchMode,
+        schedule: scheduleVal,
+        name,
+        instruction,
+        context,
+        localDirs,
+        references,
+        skills,
+        suggestedToolsets,
+        goals,
+        modelId,
+        provider,
+        profileName,
+        missionTimeMinutes,
+        timeoutMinutes,
+        categoryId: categoryParsed.value,
+        outputFormat,
+        constraints,
+      });
+
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            error: result.error,
+            cronPushError: result.cronPushError,
+            data: result.mission ? { mission: result.mission } : undefined,
+          },
+          { status: result.status },
+        );
+      }
+
+      appendAuditLine({ action: "mission.promote", resource: missionIdFinal, ok: true });
+      return NextResponse.json({ data: { mission: result.mission } });
+    }
+
     // ── Update Mission ─────────────────────────────────────────
     if (action === "update") {
-      const { status, result, instruction, localDirs, references, skills, suggestedToolsets, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw, outputFormat, constraints } = body as {
+      const { status, result, name, instruction, localDirs, references, skills, suggestedToolsets, goals, modelId, provider, profileName, missionTimeMinutes, timeoutMinutes, schedule, context, categoryId: categoryIdRaw, outputFormat, constraints } = body as {
         id?: string;
         missionId?: string;
         status?: string;
         result?: string;
+        name?: string;
         instruction?: string;
         localDirs?: unknown;
         references?: string[];
@@ -439,104 +438,51 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: categoryParsed.error }, { status: 400 });
       }
 
-      let prompt: string | undefined;
-      const shouldRebuildPrompt =
-        instruction !== undefined ||
-        context !== undefined ||
-        localDirs !== undefined ||
-        references !== undefined ||
-        skills !== undefined ||
-        suggestedToolsets !== undefined ||
-        goals !== undefined ||
-        missionTimeMinutes !== undefined ||
-        timeoutMinutes !== undefined ||
-        outputFormat !== undefined ||
-        constraints !== undefined;
-
-      if (shouldRebuildPrompt) {
-        const parsed = parseMissionPrompt(existing.prompt);
-        prompt = buildMissionPrompt({
-          instruction:
-            instruction !== undefined ? instruction.trim() : parsed.instruction,
-          context: context !== undefined ? context : parsed.context,
-          localDirs:
-            localDirs !== undefined
-              ? normalizeLocalDirsInput(localDirs)
-              : existing.localDirs,
-          references: references !== undefined ? references : existing.references,
-          skills: skills !== undefined ? skills : existing.skills,
-          toolsets:
-            suggestedToolsets !== undefined
-              ? suggestedToolsets
-              : existing.suggestedToolsets,
-          goals: goals !== undefined ? goals : existing.goals,
-          missionTimeMinutes:
-            missionTimeMinutes !== undefined
-              ? missionTimeMinutes
-              : existing.missionTimeMinutes,
-          timeoutMinutes:
-            timeoutMinutes !== undefined
-              ? timeoutMinutes
-              : existing.timeoutMinutes,
-          outputFormat:
-            outputFormat !== undefined
-              ? outputFormat
-              : existing.outputFormat ?? parsed.outputFormat,
-          constraints:
-            constraints !== undefined
-              ? constraints
-              : existing.constraints ?? parsed.constraints,
-        });
+      if (existing.status !== "dispatched") {
+        return NextResponse.json(
+          { error: "Use promote for draft or queued missions; update is for running missions" },
+          { status: 400 },
+        );
       }
 
-      const updates: {
-        status?: MissionStatus;
-        result?: string;
-        prompt?: string;
-        localDirs?: LocalDirEntry[];
-        references?: string[];
-        skills?: string[];
-        suggestedToolsets?: string[];
-        goals?: string[];
-        modelId?: string | null;
-        provider?: string | null;
-        profileName?: string | null;
-        missionTimeMinutes?: number | null;
-        timeoutMinutes?: number | null;
-        schedule?: string | null;
-        categoryId?: string | null;
-        outputFormat?: string | null;
-        constraints?: string | null;
-      } = {};
-      if (status) updates.status = status as MissionStatus;
-      if (result !== undefined) updates.result = result;
-      if (prompt !== undefined) updates.prompt = prompt;
-      if (outputFormat !== undefined) {
-        updates.outputFormat = outputFormat.trim() || null;
-      }
-      if (constraints !== undefined) {
-        updates.constraints = constraints.trim() || null;
-      }
-      if (localDirs !== undefined) updates.localDirs = normalizeLocalDirsInput(localDirs);
-      if (references !== undefined) updates.references = references;
-      if (skills !== undefined) updates.skills = skills;
-      if (suggestedToolsets !== undefined) updates.suggestedToolsets = suggestedToolsets;
-      if (goals !== undefined) updates.goals = goals;
-      if (modelId !== undefined) updates.modelId = modelId;
-      if (provider !== undefined) updates.provider = provider;
-      if (profileName !== undefined) updates.profileName = profileName;
-      if (missionTimeMinutes !== undefined) updates.missionTimeMinutes = missionTimeMinutes;
-      if (timeoutMinutes !== undefined) updates.timeoutMinutes = timeoutMinutes;
-      if (schedule !== undefined) updates.schedule = schedule;
-      if (categoryParsed.value !== undefined) updates.categoryId = categoryParsed.value;
+      const { shouldRebuildPrompt, prompt, updates } = buildMissionFieldPatch(
+        existing,
+        {
+          status,
+          result,
+          name,
+          instruction,
+          context,
+          localDirs,
+          references,
+          skills,
+          suggestedToolsets,
+          goals,
+          modelId,
+          provider,
+          profileName,
+          missionTimeMinutes,
+          timeoutMinutes,
+          schedule,
+          outputFormat,
+          constraints,
+        },
+        categoryParsed.value,
+      );
 
       const mission = updateMission(missionIdFinal, updates);
       if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
 
-      if (mission.cronJobId && shouldRebuildPrompt) {
-        await syncMissionToCronJob(missionIdFinal);
-      } else if (mission.cronJobId && schedule !== undefined) {
+      const shouldSyncCron =
+        mission.cronJobId &&
+        (shouldRebuildPrompt ||
+          schedule !== undefined ||
+          profileName !== undefined ||
+          modelId !== undefined ||
+          provider !== undefined);
+
+      if (shouldSyncCron) {
         await syncMissionToCronJob(missionIdFinal);
       }
 
@@ -569,6 +515,7 @@ export async function POST(request: NextRequest) {
       const mission = updateMission(cancelId, {
         status: "failed",
         result: "Cancelled by user",
+        queuedForRun: false,
       });
       if (!mission)
         return NextResponse.json({ error: "Mission not found" }, { status: 404 });
@@ -587,8 +534,7 @@ export async function POST(request: NextRequest) {
 
       await pauseMissionCron(cancelId);
 
-      const shouldKillProcess =
-        existingMission.status === "dispatched" || existingMission.status === "queued";
+      const shouldKillProcess = existingMission.status === "dispatched";
       if (shouldKillProcess) {
         void agentBackend.cancelMission(cancelId).catch((err: unknown) => {
           logApiError("POST /api/missions", "cancelMission process kill (background)", err);

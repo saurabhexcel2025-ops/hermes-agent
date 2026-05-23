@@ -14,6 +14,19 @@ import {
 } from "@/lib/mission-categories";
 import type { ManagedCategory } from "@/components/missions/CategoryManagerModal";
 import { buildTemplatePayload } from "@/lib/mission-form-utils";
+import {
+  isMissionActive,
+  isMissionDraft,
+  isMissionQueuedForRun,
+  missionBoardColumn,
+} from "@/lib/mission-board";
+
+function submitToastForDispatch(mode: "save" | "now" | "cron" | "queue"): string {
+  if (mode === "save") return "Saving draft...";
+  if (mode === "queue") return "Queueing mission...";
+  if (mode === "cron") return "Scheduling mission...";
+  return "Dispatching mission...";
+}
 
 export type MissionRow = Mission & {
   cronJob?: {
@@ -383,8 +396,9 @@ export function useMissionsPage() {
     if (typeof tm === "number" && Number.isFinite(tm)) {
       setNewTimeout(tm);
     }
-    if (t.dispatchMode)
-      setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
+    if (t.dispatchMode) {
+      setNewDispatch(t.dispatchMode as "save" | "now" | "cron" | "queue");
+    }
     if (t.schedule) setNewSchedule(t.schedule);
   };
 
@@ -494,12 +508,16 @@ export function useMissionsPage() {
     try {
       if (editingId) {
         const existingMission = missions.find((m) => m.id === editingId);
-        const isActive =
+        const isCompleted =
           existingMission &&
-          (existingMission.status === "queued" ||
-            existingMission.status === "dispatched");
+          (existingMission.status === "successful" ||
+            existingMission.status === "failed");
+        const isRunning = existingMission?.status === "dispatched";
+        const isPromotable =
+          existingMission &&
+          (isMissionDraft(existingMission) || isMissionQueuedForRun(existingMission));
 
-        if (isActive) {
+        if (isRunning) {
           showToast("Updating mission...", "info");
           const res = await fetch("/api/missions", {
             method: "POST",
@@ -522,6 +540,58 @@ export function useMissionsPage() {
           } else {
             showToast("Failed to update mission", "error");
           }
+          setDispatching(false);
+          return;
+        }
+
+        if (isPromotable) {
+          showToast(submitToastForDispatch(newDispatch), "info");
+          const res = await fetch("/api/missions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "promote",
+              missionId: editingId,
+              name: newName,
+              ...dispatchPayload({
+                dispatchMode: newDispatch,
+                schedule: newDispatch === "cron" ? newSchedule : undefined,
+              }),
+            }),
+          });
+          if (res.ok) {
+            if (newDispatch === "save") {
+              showToast("Mission saved as draft", "success");
+            } else if (newDispatch === "queue") {
+              showToast("Mission saved to queue", "success");
+            } else if (newDispatch === "now") {
+              showToast("Mission dispatched", "success");
+            } else {
+              showToast(`Mission scheduled: ${newSchedule}`, "success");
+            }
+            setEditingId(null);
+            setShowCreate(false);
+            resetForm();
+            await fetchData();
+            if (expandedId === editingId) fetchDetail(editingId);
+          } else {
+            let msg = "Failed to update mission";
+            try {
+              const errBody = (await res.json()) as {
+                error?: string;
+                cronPushError?: string;
+              };
+              msg = errBody.cronPushError ?? errBody.error ?? msg;
+            } catch {
+              /* keep default */
+            }
+            showToast(msg, "error");
+          }
+          setDispatching(false);
+          return;
+        }
+
+        if (!isCompleted) {
           setDispatching(false);
           return;
         }
@@ -554,7 +624,7 @@ export function useMissionsPage() {
         return;
       }
 
-      showToast("Dispatching mission...", "info");
+      showToast(submitToastForDispatch(newDispatch), "info");
 
       const res = await fetch("/api/missions", {
         method: "POST",
@@ -651,8 +721,18 @@ export function useMissionsPage() {
       setNewSchedule("every 5m");
       setScheduleType("interval");
     }
-    if (opts.editing && (m.status === "successful" || m.status === "failed")) {
-      setNewDispatch("now");
+    if (opts.editing) {
+      if (m.status === "successful" || m.status === "failed") {
+        setNewDispatch("now");
+      } else if (isMissionQueuedForRun(m)) {
+        setNewDispatch("queue");
+      } else if (m.status === "queued") {
+        setNewDispatch("save");
+      } else if (m.cronJobId) {
+        setNewDispatch("cron");
+      } else if (m.status === "dispatched") {
+        setNewDispatch("now");
+      }
     }
   }
 
@@ -927,7 +1007,10 @@ export function useMissionsPage() {
   const filtered = useMemo(
     () =>
       missions.filter((m) => {
-        if (filter !== "all" && m.status !== filter) return false;
+        if (filter !== "all") {
+          const column = missionBoardColumn(m);
+          if (filter !== column) return false;
+        }
         if (missionCategoryFilter !== "all") {
           if (missionCategoryFilter === "__uncategorized__") {
             if (m.categoryId) return false;
@@ -948,12 +1031,52 @@ export function useMissionsPage() {
 
   const missionCounts = useMemo(
     () => ({
-      active: missions.filter((m) => m.status === "queued" || m.status === "dispatched").length,
+      active: missions.filter((m) => isMissionActive(m)).length,
       completed: missions.filter((m) => m.status === "successful").length,
       failed: missions.filter((m) => m.status === "failed").length,
+      drafts: missions.filter((m) => isMissionDraft(m)).length,
+      queued: missions.filter((m) => isMissionQueuedForRun(m)).length,
     }),
     [missions],
   );
+
+  useEffect(() => {
+    if (!showCreate || editingId) return;
+    if (newModel.trim()) return;
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const [defaultsRes, modelsRes] = await Promise.all([
+          fetch("/api/models/defaults", { signal: controller.signal }),
+          fetch("/api/models", { signal: controller.signal }),
+        ]);
+        if (!defaultsRes.ok || !modelsRes.ok) return;
+
+        const defaultsBody = (await defaultsRes.json()) as {
+          data?: { defaults?: { agent?: string | null } };
+        };
+        const modelsBody = (await modelsRes.json()) as {
+          data?: {
+            models?: Array<{ id: string; modelId: string; provider: string }>;
+          };
+        };
+
+        const agentRegistryId = defaultsBody.data?.defaults?.agent;
+        if (!agentRegistryId) return;
+
+        const match = modelsBody.data?.models?.find((m) => m.id === agentRegistryId);
+        if (!match) return;
+
+        setNewModel(match.modelId);
+        setNewProvider(match.provider);
+      } catch {
+        /* aborted or network */
+      }
+    })();
+
+    return () => controller.abort();
+  }, [showCreate, editingId, newModel]);
 
   const templateCategoryPills = useMemo(() => {
     const counts: Record<string, number> = {};

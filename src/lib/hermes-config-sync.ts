@@ -220,6 +220,7 @@ export interface HermesConfigModelEntry {
   modelId: string;
   provider: string;
   baseUrl: string | null;
+  contextLength: number | null;
 }
 
 export function readHermesConfigModels(): Map<string, HermesConfigModelEntry> {
@@ -231,41 +232,50 @@ export function readHermesConfigModels(): Map<string, HermesConfigModelEntry> {
     const config = (yaml.load(raw) as Record<string, unknown> | null) ?? {};
     const map = new Map<string, HermesConfigModelEntry>();
 
+    type ConfigModelSlice = {
+      default?: string;
+      model?: string;
+      provider?: string;
+      base_url?: string;
+      context_length?: number;
+    };
+
+    const entryFromSlice = (slice: ConfigModelSlice): HermesConfigModelEntry | null => {
+      const modelId = slice.default ?? slice.model;
+      if (!modelId || !slice.provider) return null;
+      return {
+        modelId,
+        provider: slice.provider,
+        baseUrl: slice.base_url?.trim() || null,
+        contextLength:
+          typeof slice.context_length === "number" ? slice.context_length : null,
+      };
+    };
+
     // Primary model section
-    const model = config.model as { default?: string; provider?: string; base_url?: string } | undefined;
-    if (model?.default && model.provider) {
-      const key = `${model.provider}::${model.default}`;
-      map.set(key, {
-        modelId: model.default,
-        provider: model.provider,
-        baseUrl: model.base_url?.trim() || null,
-      });
+    const model = config.model as ConfigModelSlice | undefined;
+    const primary = model ? entryFromSlice(model) : null;
+    if (primary) {
+      map.set(`${primary.provider}::${primary.modelId}`, primary);
     }
 
     // Auxiliary sections
-    const aux = config.auxiliary as Record<string, { model?: string; provider?: string; base_url?: string }> | undefined;
+    const aux = config.auxiliary as Record<string, ConfigModelSlice> | undefined;
     for (const entry of Object.values(aux ?? {})) {
-      if (entry?.model && entry.provider) {
-        const key = `${entry.provider}::${entry.model}`;
-        map.set(key, {
-          modelId: entry.model,
-          provider: entry.provider,
-          baseUrl: entry.base_url?.trim() || null,
-        });
+      const parsed = entryFromSlice(entry);
+      if (parsed) {
+        map.set(`${parsed.provider}::${parsed.modelId}`, parsed);
       }
     }
 
     // Fallback providers chain — models used as fallbacks
-    const fallback = config.fallback_providers as Array<{ provider?: string; model?: string; base_url?: string }> | undefined;
+    const fallback = config.fallback_providers as ConfigModelSlice[] | undefined;
     for (const entry of fallback ?? []) {
-      if (entry?.model && entry.provider) {
-        const key = `${entry.provider}::${entry.model}`;
+      const parsed = entryFromSlice(entry);
+      if (parsed) {
+        const key = `${parsed.provider}::${parsed.modelId}`;
         if (!map.has(key)) {
-          map.set(key, {
-            modelId: entry.model,
-            provider: entry.provider,
-            baseUrl: entry.base_url?.trim() || null,
-          });
+          map.set(key, parsed);
         }
       }
     }

@@ -19,6 +19,10 @@ import {
   ComposerFieldLabel,
 } from "@/components/missions/MissionComposerLayout";
 import type { LocalDirEntry } from "@/types/hermes";
+import {
+  isMissionDraft,
+  isMissionQueuedForRun,
+} from "@/lib/mission-board";
 
 export interface MissionFormState {
   newName: string;
@@ -47,7 +51,13 @@ export interface MissionFormState {
 export interface MissionCreateFormProps {
   embedded?: boolean;
   editingId: string | null;
-  missions: { id: string; name: string; status: string }[];
+  missions: {
+    id: string;
+    name: string;
+    status: string;
+    queuedForRun?: boolean;
+    cronJobId?: string;
+  }[];
   formState: MissionFormState;
   setFormField: <K extends keyof MissionFormState>(
     field: K,
@@ -79,11 +89,25 @@ export function dispatchSubmitLabel(
   dispatch: MissionFormState["newDispatch"],
   options: {
     isReDispatch?: boolean;
-    isActiveEdit?: boolean;
+    isRunningEdit?: boolean;
+    isDraftEdit?: boolean;
+    isQueuedEdit?: boolean;
   } = {},
 ): string {
   if (options.isReDispatch) return "Re-Dispatch Now";
-  if (options.isActiveEdit) return "Update Mission";
+  if (options.isRunningEdit) return "Update Mission";
+  if (options.isDraftEdit) {
+    if (dispatch === "save") return "Save draft";
+    if (dispatch === "queue") return "Queue mission";
+    if (dispatch === "now") return "Dispatch now";
+    return "Schedule mission";
+  }
+  if (options.isQueuedEdit) {
+    if (dispatch === "save") return "Move to drafts";
+    if (dispatch === "queue") return "Update queue";
+    if (dispatch === "now") return "Dispatch now";
+    return "Schedule mission";
+  }
   if (dispatch === "save") return "Save draft";
   if (dispatch === "queue") return "Queue mission";
   if (dispatch === "now") return "Dispatch now";
@@ -118,13 +142,15 @@ export function MissionComposerActions({
     existing &&
     (existing.status === "successful" || existing.status === "failed");
 
-  const isActiveEdit =
-    existing &&
-    (existing.status === "queued" || existing.status === "dispatched");
+  const isRunningEdit = existing?.status === "dispatched";
+  const isDraftEdit = existing ? isMissionDraft(existing) : false;
+  const isQueuedEdit = existing ? isMissionQueuedForRun(existing) : false;
 
   const submitLabel = dispatchSubmitLabel(formState.newDispatch, {
     isReDispatch: Boolean(isReDispatch),
-    isActiveEdit: Boolean(isActiveEdit),
+    isRunningEdit,
+    isDraftEdit,
+    isQueuedEdit,
   });
 
   const needsDispatchAck = !editingId && !dispatchAcknowledged;
@@ -192,9 +218,9 @@ export default function MissionCreateForm({
     existing &&
     (existing.status === "successful" || existing.status === "failed");
 
-  const isActiveEdit =
-    existing &&
-    (existing.status === "queued" || existing.status === "dispatched");
+  const isRunningEdit = existing?.status === "dispatched";
+  const isDraftEdit = existing ? isMissionDraft(existing) : false;
+  const isQueuedEdit = existing ? isMissionQueuedForRun(existing) : false;
 
   const inner = (
     <div className="space-y-4">
@@ -204,10 +230,22 @@ export default function MissionCreateForm({
           changes. The previous mission record will be kept for history.
         </div>
       )}
-      {editingId && isActiveEdit && (
+      {editingId && isRunningEdit && (
         <div className="rounded-lg bg-neon-orange/5 border border-neon-orange/20 p-3 text-xs text-neon-orange/80 font-mono">
-          Updates apply to this mission and sync the linked cron job when
-          schedule or prompt fields change.
+          Updates apply to this running mission. Linked cron jobs sync when
+          schedule, profile, model, or prompt fields change.
+        </div>
+      )}
+      {editingId && isDraftEdit && (
+        <div className="rounded-lg bg-white/5 border border-white/10 p-3 text-xs text-white/50 font-mono">
+          This mission is a draft. Choose how to run it in Dispatch — save,
+          queue for when the agent is idle, run now, or schedule.
+        </div>
+      )}
+      {editingId && isQueuedEdit && (
+        <div className="rounded-lg bg-neon-orange/5 border border-neon-orange/20 p-3 text-xs text-neon-orange/80 font-mono">
+          This mission is waiting in the queue. You can update fields, dispatch
+          immediately, or move it back to drafts.
         </div>
       )}
 

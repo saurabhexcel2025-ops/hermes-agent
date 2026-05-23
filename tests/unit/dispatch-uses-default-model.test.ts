@@ -51,9 +51,12 @@ jest.mock("@/lib/llm", () => ({ callLLM: jest.fn() }));
 
 jest.mock("@/lib/models-repository", () => {
   const getDefaultModel = jest.fn();
+  const findModelByModelId = jest.fn();
   return {
     getDefaultModel,
+    findModelByModelId,
     __getDefaultModel: getDefaultModel,
+    __findModelByModelId: findModelByModelId,
     getModelWithKey: jest.fn(),
   };
 });
@@ -138,7 +141,7 @@ describe("dispatchMission — registry default fallback", () => {
     expect(hermesLine).toContain("hermes chat");
   });
 
-  it("merges registry provider with caller modelId when caller didn't provide a provider", async () => {
+  it("uses agent default when caller omits modelId and provider", async () => {
     const repo = require("@/lib/models-repository") as { __getDefaultModel: jest.Mock };
     repo.__getDefaultModel.mockReturnValue({
       id: "model-default",
@@ -146,7 +149,6 @@ describe("dispatchMission — registry default fallback", () => {
       provider: "anthropic",
     });
 
-    // modelId omitted → lookup applies; provider omitted → uses registry's.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { HermesAgentBackend } = require("@/lib/backends/hermes") as any;
     const backend = new HermesAgentBackend();
@@ -158,5 +160,33 @@ describe("dispatchMission — registry default fallback", () => {
     const hermesLine = getHermesLine(spawnCalls[0]);
     expect(hermesLine).toContain("--model anthropic/claude-opus-4");
     expect(hermesLine).toContain("--provider anthropic");
+  });
+
+  it("resolves provider from registry when caller sets modelId only", async () => {
+    const repo = require("@/lib/models-repository") as {
+      __getDefaultModel: jest.Mock;
+      __findModelByModelId: jest.Mock;
+    };
+    repo.__findModelByModelId.mockReturnValue({
+      id: "reg-openai",
+      modelId: "openai/gpt-5.5-medium",
+      provider: "openai",
+      credentialsId: null,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { HermesAgentBackend } = require("@/lib/backends/hermes") as any;
+    const backend = new HermesAgentBackend();
+    await backend.dispatchMission({
+      name: "model only",
+      prompt: "do",
+      modelId: "openai/gpt-5.5-medium",
+    });
+
+    expect(repo.__findModelByModelId).toHaveBeenCalledWith("openai/gpt-5.5-medium");
+    expect(repo.__getDefaultModel).not.toHaveBeenCalled();
+    const hermesLine = getHermesLine(spawnCalls[0]);
+    expect(hermesLine).toContain("--model openai/gpt-5.5-medium");
+    expect(hermesLine).toContain("--provider openai");
   });
 });
