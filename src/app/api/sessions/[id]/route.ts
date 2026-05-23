@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Database from "better-sqlite3";
-import { existsSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
@@ -127,7 +127,6 @@ export async function GET(
         const missionLog = join(PATHS.missions, `${dbSession.missionId}.output.log`);
         const sessionPath = existsSync(missionFile) ? missionFile : existsSync(missionLog) ? missionLog : null;
         if (sessionPath) {
-          const { readFileSync, statSync } = require("fs");
           const content = readFileSync(sessionPath, "utf-8");
           const lines = content.split("\n").filter((l: string) => l.trim());
           const messages = lines.map((line: string, i: number) => ({
@@ -175,7 +174,6 @@ export async function GET(
   }
 
   try {
-    const { statSync, readFileSync } = require("fs");
     const st = statSync(filePath);
     const maxBytes = getMaxSessionFileBytes();
     if (st.size > maxBytes) {

@@ -8,16 +8,13 @@ import * as yaml from "js-yaml";
 
 import { getActiveHermesPaths } from "./hermes-agent-runtime";
 import { getModel, listModels, getModelDefaults } from "./models-repository";
-import { getCredentialWithKey, listCredentials } from "./credentials-repository";
-import { listFallbackChain, getFallbackConfig } from "./fallbacks-repository";
+import { getCredentialWithKey } from "./credentials-repository";
 import {
   syncSingleModelToHermesConfig,
   syncSingleCredentialToHermesEnv,
-  syncFallbacksToHermesConfig,
-  syncDefaultsToHermesConfig,
   readHermesConfigModels,
 } from "./hermes-config-sync";
-import { isHermesProvider, type HermesProvider, envVarForProvider } from "./hermes-providers";
+import { isHermesProvider, type HermesProvider } from "./hermes-providers";
 
 // ── Types ────────────────────────────────────────────────────
 

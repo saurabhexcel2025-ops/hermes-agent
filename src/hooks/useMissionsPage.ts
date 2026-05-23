@@ -332,6 +332,62 @@ export function useMissionsPage() {
     }
   }, [showCreate, editingId, newCategoryId]);
 
+  // ── Shared form population helpers ─────────────────────────────────
+
+  /**
+   * Populate form state from a mission template.
+   * Used by handleTemplateSelect, handleTemplateEdit, and fetchData.
+   */
+  const applyTemplateToForm = (
+    t: MissionTemplate & {
+      instruction?: string;
+      context?: string;
+      dispatchMode?: string;
+      schedule?: string;
+      name?: string;
+    },
+    categoryIdOverride?: string | null,
+  ) => {
+    setNewName(t.name ?? "");
+    setNewInstruction(t.instruction || "");
+    setNewContext(t.context || "");
+    setNewGoals((t.goals || []).join("\n"));
+    setNewOutputFormat(
+      (t as MissionTemplate & { outputFormat?: string }).outputFormat ?? "",
+    );
+    setNewConstraints(
+      (t as MissionTemplate & { constraints?: string }).constraints ?? "",
+    );
+    setNewProfile(t.profile || "");
+    setNewModel(t.defaultModel || "");
+    setNewProvider(t.defaultProvider || "");
+    setNewLocalDirs(
+      normalizeLocalDirsInput(
+        (t as MissionTemplate & { localDirs?: unknown }).localDirs,
+      ),
+    );
+    setLocalDirDraft({ path: "", branch: null });
+    setNewReferences(
+      (t as MissionTemplate & { references?: string[] }).references ?? [],
+    );
+    setNewSkills(t.suggestedSkills || []);
+    setNewToolsets(
+      (t as MissionTemplate & { suggestedToolsets?: string[] }).suggestedToolsets ?? [],
+    );
+    setNewCategoryId(
+      categoryIdOverride !== undefined
+        ? categoryIdOverride
+        : (t as MissionTemplate & { categoryId?: string }).categoryId ?? null
+    );
+    const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
+    if (typeof tm === "number" && Number.isFinite(tm)) {
+      setNewTimeout(tm);
+    }
+    if (t.dispatchMode)
+      setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
+    if (t.schedule) setNewSchedule(t.schedule);
+  };
+
   const fetchData = useCallback(async () => {
     try {
       const list = await fetchMissions();
@@ -774,56 +830,6 @@ export function useMissionsPage() {
     applyTemplateToForm(t);
     setShowTemplateManager(false);
     setShowTemplateEditor(true);
-  };
-
-  const applyTemplateToForm = (
-    t: MissionTemplate & {
-      instruction?: string;
-      context?: string;
-      dispatchMode?: string;
-      schedule?: string;
-      name?: string;
-    },
-    categoryIdOverride?: string | null,
-  ) => {
-    setNewName(t.name ?? "");
-    setNewInstruction(t.instruction || "");
-    setNewContext(t.context || "");
-    setNewGoals((t.goals || []).join("\n"));
-    setNewOutputFormat(
-      (t as MissionTemplate & { outputFormat?: string }).outputFormat ?? "",
-    );
-    setNewConstraints(
-      (t as MissionTemplate & { constraints?: string }).constraints ?? "",
-    );
-    setNewProfile(t.profile || "");
-    setNewModel(t.defaultModel || "");
-    setNewProvider(t.defaultProvider || "");
-    setNewLocalDirs(
-      normalizeLocalDirsInput(
-        (t as MissionTemplate & { localDirs?: unknown }).localDirs,
-      ),
-    );
-    setLocalDirDraft({ path: "", branch: null });
-    setNewReferences(
-      (t as MissionTemplate & { references?: string[] }).references ?? [],
-    );
-    setNewSkills(t.suggestedSkills || []);
-    setNewToolsets(
-      (t as MissionTemplate & { suggestedToolsets?: string[] }).suggestedToolsets ?? [],
-    );
-    setNewCategoryId(
-      categoryIdOverride !== undefined
-        ? categoryIdOverride
-        : (t as MissionTemplate & { categoryId?: string }).categoryId ?? null
-    );
-    const tm = (t as MissionTemplate & { timeoutMinutes?: number }).timeoutMinutes;
-    if (typeof tm === "number" && Number.isFinite(tm)) {
-      setNewTimeout(tm);
-    }
-    if (t.dispatchMode)
-      setNewDispatch(t.dispatchMode as "save" | "now" | "cron");
-    if (t.schedule) setNewSchedule(t.schedule);
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
