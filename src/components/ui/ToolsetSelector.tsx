@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Wrench, Loader2, X, ChevronDown, Search } from "lucide-react";
-import { flattenProfileToolsets, toolsetCatalogLabel } from "@/lib/hermes-toolset-catalog";
+import { unionToolsetsFromPlatforms } from "@/lib/hermes-toolset-unify";
+import { toolsetCatalogLabel } from "@/lib/hermes-toolset-catalog";
 import type { PlatformToolsets } from "@/lib/profile-config-builder";
 
 interface ToolsetSelectorProps {
@@ -34,7 +35,7 @@ export default function ToolsetSelector({
       .then((r) => r.json())
       .then((d) => {
         const toolsets = (d.data?.platformToolsets ?? {}) as PlatformToolsets;
-        setAvailable(flattenProfileToolsets(toolsets));
+        setAvailable(unionToolsetsFromPlatforms(toolsets));
       })
       .catch(() => setAvailable([]))
       .finally(() => setLoading(false));

@@ -54,14 +54,3 @@ export const HERMES_CONFIGURABLE_TOOLSETS: HermesToolsetDef[] = [
 export function toolsetCatalogLabel(id: string): string {
   return HERMES_CONFIGURABLE_TOOLSETS.find((entry) => entry.id === id)?.label ?? id;
 }
-
-/** Union of toolset IDs enabled on a profile (all platforms). */
-export function flattenProfileToolsets(toolsets: Record<string, string[]>): string[] {
-  const seen = new Set<string>();
-  for (const list of Object.values(toolsets)) {
-    for (const id of list) {
-      seen.add(id);
-    }
-  }
-  return [...seen].sort();
-}

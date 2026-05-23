@@ -32,6 +32,10 @@ import {
   type CronJobRecord,
 } from "@/lib/cron-repository";
 
+import {
+  parseScheduleToJson,
+} from "@/lib/cron/write";
+
 import { getDefaultModel } from "@/lib/models-repository";
 
 function cronSyncFailureResponse(
@@ -66,6 +70,8 @@ function recordToApiJob(job: CronJobRecord) {
     profile_name: job.profile_name,
     next_run_at: job.next_run_at,
     last_run_at: job.last_run_at,
+    nextRun: job.next_run_at,
+    lastRun: job.last_run_at,
     last_status: job.last_status,
     hermes_job_id: job.hermes_job_id,
     source: job.source,
@@ -79,7 +85,10 @@ function recordToApiJob(job: CronJobRecord) {
 export async function GET(request: NextRequest) {
   try {
     // Pull latest execution state from Hermes before reading
-    importHermesJobs();
+    const importResult = importHermesJobs();
+    if (importResult.errors.length > 0) {
+      logApiError("GET /api/cron", "importing Hermes jobs", new Error(importResult.errors.join("; ")));
+    }
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -242,7 +251,7 @@ export async function POST(request: NextRequest) {
       provider: resolvedProvider,
       base_url: (base_url as string | null) ?? null,
       schedule,
-      schedule_display: parsedSchedule.display,
+      schedule_display: "display" in parsedSchedule ? (parsedSchedule as { display: string }).display : schedule,
       repeat: repeatObj,
       enabled: true,
       state: "scheduled",
@@ -304,10 +313,10 @@ export async function PUT(request: NextRequest) {
     if (action === "pause") {
       const updated = updateCronJob(id, { enabled: false, state: "paused" });
       const pushResult = await pushJobToHermes(id);
+      appendAuditLine({ action: "cron.pause", resource: id, ok: pushResult.ok, detail: pushResult.ok ? undefined : pushResult.error });
       if (!pushResult.ok) {
         return cronSyncFailureResponse("PUT /api/cron pause", pushResult);
       }
-      appendAuditLine({ action: "cron.pause", resource: id, ok: true });
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
 
@@ -315,10 +324,10 @@ export async function PUT(request: NextRequest) {
     if (action === "resume") {
       const updated = updateCronJob(id, { enabled: true, state: "scheduled" });
       const pushResult = await pushJobToHermes(id);
+      appendAuditLine({ action: "cron.resume", resource: id, ok: pushResult.ok, detail: pushResult.ok ? undefined : pushResult.error });
       if (!pushResult.ok) {
         return cronSyncFailureResponse("PUT /api/cron resume", pushResult);
       }
-      appendAuditLine({ action: "cron.resume", resource: id, ok: true });
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
 
@@ -329,10 +338,10 @@ export async function PUT(request: NextRequest) {
         next_run_at: new Date().toISOString(),
       });
       const pushResult = await pushJobToHermes(id);
+      appendAuditLine({ action: "cron.run", resource: id, ok: pushResult.ok, detail: pushResult.ok ? undefined : pushResult.error });
       if (!pushResult.ok) {
         return cronSyncFailureResponse("PUT /api/cron run", pushResult);
       }
-      appendAuditLine({ action: "cron.run", resource: id, ok: true });
       return NextResponse.json({ data: { success: true, job: recordToApiJob(updated!) } });
     }
 
@@ -354,12 +363,13 @@ export async function PUT(request: NextRequest) {
     if (updates.state !== undefined) updatePayload.state = updates.state as string;
 
     if (updates.schedule !== undefined) {
-      const parsed = parseSchedule(updates.schedule as string);
-      if (parsed.kind === "invalid") {
-        return NextResponse.json({ error: parsed.message }, { status: 400 });
+      const rawParsed = parseSchedule(updates.schedule as string);
+      if (rawParsed.kind === "invalid") {
+        return NextResponse.json({ error: rawParsed.message }, { status: 400 });
       }
+      const schedParsed = parseScheduleToJson(updates.schedule as string);
       updatePayload.schedule = updates.schedule as string;
-      updatePayload.schedule_display = (parsed as { display?: string }).display ?? (updates.schedule as string);
+      updatePayload.schedule_display = schedParsed.scheduleDisplay;
     }
 
     if (updates.repeat !== undefined) {
@@ -377,11 +387,10 @@ export async function PUT(request: NextRequest) {
 
     // Sync to Hermes
     const pushResult = await pushJobToHermes(id);
+    appendAuditLine({ action: "cron.update", resource: id, ok: pushResult.ok, detail: pushResult.ok ? undefined : pushResult.error });
     if (!pushResult.ok) {
       return cronSyncFailureResponse("PUT /api/cron", pushResult);
     }
-
-    appendAuditLine({ action: "cron.update", resource: id, ok: true });
 
     return NextResponse.json({ data: { success: true, job: recordToApiJob(updated) } });
   } catch (error) {

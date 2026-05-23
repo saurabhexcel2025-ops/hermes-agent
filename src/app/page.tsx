@@ -111,7 +111,7 @@ function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }
       <StatusBadge def={{ bg: "bg-white/5", text: "text-white/40", icon: <Pause className="w-2.5 h-2.5" />, label: "Paused" }} />
     );
   }
-  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null as unknown as React.ReactNode, label: state.charAt(0).toUpperCase() + state.slice(1) };
+  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: state.charAt(0).toUpperCase() + state.slice(1) };
   return <StatusBadge def={def} />;
 }
 
@@ -127,18 +127,8 @@ function StatPill({
   value: string;
   color: AccentColor;
 }) {
-  const colorClasses: Record<AccentColor, string> = {
-    cyan: "border-neon-cyan/20 text-neon-cyan",
-    purple: "border-neon-purple/20 text-neon-purple",
-    green: "border-neon-green/20 text-neon-green",
-    pink: "border-neon-pink/20 text-neon-pink",
-    orange: "border-neon-orange/20 text-neon-orange",
-    red: "border-red-500/20 text-red-400",
-    blue: "border-blue-500/20 text-blue-400",
-    yellow: "border-yellow-500/20 text-yellow-400",
-  };
   return (
-    <div className={`rounded-lg border ${colorClasses[color]} bg-dark-900/50 px-4 py-3 flex items-center gap-3 min-w-0`}>
+    <div className={`rounded-lg border ${STAT_COLOR_CLASSES[color]} bg-dark-900/50 px-4 py-3 flex items-center gap-3 min-w-0`}>
       <Icon className="w-4 h-4 opacity-60 flex-shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="text-[10px] font-mono text-white/40 uppercase truncate">{label}</div>
@@ -151,6 +141,17 @@ function StatPill({
 // ── Template Category Constants (module-level — don't re-create on every render) ──
 
 const DEFAULT_PLATFORMS = ["discord", "telegram", "slack", "whatsapp"] as const;
+
+const STAT_COLOR_CLASSES: Record<AccentColor, string> = {
+  cyan: "border-neon-cyan/20 text-neon-cyan",
+  purple: "border-neon-purple/20 text-neon-purple",
+  green: "border-neon-green/20 text-neon-green",
+  pink: "border-neon-pink/20 text-neon-pink",
+  orange: "border-neon-orange/20 text-neon-orange",
+  red: "border-red-500/20 text-red-400",
+  blue: "border-blue-500/20 text-blue-400",
+  yellow: "border-yellow-500/20 text-yellow-400",
+};
 
 
 export default function Dashboard() {

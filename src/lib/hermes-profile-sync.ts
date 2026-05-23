@@ -31,7 +31,7 @@ import {
   setProfileSyncStatus,
   updateProfileContent,
 } from "./profiles-repository";
-import { flattenProfileToolsets } from "./hermes-toolset-catalog";
+import { unionToolsetsFromPlatforms } from "./hermes-toolset-unify";
 import {
   buildConfigYaml,
   configYamlToColumnValues,
@@ -124,10 +124,6 @@ function ensureProfileDirs(root: string): void {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-  }
-  const memories = root + "/memories";
-  if (!existsSync(memories)) {
-    mkdirSync(memories, { recursive: true });
   }
 }
 
@@ -606,7 +602,7 @@ export function removeProfileFromDisk(slug: string): void {
 export function countProfileToolsets(slug: string): number {
   const hydrated = hydratePlatformToolsetsForSlug(slug === "default" ? "default" : slug);
   if (!hydrated) return 0;
-  return flattenProfileToolsets(hydrated.toolsets).length;
+  return unionToolsetsFromPlatforms(hydrated.toolsets).length;
 }
 
 export function countProfileSkills(slug: string): number {

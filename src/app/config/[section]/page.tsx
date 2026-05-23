@@ -16,8 +16,6 @@ import { LoadingSpinner, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import { getSectionDef, type FieldDef } from "@/lib/config-schema";
 import { getConfigSectionIcon } from "@/lib/config-section-icons";
 
-const FULLSCREEN_CLASS = "min-h-screen bg-dark-950 grid-bg flex items-center justify-center";
-
 export default function ConfigSectionPage() {
   const params = useParams();
   const sectionId = params.section as string;
@@ -140,7 +138,7 @@ export default function ConfigSectionPage() {
 
   if (!sectionDef) {
     return (
-      <div className={FULLSCREEN_CLASS}>
+      <div className="min-h-screen bg-dark-950 grid-bg flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-xl font-bold text-white mb-2">
             Unknown Config Section
@@ -158,7 +156,7 @@ export default function ConfigSectionPage() {
 
   if (loading) {
     return (
-      <div className={FULLSCREEN_CLASS}>
+      <div className="min-h-screen bg-dark-950 grid-bg flex items-center justify-center">
         <LoadingSpinner text={`Loading ${sectionDef.label}...`} />
       </div>
     );

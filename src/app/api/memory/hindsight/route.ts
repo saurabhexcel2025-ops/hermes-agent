@@ -19,24 +19,42 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 
 // ── Direct HTTP helpers ──────────────────────────────────────
 
-async function apiGet<T = Record<string, unknown>>(
+interface ApiOptions {
+  method?: string;
+  body?: Record<string, unknown>;
+  timeoutMs?: number;
+}
+
+async function requestWithTimeout<T = Record<string, unknown>>(
   path: string,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  { method = "GET", body, timeoutMs = DEFAULT_TIMEOUT_MS }: ApiOptions = {},
 ): Promise<T> {
   const url = `${HINDSIGHT_BASE_URL}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const init: RequestInit = { method, signal: controller.signal };
+  if (body) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, init);
     clearTimeout(timer);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Hindsight GET ${path}: ${res.status} ${text}`);
+      throw new Error(`Hindsight ${method} ${path}: ${res.status} ${text}`);
     }
     return (await res.json()) as T;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function apiGet<T = Record<string, unknown>>(
+  path: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
+  return requestWithTimeout<T>(path, { timeoutMs });
 }
 
 async function apiPost<T = Record<string, unknown>>(
@@ -44,48 +62,14 @@ async function apiPost<T = Record<string, unknown>>(
   body: Record<string, unknown>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<T> {
-  const url = `${HINDSIGHT_BASE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Hindsight POST ${path}: ${res.status} ${text}`);
-    }
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timer);
-  }
+  return requestWithTimeout<T>(path, { method: "POST", body, timeoutMs });
 }
 
 async function apiDelete<T = Record<string, unknown>>(
   path: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<T> {
-  const url = `${HINDSIGHT_BASE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      method: "DELETE",
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Hindsight DELETE ${path}: ${res.status} ${text}`);
-    }
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timer);
-  }
+  return requestWithTimeout<T>(path, { method: "DELETE", timeoutMs });
 }
 
 async function apiPatch<T = Record<string, unknown>>(
@@ -93,25 +77,7 @@ async function apiPatch<T = Record<string, unknown>>(
   body: Record<string, unknown>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<T> {
-  const url = `${HINDSIGHT_BASE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Hindsight PATCH ${path}: ${res.status} ${text}`);
-    }
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timer);
-  }
+  return requestWithTimeout<T>(path, { method: "PATCH", body, timeoutMs });
 }
 
 // ── Response shaping helpers ─────────────────────────────────

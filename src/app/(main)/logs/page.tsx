@@ -112,11 +112,12 @@ export default function LogsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const hasDataRef = useRef(false);
 
   const loadLogs = useCallback(async () => {
-    const hasData = data !== null;
+    const alreadyLoaded = hasDataRef.current;
     setLoadError(null);
-    if (hasData) {
+    if (alreadyLoaded) {
       setRefreshing(true);
     } else {
       setLoading(true);
@@ -128,7 +129,7 @@ export default function LogsPage() {
       const json: { data?: LogData; error?: string } = await res.json();
       if (!res.ok || json.error) {
         setLoadError(json.error ?? `Request failed (${res.status})`);
-        if (!hasData) setData(null);
+        if (!alreadyLoaded) setData(null);
         return;
       }
       if (json.data) {
@@ -136,12 +137,13 @@ export default function LogsPage() {
       }
     } catch {
       setLoadError("Network error while loading logs");
-      if (!hasData) setData(null);
+      if (!alreadyLoaded) setData(null);
     } finally {
+      hasDataRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeLog, lineCount, data]);
+  }, [activeLog, lineCount]);
 
   const handleDeleteAllLogs = useCallback(async () => {
     if (!deleteConfirm) {

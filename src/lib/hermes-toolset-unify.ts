@@ -20,6 +20,11 @@ export function unionToolsetsFromPlatforms(toolsets: PlatformToolsets): string[]
   return sortedUnique([...seen]);
 }
 
+/** Sort + dedupe an array of strings. */
+export function dedupeSorted(items: string[]): string[] {
+  return [...new Set(items.map((item) => item.trim()).filter(Boolean))].sort();
+}
+
 function normalizeListsForCompare(toolsets: PlatformToolsets): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [platform, list] of Object.entries(toolsets)) {

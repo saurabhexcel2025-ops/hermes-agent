@@ -8,7 +8,7 @@ import { parseSchedule } from "../utils";
 import type { CronJobRecord, CronJobRow, CreateCronJobInput, UpdateCronJobInput } from "./types";
 import { getCronJob } from "./read";
 
-function parseScheduleToJson(
+export function parseScheduleToJson(
   schedule: string
 ): { scheduleJson: string; scheduleDisplay: string } {
   const parsed = parseSchedule(schedule);

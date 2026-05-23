@@ -10,14 +10,14 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { db, uuid, now } from "./db";
+import Database from "better-sqlite3";
 import { getActiveHermesPaths } from "./hermes-agent-runtime";
-import { existsSync, readdirSync, statSync } from "fs";
+import { existsSync } from "fs";
 import { join } from "path";
 
-// ── Types ────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────
 
 export type AgentType = "hermes";
-// Single agent type — Hermes only.
 export type SessionSource = "cli" | "cron" | "mission" | "api";
 export type SessionStatus = "active" | "completed" | "failed";
 
@@ -107,12 +107,8 @@ function rowToSession(row: SessionRow | undefined): SessionRecord | null {
   };
 }
 
-// ── CRUD ────────────────────────────────────────────────────
+// ── CRUD ───────────────────────────────────────────────────
 
-/**
- * Insert a new session record. Called by the dispatch pipeline when a mission
- * or cron job starts. Also called by syncHermesSessionsToDb for CLI sessions.
- */
 export function createSession(input: CreateSessionInput): SessionRecord {
   const id = uuid();
   const startedAt = input.startedAt ?? now();
@@ -141,9 +137,6 @@ export function createSession(input: CreateSessionInput): SessionRecord {
   return getSession(id)!;
 }
 
-/**
- * Update a session record. Called when a mission/cron completes or fails.
- */
 export function updateSession(id: string, updates: UpdateSessionInput): SessionRecord | null {
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
@@ -180,9 +173,6 @@ export function updateSession(id: string, updates: UpdateSessionInput): SessionR
   return getSession(id);
 }
 
-/**
- * Fetch a single session by id.
- */
 export function getSession(id: string): SessionRecord | null {
   const row = db().prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
     | SessionRow
@@ -190,9 +180,6 @@ export function getSession(id: string): SessionRecord | null {
   return rowToSession(row);
 }
 
-/**
- * List sessions with optional filters. Ordered by started_at DESC.
- */
 export function listSessions(opts: ListSessionsOptions = {}): {
   sessions: SessionRecord[];
   total: number;
@@ -231,93 +218,201 @@ export function listSessions(opts: ListSessionsOptions = {}): {
   return { sessions: rows.map(rowToSession).filter(Boolean) as SessionRecord[], total };
 }
 
-// ── Hermes file sync ─────────────────────────────────────────
+// ── Hermes state.db sync ──────────────────────────────────────
 
-interface HermesSessionFile {
-  filename: string;
+interface HermesSessionRow {
   id: string;
-  title: string;
-  source: SessionSource;
-  size: number;
-  created: string;
-  modified: string;
+  source: string;
+  model: string;
+  title: string | null;
+  started_at: number;
+  ended_at: number | null;
+  end_reason: string | null;
+  message_count: number | null;
+  api_call_count: number | null;
 }
 
-/**
- * Read Hermes's session directory and return lightweight metadata for each file.
- * Does NOT parse the JSON content — only filename patterns + stat().
- */
-function scanHermesSessionDir(): HermesSessionFile[] {
-  const sessionsPath = getActiveHermesPaths().sessions;
-  if (!existsSync(sessionsPath)) return [];
+function hermesStatusFromEndReason(
+  end_reason: string | null,
+): { status: SessionStatus; exitCode: number | null } {
+  if (!end_reason) return { status: "active", exitCode: null };
+  switch (end_reason) {
+    case "stop":
+    case "token_limit":
+    case "max_iterations":
+      return { status: "completed", exitCode: 0 };
+    case "timeout":
+    case "interrupt":
+      return { status: "completed", exitCode: 143 };
+    case "error":
+      return { status: "failed", exitCode: 1 };
+    default:
+      return { status: "completed", exitCode: null };
+  }
+}
+
+function readHermesSessionsFromStateDb(): HermesSessionRow[] {
+  const root = getActiveHermesPaths().root;
+  const stateDbPath = join(root, "state.db");
+  if (!existsSync(stateDbPath)) return [];
 
   try {
-    return readdirSync(sessionsPath)
-      .filter((f) => f.endsWith(".json") || f.endsWith(".jsonl"))
-      .map((file) => {
-        const fullPath = join(sessionsPath, file);
-        const stats = statSync(fullPath);
-        const id = file.replace(/\.(json|jsonl)$/, "");
-        let title = "";
-        let source: SessionSource = "cli";
+    const hermesDb = new Database(stateDbPath, { readonly: true });
 
-        if (file.startsWith("session_cron_")) {
-          source = "cron";
-          const parts = file.replace(/\.(json|jsonl)$/, "").split("_");
-          if (parts.length >= 4) {
-            title = `Cron: ${parts[2]} — ${parts.slice(3).join(" ")}`;
-          }
-        } else if (file.startsWith("session_")) {
-          source = "cli";
-          title = file.replace(/_/g, " ").replace(/\.(json|jsonl)$/, "");
-        }
+    const tables = hermesDb
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+      .all();
+    if (tables.length === 0) {
+      hermesDb.close();
+      return [];
+    }
 
-        return {
-          filename: file,
-          id,
-          title: title || file,
-          source,
-          size: stats.size,
-          created: stats.birthtime.toISOString(),
-          modified: stats.mtime.toISOString(),
-        };
-      });
+    const rows = hermesDb
+      .prepare(
+        `SELECT id, source, model, title, started_at, ended_at, end_reason, message_count, api_call_count
+         FROM sessions ORDER BY started_at DESC LIMIT 5000`,
+      )
+      .all() as HermesSessionRow[];
+    hermesDb.close();
+
+    return rows;
   } catch {
     return [];
   }
 }
 
 /**
- * Sync Hermes session files into the sessions table.
+ * Build a set of all mission IDs from Control Hub's missions table.
+ * Includes soft-deleted missions — the FK constraint only checks id existence,
+ * not deleted_at. Used to filter session mission_ids so we never insert
+ * a mission_id that would violate the FK.
+ */
+function buildValidMissionIdSet(): Set<string> {
+  try {
+    const rows = db()
+      .prepare("SELECT id FROM missions")
+      .all() as Array<{ id: string }>;
+    return new Set(rows.map((r) => r.id));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Build a map of Hermes job ID -> Control Hub mission UUID.
  *
- * Strategy: for each file in Hermes's sessions dir, UPSERT into the DB
- * (INSERT OR REPLACE). This means Hermes CLI/cron sessions are tracked in
- * Control Hub's registry alongside mission-born sessions, giving a single
- * unified view.
+ * Correct join path:
+ *   Hermes job ID (e.g. "9514116b5b0d")
+ *     -> cron_jobs.hermes_job_id = job ID
+ *     -> cron_jobs.id = cron_job UUID
+ *     -> missions.cron_job_id = cron_job UUID  (NOT cron_jobs.id)
+ *     -> missions.id = mission UUID
+ */
+function buildMissionIdByJobId(): Map<string, string> {
+  const missionIdByJobId = new Map<string, string>();
+  try {
+    const rows = db()
+      .prepare(`
+        SELECT m.id AS mission_id, c.hermes_job_id
+        FROM missions m
+        JOIN cron_jobs c ON c.id = m.cron_job_id
+        WHERE c.hermes_job_id IS NOT NULL AND c.hermes_job_id != ''
+      `)
+      .all() as Array<{ mission_id: string; hermes_job_id: string }>;
+    for (const row of rows) {
+      missionIdByJobId.set(row.hermes_job_id, row.mission_id);
+    }
+  } catch {
+    // table structure may differ — non-fatal
+  }
+  return missionIdByJobId;
+}
+
+/**
+ * Sync Hermes sessions into the sessions table.
  *
- * Only hermes sessions with source='cli' or source='cron' are synced.
- * Sessions that have already been upserted are refreshed (title, size, modified).
- * Sessions that no longer exist on disk are NOT deleted from the DB — that would
- * lose the record of completed sessions.
+ * Reads session metadata from Hermes's state.db (v0.14+).
+ * Upserts so Control Hub has a unified view of all agent activity.
+ *
+ * For cron sessions, derives mission_id by matching the embedded
+ * job ID in the session title against cron_jobs.hermes_job_id,
+ * then resolving to missions.id via the missions.cron_job_id FK.
+ *
+ * Completed sessions in Hermes are updated to "completed"/"failed"
+ * status here — their end state is always driven by Hermes.
  */
 export function syncHermesSessionsToDb(): { synced: number } {
-  const files = scanHermesSessionDir();
+  const hermesSessions = readHermesSessionsFromStateDb();
+  const missionIdByJobId = buildMissionIdByJobId();
+  const validMissionIds = buildValidMissionIdSet();
   const database = db();
+
   const upsert = database.prepare(/* sql */ `
     INSERT INTO sessions (
-      id, agent_type, source, title, size, started_at, status
+      id, agent_type, source, mission_id,
+      model_id, provider, title, size, started_at, ended_at,
+      status, exit_code
     ) VALUES (
-      ?, 'hermes', ?, ?, ?, ?, 'active'
+      ?, 'hermes', ?, ?,
+      ?, NULL, ?, ?, ?, ?,
+      ?, ?
     )
     ON CONFLICT(id) DO UPDATE SET
-      title   = excluded.title,
-      size    = excluded.size
+      title      = excluded.title,
+      model_id   = COALESCE(excluded.model_id, model_id),
+      mission_id = COALESCE(excluded.mission_id, mission_id),
+      size       = excluded.size,
+      started_at = excluded.started_at,
+      ended_at   = COALESCE(excluded.ended_at, ended_at),
+      status     = excluded.status,
+      exit_code  = COALESCE(excluded.exit_code, exit_code)
   `);
 
   const tx = database.transaction(() => {
     let count = 0;
-    for (const f of files) {
-      upsert.run(f.id, f.source, f.title, f.size, f.modified);
+    for (const row of hermesSessions) {
+      const startedAt = new Date(row.started_at * 1000).toISOString();
+      const endedAt = row.ended_at
+        ? new Date(row.ended_at * 1000).toISOString()
+        : null;
+      const { status, exitCode } = hermesStatusFromEndReason(row.end_reason);
+      const size = Math.max(
+        (row.message_count ?? 0) * 200 + (row.api_call_count ?? 0) * 50,
+        0,
+      );
+
+      let title = row.title ?? row.id;
+      let missionId: string | null = null;
+
+      if (row.source === "cron") {
+        // cron session id: cron_<jobid>_<date>_<time>
+        const parts = row.id.replace(/^cron_/, "").split("_");
+        if (parts.length >= 3) {
+          const jobId = parts[0];
+          title = `Cron: ${jobId} — ${parts.slice(1).join(" ")}`;
+          const candidateMissionId = missionIdByJobId.get(jobId) ?? null;
+          // Only set mission_id if it exists in missions table (avoids FK violations)
+          missionId =
+            candidateMissionId && validMissionIds.has(candidateMissionId)
+              ? candidateMissionId
+              : null;
+        }
+      } else if (row.source === "api_server") {
+        // api_server sessions treated as cli
+      }
+
+      upsert.run(
+        row.id,
+        row.source === "api_server" ? "cli" : row.source,
+        missionId,
+        row.model ?? null,
+        title,
+        size,
+        startedAt,
+        endedAt,
+        status,
+        exitCode,
+      );
       count++;
     }
     return count;

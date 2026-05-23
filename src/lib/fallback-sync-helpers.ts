@@ -15,7 +15,9 @@ export function mapEnabledFallbackChainForSync() {
 }
 
 export function syncEnabledFallbackChainToHermes(config: FallbackConfig) {
-  return syncFallbacksToHermesConfig(mapEnabledFallbackChainForSync(), {
+  const chain = mapEnabledFallbackChainForSync();
+  if (chain.length === 0) return null;
+  return syncFallbacksToHermesConfig(chain, {
     restorePrimaryOnFallback: config.restorePrimaryOnFallback,
     fallbackNotification: config.fallbackNotification,
     apiMaxRetries: config.apiMaxRetries,

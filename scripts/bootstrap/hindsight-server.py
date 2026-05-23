@@ -15,9 +15,7 @@ AGENT_PKG = HERMES_HOME / "hermes-agent"
 if AGENT_PKG.is_dir():
     sys.path.insert(0, str(AGENT_PKG))
 else:
-    fallback = Path.home() / ".local" / "share" / "hermes-agent"
-    if fallback.is_dir():
-        sys.path.insert(0, str(fallback))
+    raise RuntimeError(f"Hermes agent not found at {AGENT_PKG} — run: hermes update")
 
 def main():
     from hindsight import start_server

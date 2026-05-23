@@ -110,6 +110,7 @@ export function addFallbackEntry(input: CreateFallbackInput): FallbackEntryRecor
     .prepare("SELECT COALESCE(MAX(position), 0) AS mx FROM model_fallbacks")
     .get() as { mx: number };
   const position = input.position ?? maxPos.mx + 1;
+  // Default to enabled (1) unless explicitly set to false
   const enabled = input.enabled === false ? 0 : 1;
 
   db().prepare(

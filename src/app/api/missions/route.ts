@@ -31,6 +31,27 @@ import {
   syncMissionToCronJob,
 } from "@/lib/mission-cron-sync";
 
+// ── Shared helpers ─────────────────────────────────────────────────
+
+/**
+ * Wait for the Hermes backend to surface a sessionId for a freshly
+ * dispatched mission. Polls up to 10 times with 800ms back-off.
+ * Falls back gracefully if the backend does not support this.
+ */
+async function pollForSessionId(
+  missionId: string,
+  agentBackend: typeof import("@/lib/backends").agentBackend,
+): Promise<string | undefined> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await new Promise((r) => setTimeout(r, 800));
+    try {
+      const sid = await agentBackend.getMissionSessionId?.(missionId);
+      if (sid) return sid;
+    } catch { /* keep polling */ }
+  }
+  return undefined;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 function resolveMissionId(body: Record<string, unknown>): string | undefined {
@@ -285,16 +306,7 @@ export async function POST(request: NextRequest) {
             if (!sessionId && sessionIdFromDb) {
               sessionId = sessionIdFromDb;
             } else if (!sessionId) {
-              for (let attempt = 0; attempt < 10; attempt++) {
-                await new Promise((r) => setTimeout(r, 800));
-                try {
-                  const sid = await agentBackend.getMissionSessionId?.(mission.id);
-                  if (sid) {
-                    sessionId = sid;
-                    break;
-                  }
-                } catch { /* keep polling */ }
-              }
+              sessionId = await pollForSessionId(mission.id, agentBackend);
             }
 
             updateMission(mission.id, {
@@ -365,16 +377,7 @@ export async function POST(request: NextRequest) {
           if (!sessionId && sessionIdFromDb) {
             sessionId = sessionIdFromDb;
           } else if (!sessionId) {
-            for (let attempt = 0; attempt < 10; attempt++) {
-              await new Promise((r) => setTimeout(r, 800));
-              try {
-                const sid = await agentBackend.getMissionSessionId?.(mission.id);
-                if (sid) {
-                  sessionId = sid;
-                  break;
-                }
-              } catch { /* keep polling */ }
-            }
+            sessionId = await pollForSessionId(mission.id, agentBackend);
           }
 
           updateMission(mission.id, {

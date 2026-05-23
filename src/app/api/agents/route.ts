@@ -9,18 +9,7 @@ import { NextResponse } from "next/server";
 
 import { ensureSyncLayer } from "@/lib/sync";
 import { logApiError } from "@/lib/api-logger";
-
-interface HermesProcess {
-  id: string;
-  type: "cron" | "gateway" | "manual" | "subagent";
-  name: string;
-  status: "running" | "idle";
-  startedAt: string | null;
-  lastActivity: string | null;
-  model: string;
-  pid: number | null;
-  turns: number;
-}
+import type { HermesProcess } from "@/types/hermes";
 
 export async function GET() {
   try {
