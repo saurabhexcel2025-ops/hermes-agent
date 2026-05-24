@@ -8,6 +8,7 @@ import { useState } from "react";
 import { ChevronUp, ChevronDown, Plus, Edit3, Trash2 } from "lucide-react";
 import type { FallbackChainEntry } from "@/types/hermes";
 import GlowSurface from "@/components/ui/GlowSurface";
+import { InlineToggle } from "@/components/ui/Input";
 
 interface FallbackChainListProps {
   chain: FallbackChainEntry[];
@@ -181,24 +182,12 @@ export default function FallbackChainList({
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => onToggle(entry.id, !entry.enabled)}
+                    <InlineToggle
+                      value={entry.enabled}
+                      onChange={(enabled) => onToggle(entry.id, enabled)}
                       disabled={disabled}
-                      className={`w-9 h-5 rounded-full transition-colors relative ${
-                        entry.enabled
-                          ? "bg-neon-purple/30"
-                          : "bg-white/10"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
-                          entry.enabled
-                            ? "left-4 bg-neon-purple"
-                            : "left-0.5 bg-white/30"
-                        }`}
-                      />
-                    </button>
+                      color="purple"
+                    />
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-1">
@@ -253,8 +242,8 @@ export default function FallbackChainList({
       {/* Add Custom inline form */}
       {showAddCustom && (
         <AddCustomForm
-          onConfirm={(modelId, provider, modelIdString, baseUrl) => {
-            onAddCustom(modelId, provider, modelIdString, baseUrl);
+          onConfirm={(name, provider, modelIdString, baseUrl) => {
+            void onAddCustom(name, provider, modelIdString, baseUrl);
             setShowAddCustom(false);
           }}
           onCancel={() => setShowAddCustom(false)}

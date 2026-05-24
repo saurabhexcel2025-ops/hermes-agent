@@ -360,7 +360,13 @@ export default function ConfigSectionPage() {
               </p>
             )}
             <div className="space-y-4">
-              {sectionDef.complexKeys.map((key) => {
+              {/* platform_toolsets: derive keys dynamically from loaded values
+                  so new platforms added by Hermes appear automatically */}
+              {(
+                sectionId === "platform_toolsets"
+                  ? Object.keys(values).sort()
+                  : sectionDef.complexKeys
+              ).map((key) => {
                 const val = values[key];
                 const isObj = typeof val === "object" && val !== null;
                 const isEmpty = !val || (isObj && Object.keys(val as object).length === 0);

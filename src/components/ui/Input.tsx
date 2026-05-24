@@ -142,19 +142,41 @@ export function Toggle({
           <p className="text-xs text-white/40 mt-0.5">{description}</p>
         )}
       </div>
-      <button
-        onClick={() => onChange(!value)}
-        className={`relative w-10 h-5 rounded-full transition-colors ${
-          value ? colors.track : "bg-white/10 border border-white/20"
-        }`}
-      >
-        <div
-          className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform ${
-            value ? `translate-x-5 ${colors.thumb}` : "translate-x-0.5 bg-white/40"
-          }`}
-        />
-      </button>
+      <InlineToggle value={value} onChange={onChange} color={color} />
     </div>
+  );
+}
+
+// ── Inline Toggle (no label/description — for use inside tables, lists) ─
+export function InlineToggle({
+  value,
+  onChange,
+  disabled = false,
+  color = "cyan",
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  color?: string;
+}) {
+  const colors = toggleColorMap[color] || toggleColorMap.cyan;
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      disabled={disabled}
+      className={`relative w-9 h-5 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        value ? colors.track : "bg-white/10 border border-white/20"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 w-4 h-4 rounded-full transition-transform ${
+          value
+            ? `translate-x-4 ${colors.thumb}`
+            : "translate-x-0.5 bg-white/40"
+        }`}
+      />
+    </button>
   );
 }
 

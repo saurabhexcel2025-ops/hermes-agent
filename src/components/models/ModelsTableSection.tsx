@@ -7,17 +7,10 @@ import { EmptyState } from "@/components/ui/LoadingSpinner";
 import GlowSurface from "@/components/ui/GlowSurface";
 import ModelSyncButtons from "@/components/models/ModelSyncButtons";
 import type { ModelEditorRecord } from "@/components/models/ModelEditor";
-import { TASK_TYPES, type TaskType } from "@/lib/hermes-providers";
+import type { TaskType } from "@/lib/hermes-providers";
 import type { SyncActionResult } from "@/lib/sync-manager";
 
 import type { ApiModel } from "./types";
-
-function defaultBadgesFor(
-  model: ApiModel,
-  defaults: Record<TaskType, string | null>,
-): TaskType[] {
-  return TASK_TYPES.filter((slot) => defaults[slot] === model.id);
-}
 
 interface ModelsTableSectionProps {
   models: ApiModel[];
@@ -85,7 +78,9 @@ export default function ModelsTableSection({
               </thead>
               <tbody>
                 {models.map((m) => {
-                  const badges = defaultBadgesFor(m, defaults);
+                  const badges = (Object.keys(defaults) as TaskType[]).filter(
+                    (slot) => defaults[slot] === m.id,
+                  );
                   return (
                     <tr
                       key={m.id}
