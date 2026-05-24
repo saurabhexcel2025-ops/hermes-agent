@@ -38,8 +38,7 @@ export async function PUT(
     }
     const profile = profileResult.profile;
 
-    const skillKey = name.includes("/") ? name : name;
-    if (!getSkill(skillKey)) {
+    if (!getSkill(name)) {
       return NextResponse.json({ error: `Skill not in catalog: ${name}` }, { status: 404 });
     }
 
@@ -56,10 +55,10 @@ export async function PUT(
     }
 
     const newDisabled = enabled
-      ? currentDisabled.filter((s) => s !== skillKey && s !== name)
-      : currentDisabled.includes(skillKey)
+      ? currentDisabled.filter((s) => s !== name)
+      : currentDisabled.includes(name)
         ? currentDisabled
-        : [...currentDisabled, skillKey].sort();
+        : [...currentDisabled, name].sort();
 
     if (profile === "default") {
       updateAgentRoot({ disabledSkillsJson: serializeJsonArray(newDisabled) });

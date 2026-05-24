@@ -32,4 +32,5 @@ export {
   pushJobToHermes,
   removeJobFromHermes,
   syncCronWithHermes,
+  triggerJobViaGateway,
 } from "./cron/hermes-sync";

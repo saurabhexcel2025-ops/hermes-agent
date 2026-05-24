@@ -30,45 +30,34 @@ export interface DriftReport {
   primaryDiffers: { dbModel: string; hermesModel: string } | null;
 }
 
-// ── Internal helpers ─────────────────────────────────────────
-
-interface ConfigModelSection {
-  default?: string;
-  provider?: string;
-  base_url?: string;
-  context_length?: number;
-}
-
-interface ConfigAuxiliaryEntry {
-  provider?: string;
-  model?: string;
-  base_url?: string;
-  api_key?: string;
-}
-
-interface HermesYamlConfig {
-  model?: ConfigModelSection;
-  auxiliary?: Record<string, ConfigAuxiliaryEntry>;
-  [key: string]: unknown;
-}
-
 /**
- * Read the current `model.*` section from ~/.hermes/config.yaml.
- * Returns null if file doesn't exist or can't be parsed.
+ * Read the primary model from ~/.hermes/config.yaml.
+ * Returns null if no primary model is set or file can't be parsed.
+ * Re-uses readHermesConfigModels to avoid duplicating the YAML parsing.
  */
 function readHermesPrimaryModel(): { modelId: string; provider: string; baseUrl: string | null } | null {
+  const hermesModelMap = readHermesConfigModels();
+  if (hermesModelMap.size === 0) return null;
+
+  // The primary model is keyed as "provider::modelId" in readHermesConfigModels.
+  // We find it by scanning for the entry that was parsed from the top-level
+  // `model.default` field (identified by provider + baseUrl source).
   const paths = getActiveHermesPaths();
   if (!existsSync(paths.config)) return null;
 
   try {
     const raw = readFileSync(paths.config, "utf-8");
-    const config = (yaml.load(raw) as HermesYamlConfig) ?? {};
-    if (!config.model?.default) return null;
-    return {
-      modelId: config.model.default,
-      provider: config.model.provider ?? "",
-      baseUrl: config.model.base_url?.trim() || null,
-    };
+    const config = (yaml.load(raw) as Record<string, unknown>) ?? {};
+    const modelSection = config.model as Record<string, unknown> | undefined;
+    if (!modelSection) return null;
+
+    const primaryId = (modelSection.default ?? modelSection.model) as string | undefined;
+    const primaryProvider = modelSection.provider as string | undefined;
+    if (!primaryId || !primaryProvider) return null;
+
+    const entry = hermesModelMap.get(`${primaryProvider}::${primaryId}`);
+    if (!entry) return null;
+    return { modelId: entry.modelId, provider: entry.provider, baseUrl: entry.baseUrl };
   } catch {
     return null;
   }

@@ -7,10 +7,10 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { RefreshCw, ChevronDown, Clock, Timer } from "lucide-react";
-import { parseCronExpression } from "@/lib/utils";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
+import { parseCronExpression } from "@/lib/cron-display";
 
 export type ScheduleMode = "interval" | "wall-clock" | "post-run";
 
@@ -45,80 +45,6 @@ const PRESETS = [
   { value: "every 3d",  label: "3 days"    },
   { value: "every 7d",  label: "7 days"    },
 ];
-
-// ── Dropdown Menu (reused from IntervalSelector) ─────────────
-
-function DropdownMenu({
-  anchorRef,
-  presets,
-  activePresetValue,
-  onSelect,
-  onClose,
-  width = 160,
-}: {
-  anchorRef: React.RefObject<HTMLElement | null>;
-  presets: typeof PRESETS;
-  activePresetValue: string | undefined;
-  onSelect: (v: string) => void;
-  onClose: () => void;
-  width?: number;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    if (!anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    const menuH = Math.min(presets.length * 36 + 16, 288);
-    const spaceBelow = window.innerHeight - rect.bottom;
-
-    // Prefer below — only show above when there truly isn't room beneath
-    const top = spaceBelow >= menuH
-      ? rect.bottom + 4
-      : rect.top - menuH - 4;
-    setPos({ top, left: rect.left });
-  }, [anchorRef, presets.length]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        anchorRef.current && !anchorRef.current.contains(e.target as Node)
-      ) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [anchorRef, onClose]);
-
-  if (typeof document === "undefined" || !pos) return null;
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      className="fixed z-[9999] bg-dark-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden"
-      style={{ top: pos.top, left: pos.left, width }}
-    >
-      <div className="max-h-72 overflow-y-auto py-1">
-        {presets.map((p) => (
-          <button
-            key={p.value}
-            onClick={() => { onSelect(p.value); onClose(); }}
-            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-              activePresetValue === p.value
-                ? "text-neon-cyan bg-neon-cyan/5"
-                : "text-white/70 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Every {p.label}
-          </button>
-        ))}
-      </div>
-    </div>,
-    document.body
-  );
-}
 
 // ── Mode tab config ──────────────────────────────────────────
 

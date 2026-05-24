@@ -52,6 +52,7 @@ export interface CronJobRecord {
   last_delivery_error: string | null;
   created_at: string;
   updated_at: string;
+  workdir: string | null;
 }
 
 /** SQLite row shape for `cron_jobs`. */
@@ -80,6 +81,7 @@ export interface CronJobRow {
   last_delivery_error: string | null;
   created_at: string;
   updated_at: string;
+  workdir: string | null;
 }
 
 export interface CreateCronJobInput {
@@ -99,6 +101,7 @@ export interface CreateCronJobInput {
   profile_name?: string;
   hermes_job_id?: string | null; // if linking to existing Hermes job
   source?: "ch" | "hermes";
+  workdir?: string | null;
 }
 
 export interface UpdateCronJobInput {
@@ -122,6 +125,7 @@ export interface UpdateCronJobInput {
   profile_name?: string;
   hermes_job_id?: string | null;
   orphan?: boolean;
+  workdir?: string | null;
 }
 
 export interface ImportHermesJobResult {

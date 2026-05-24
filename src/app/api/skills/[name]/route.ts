@@ -7,7 +7,6 @@ import { ensureDb } from "@/lib/db";
 import { getSkill, upsertSkill, parseSkillFrontmatter } from "@/lib/skills-repository";
 import { pushSkillToHermes } from "@/lib/hermes-profile-sync";
 import { skillsRootForProfile } from "@/lib/skills-config";
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { existsSync, readFileSync, statSync } from "fs";
 
 export async function GET(
@@ -23,7 +22,7 @@ export async function GET(
       return NextResponse.json({
         data: {
           name,
-          path: skillsRootForProfile(getActiveHermesHome(), "default") + "/" + name + "/SKILL.md",
+          path: skillsRootForProfile() + "/" + name + "/SKILL.md",
           content: row.content,
           size: row.content.length,
           lastModified: row.updatedAt,
@@ -31,7 +30,7 @@ export async function GET(
       });
     }
 
-    const skillsRoot = skillsRootForProfile(getActiveHermesHome(), "default");
+    const skillsRoot = skillsRootForProfile();
     const filePath = skillsRoot + "/" + name + "/SKILL.md";
     if (!existsSync(filePath)) {
       return NextResponse.json({ error: `Skill not found: ${name}` }, { status: 404 });

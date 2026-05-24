@@ -147,6 +147,58 @@ describe("parseLogLine", () => {
     });
   });
 
+  describe("finishParse — RE_BRACKET_LEVEL path (bracket level after timestamp+plain-level prefix)", () => {
+    // NOTE: RE_LEADING_LEVEL_PLAIN runs before RE_BRACKET_LEVEL in finishParse's else branch.
+    // When both a plain level prefix (e.g. "ERROR gateway.run:") and a bracket level (e.g. [ERROR])
+    // are present, the leading plain level wins and the bracket is treated as plain message text.
+    it("treats [ERROR] bracket as plain text when preceded by plain-level source prefix", () => {
+      const result = parseLogLine("2026-05-11 10:20:04 ERROR gateway.run: [ERROR] Connection refused");
+      expect(result.level).toBe("error");
+      expect(result.message).toBe("gateway.run: [ERROR] Connection refused");
+    });
+
+    it("treats [WARN] bracket as plain text when preceded by plain-level source prefix", () => {
+      const result = parseLogLine("2026-05-11 10:20:04 INFO app: [WARN] Low memory");
+      expect(result.level).toBe("info");
+      expect(result.message).toBe("app: [WARN] Low memory");
+    });
+
+    it("treats [DEBUG] bracket as plain text when preceded by plain-level source prefix", () => {
+      const result = parseLogLine("2026-05-11 10:20:04 ERROR service: [DEBUG] verbose details");
+      expect(result.level).toBe("error");
+      expect(result.message).toBe("service: [DEBUG] verbose details");
+    });
+  });
+
+  describe("finishParse — RE_LEADING_LEVEL_PLAIN strip path", () => {
+    it("extracts level from leading LEVEL source: and preserves source in message", () => {
+      // "ERROR gateway.run: Connection refused" -> level=error, message="gateway.run: Connection refused"
+      const result = parseLogLine("2026-05-11 10:20:04 ERROR gateway.run: Connection refused");
+      expect(result.level).toBe("error");
+      expect(result.message).toBe("gateway.run: Connection refused");
+    });
+
+    it("handles WARN with source label", () => {
+      const result = parseLogLine("2026-05-11 10:20:04 WARN auth: Invalid token");
+      expect(result.level).toBe("warn");
+      expect(result.message).toBe("auth: Invalid token");
+    });
+
+    it("handles INFO with source label", () => {
+      const result = parseLogLine("2026-05-11 10:20:04 INFO server: Listening on port 3000");
+      expect(result.level).toBe("info");
+      expect(result.message).toBe("server: Listening on port 3000");
+    });
+
+    it("falls back to levelFromMessage when no colon follows plain level token", () => {
+      // "ERROR Something went wrong" — no colon, RE_LEADING_LEVEL_PLAIN doesn't match.
+      // levelFromMessage sees "ERROR" and returns "error"; message stays full line.
+      const result = parseLogLine("2026-05-11 10:20:04 ERROR Something went wrong");
+      expect(result.level).toBe("error");
+      expect(result.message).toBe("ERROR Something went wrong");
+    });
+  });
+
   describe("edge cases", () => {
     it("returns empty for blank lines", () => {
       const result = parseLogLine("");
