@@ -66,7 +66,7 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
     last_delivery_error: null,
     created_at: ts,
     updated_at: ts,
-    workdir: input.workdir ?? null,
+    workdir: input.workdir ?? "",
   };
 
   db()
@@ -76,7 +76,7 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
         schedule, schedule_display, repeat_json, enabled, state, deliver, script,
         profile_name, hermes_job_id, source, orphan, next_run_at, last_run_at,
         last_status, last_delivery_error, created_at, updated_at, workdir
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
