@@ -130,6 +130,7 @@ CREATE TABLE cron_jobs (
   last_run_at         TEXT,
   last_status         TEXT,
   last_delivery_error TEXT,
+  workdir             TEXT NOT NULL DEFAULT '',
   created_at          TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
