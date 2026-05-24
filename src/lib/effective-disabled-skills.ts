@@ -19,7 +19,7 @@ export function listCatalogSkillKeys(): string[] {
   for (const row of listSkills()) {
     keys.add(row.skillKey);
   }
-  const home = getActiveHermesHome();
+  const _home = getActiveHermesHome();
     for (const name of collectSkillDirectoryNames(skillsRootForProfile())) {
     keys.add(name);
   }
@@ -35,7 +35,7 @@ export function resolveEffectiveDisabledSkills(
   options?: { refreshFromDisk?: boolean },
 ): Set<string> {
   const catalogKeys = listCatalogSkillKeys();
-  const home = getActiveHermesHome();
+  const _home = getActiveHermesHome();
 
   let fromDb: string[] =
     profile === "default"
@@ -58,6 +58,6 @@ export function resolveEffectiveDisabledSkills(
 }
 
 export function catalogKeysForSkillsRoot(): string[] {
-  const home = getActiveHermesHome();
+  const _home = getActiveHermesHome();
   return collectSkillDirectoryNames(skillsRootForProfile());
 }

@@ -30,9 +30,6 @@ export interface DriftReport {
   primaryDiffers: { dbModel: string; hermesModel: string } | null;
 }
 
-// Re-use the shared entry type from hermes-config-sync
-import type { HermesConfigModelEntry } from "./hermes-config-sync";
-
 /**
  * Read the primary model from ~/.hermes/config.yaml.
  * Returns null if no primary model is set or file can't be parsed.

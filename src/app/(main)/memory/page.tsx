@@ -10,7 +10,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import AppPageShell from "@/components/layout/AppPageShell";
 import type { MemoryProviderType } from "@/lib/memory-providers";
-import type { MemoryData } from "@/lib/memory-providers";
+import type { MemoryFact } from "@/lib/memory-providers";
 import { timeAgo } from "@/lib/utils";
 
 // Lazy load provider-specific components
@@ -18,7 +18,7 @@ import HindsightBrowser from "@/components/memory/HindsightBrowser";
 
 // Holographic browser (inline for holographic provider)
 function HolographicBrowser({ initialData }: {
-  initialData: MemoryData;
+  initialData: MemoryFact;
 }) {
   const data = initialData;
 
@@ -104,7 +104,7 @@ const PROVIDER_META: Record<string, { title: string; description: string }> = {
 
 export default function MemoryPage() {
   const [provider, setProvider] = useState<MemoryProviderType | null>(null);
-  const [memData, setMemData] = useState<MemoryData | null>(null);
+  const [memData, setMemData] = useState<MemoryFact | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

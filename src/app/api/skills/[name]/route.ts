@@ -7,7 +7,6 @@ import { ensureDb } from "@/lib/db";
 import { getSkill, upsertSkill, parseSkillFrontmatter } from "@/lib/skills-repository";
 import { pushSkillToHermes } from "@/lib/hermes-profile-sync";
 import { skillsRootForProfile } from "@/lib/skills-config";
-import { getActiveHermesHome } from "@/lib/hermes-agent-runtime";
 import { existsSync, readFileSync, statSync } from "fs";
 
 export async function GET(
