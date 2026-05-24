@@ -18,6 +18,12 @@ export interface ChatSession {
   updated_at: number;
 }
 
+/** Message shape accepted by the /api/orchestration/chat endpoint */
+export interface ApiMessage {
+  role: string;
+  content: string;
+}
+
 export const CHAT_STORAGE_KEY = "ch_sessions";
 export const CHAT_DEFAULT_MODEL = "hermes-agent";
 export const CHAT_MAX_SESSIONS = 50;

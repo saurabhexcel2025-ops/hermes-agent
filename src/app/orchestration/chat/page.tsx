@@ -35,6 +35,7 @@ import {
   readChatStream,
 } from "@/lib/chat-utils";
 import TypingIndicator from "@/components/chat/TypingIndicator";
+import { useGatewayHealth } from "@/hooks/useGatewayHealth";
 
 // ── Shared streaming logic ─────────────────────────────────────
 
@@ -90,11 +91,17 @@ export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [model, setModel] = useState(CHAT_DEFAULT_MODEL);
-  const [gatewayModels, setGatewayModels] = useState<string[]>([CHAT_DEFAULT_MODEL]);
-  const [registryModelIds, setRegistryModelIds] = useState<string[]>([]);
-  const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
-  const [modelsLoading, setModelsLoading] = useState(true);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+
+  // Gateway health, models, and agent default — all in one hook
+  const {
+    online: gatewayOnline,
+    agentDefaultModelSet,
+    registryModelIds,
+    modelLabels,
+    gatewayModelIds,
+    modelsError,
+    modelsLoading,
+  } = useGatewayHealth();
 
   // Current messages
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -103,10 +110,6 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamGenRef = useRef(0);
-
-  // Gateway connectivity check
-  const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
-  const [agentDefaultModelSet, setAgentDefaultModelSet] = useState<boolean | null>(null);
 
   // ── Helpers for session state mutation ──────────────────────
 
@@ -142,112 +145,7 @@ export default function ChatPage() {
     saveSessions(sessions);
   }, [sessions]);
 
-  // ── Fetch registry + gateway models ──────────────────────
-  useEffect(() => {
-    const fetchModels = async () => {
-      setModelsLoading(true);
-      setModelsError(null);
-      const labels: Record<string, string> = {};
-      let registryIds: string[] = [];
-      let gateway: string[] = [CHAT_DEFAULT_MODEL];
-
-      try {
-        const [registryRes, gatewayRes] = await Promise.all([
-          fetch("/api/models"),
-          fetch("/api/gateway/models", { signal: AbortSignal.timeout(5000) }),
-        ]);
-
-        if (registryRes.ok) {
-          const registryJson = await registryRes.json();
-          const records = registryJson.data?.models as Array<{ modelId: string; name: string }> | undefined;
-          if (Array.isArray(records)) {
-            registryIds = records
-              .map((m) => m.modelId)
-              .filter((id): id is string => typeof id === "string" && id.length > 0);
-            for (const m of records) {
-              if (m.modelId) labels[m.modelId] = m.name;
-            }
-          }
-        }
-
-        if (gatewayRes.ok) {
-          const gatewayJson = await gatewayRes.json();
-          const ids: string[] = gatewayJson.data?.models || [];
-          if (ids.length > 0) gateway = ids;
-        } else {
-          setModelsError("Gateway models unavailable");
-        }
-      } catch {
-        setModelsError("Failed to load models");
-      } finally {
-        setRegistryModelIds(registryIds);
-        setGatewayModels(gateway);
-        setModelLabels(labels);
-        setModelsLoading(false);
-      }
-    };
-    fetchModels();
-  }, []);
-
-  // ── Gateway connectivity check ─────────────────────────────
-  useEffect(() => {
-    const checkGateway = async () => {
-      try {
-        const res = await fetch("/api/gateway/health", {
-          method: "GET",
-          signal: AbortSignal.timeout(3000),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setGatewayOnline(json.data?.online === true);
-        } else {
-          setGatewayOnline(false);
-        }
-      } catch {
-        setGatewayOnline(false);
-      }
-    };
-    checkGateway();
-    const id = setInterval(checkGateway, 30000);
-    return () => clearInterval(id);
-  }, []);
-
-  // ── Check if agent default model is set ────────────────────
-  useEffect(() => {
-    const checkAgentModel = async () => {
-      try {
-        const [defaultsRes, configRes] = await Promise.all([
-          fetch("/api/models/defaults", { signal: AbortSignal.timeout(5000) }),
-          fetch("/api/config", { signal: AbortSignal.timeout(5000) }),
-        ]);
-        let registryOk = false;
-        if (defaultsRes.ok) {
-          const defaultsJson = (await defaultsRes.json()) as {
-            data?: { defaults?: { agent?: string } };
-          };
-          registryOk = Boolean(defaultsJson.data?.defaults?.agent?.trim());
-        }
-        let diskOk = false;
-        if (configRes.ok) {
-          const cfgJson = (await configRes.json()) as {
-            data?: { model?: { default?: string } | string };
-          };
-          const modelCfg = cfgJson.data?.model;
-          if (typeof modelCfg === "string") {
-            diskOk = modelCfg.trim().length > 0;
-          } else if (modelCfg && typeof modelCfg === "object") {
-            diskOk = Boolean(String((modelCfg as Record<string, unknown>).default ?? "").trim());
-          }
-        }
-        setAgentDefaultModelSet(registryOk && diskOk);
-      } catch {
-        setAgentDefaultModelSet(null);
-      }
-    };
-    void checkAgentModel();
-  }, []);
-
-  // Get active session
+  // ── Restore per-session model when switching sessions ────────
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages ?? [];
 
@@ -438,11 +336,11 @@ export default function ChatPage() {
     };
     add(CHAT_DEFAULT_MODEL);
     for (const id of registryModelIds) add(id);
-    for (const id of gatewayModels) {
+    for (const id of gatewayModelIds) {
       if (id !== CHAT_DEFAULT_MODEL) add(id);
     }
     return merged;
-  }, [registryModelIds, gatewayModels]);
+  }, [registryModelIds, gatewayModelIds]);
 
   const displayModelName = useCallback(
     (id: string) => modelLabels[id] || formatModelName(id),
