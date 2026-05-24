@@ -290,8 +290,8 @@ export function pushAllProfiles(options?: {
 }
 
 function catalogKeysForPull(): string[] {
-  const home = getActiveHermesHome();
-  return collectSkillDirectoryNames(skillsRootForProfile(home, "default"));
+  const _home = getActiveHermesHome();
+  return collectSkillDirectoryNames(skillsRootForProfile());
 }
 
 function reconcileProfileConfigOnDisk(slug: string): void {

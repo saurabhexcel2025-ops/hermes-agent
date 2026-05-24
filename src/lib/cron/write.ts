@@ -66,6 +66,7 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
     last_delivery_error: null,
     created_at: ts,
     updated_at: ts,
+    workdir: input.workdir ?? null,
   };
 
   db()
@@ -74,8 +75,8 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
         id, name, prompt, skills, model, provider, base_url,
         schedule, schedule_display, repeat_json, enabled, state, deliver, script,
         profile_name, hermes_job_id, source, orphan, next_run_at, last_run_at,
-        last_status, last_delivery_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        last_status, last_delivery_error, created_at, updated_at, workdir
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.id,
@@ -101,7 +102,8 @@ export function createCronJob(input: CreateCronJobInput): CronJobRecord {
       row.last_status,
       row.last_delivery_error,
       row.created_at,
-      row.updated_at
+      row.updated_at,
+      row.workdir,
     );
 
   return getCronJob(id)!;
@@ -198,6 +200,10 @@ export function updateCronJob(
   if (input.orphan !== undefined) {
     sets.push("orphan = ?");
     vals.push(input.orphan ? 1 : 0);
+  }
+  if (input.workdir !== undefined) {
+    sets.push("workdir = ?");
+    vals.push(input.workdir ?? null);
   }
 
   vals.push(id);

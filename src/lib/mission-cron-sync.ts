@@ -60,6 +60,7 @@ export async function syncMissionToCronJob(missionId: string): Promise<boolean> 
       provider: mission.provider ?? undefined,
       schedule: mission.schedule ?? job.schedule_display,
       profile_name: mission.profileName ?? job.profile_name,
+      workdir: mission.localDirs?.[0]?.path ?? null,
     });
     const push = await pushJobToHermes(mission.cronJobId);
     if (!push.ok) {

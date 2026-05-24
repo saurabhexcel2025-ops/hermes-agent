@@ -170,6 +170,7 @@ export default function ModelSyncButtons({
   onPull,
   disabled = false,
 }: ModelSyncButtonsProps) {
+  void _modelName;
   const [modalState, setModalState] = useState<{
     direction: "push" | "pull";
     diffs: DiffEntry[];

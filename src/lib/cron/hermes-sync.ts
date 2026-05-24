@@ -190,6 +190,7 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     last_status: job.last_status ?? null,
     last_delivery_error: job.last_delivery_error ?? null,
     created_at: job.created_at ?? new Date().toISOString(),
+    workdir: (job as Record<string, unknown>).workdir as string | null ?? null,
   };
 }
 
@@ -233,21 +234,30 @@ export function importHermesJobs(): {
             schedule=?, schedule_display=?,
             deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
-            orphan=0`
+            orphan=0, workdir=?`
         : `name=?, prompt=?, skills=?, model=?, provider=?, base_url=?,
             schedule=?, schedule_display=?, repeat_json=?, enabled=?, state=?,
             deliver=?, script=?, profile_name=?, next_run_at=?, last_run_at=?,
             last_status=?, last_delivery_error=?, updated_at=?,
-            orphan=0`;
+            orphan=0, workdir=?`;
+      // Guard against Hermes returning "?" (fallback from _schedule_display_for_job)
+      // which would overwrite a valid CH value on import.
+      const safeScheduleDisplay =
+        row.schedule_display && row.schedule_display !== "?" ? row.schedule_display : existing.schedule_display;
+      const safeSchedule =
+        row.schedule && row.schedule !== "?" ? row.schedule : existing.schedule;
+
       const updateParams = preserveChIntent
         ? [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
-           row.schedule, row.schedule_display,
+           safeSchedule, safeScheduleDisplay,
            row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
-           row.last_status, row.last_delivery_error, ts]
+           row.last_status, row.last_delivery_error, ts,
+           row.workdir ?? existing.workdir ?? '']
         : [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
            row.schedule, row.schedule_display, row.repeat_json, row.enabled, row.state,
            row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
-           row.last_status, row.last_delivery_error, ts];
+           row.last_status, row.last_delivery_error, ts,
+           row.workdir ?? existing.workdir ?? ''];
       db()
         .prepare(
           `UPDATE cron_jobs SET ${updateFields}
@@ -265,8 +275,8 @@ export function importHermesJobs(): {
             id, name, prompt, skills, model, provider, base_url,
             schedule, schedule_display, repeat_json, enabled, state, deliver, script,
             profile_name, hermes_job_id, source, orphan, next_run_at, last_run_at,
-            last_status, last_delivery_error, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            last_status, last_delivery_error, created_at, updated_at, workdir
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           id,
@@ -292,7 +302,8 @@ export function importHermesJobs(): {
           row.last_status,
           row.last_delivery_error,
           row.created_at,
-          ts
+          ts,
+          row.workdir ?? null,
         );
       imported.push({ id, action: "inserted", hermes_job_id: job.id });
     }
@@ -428,6 +439,7 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
       last_run_at: j.last_run_at,
       last_status: j.last_status,
       hermes_job_id: j.hermes_job_id,
+      workdir: j.workdir || undefined,
     };
   });
 
@@ -514,6 +526,38 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
     const e = err as { stderr?: string; stdout?: string; message?: string };
     const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
     return { ok: false, error: String(message).slice(0, 500) };
+  }
+}
+
+// ── Gateway trigger (run now) ─────────────────────────────────
+
+const GATEWAY_BASE = "http://127.0.0.1:8642";
+
+/**
+ * Trigger a job to run immediately via the Hermes gateway's run endpoint.
+ * This calls POST /api/jobs/{job_id}/run which calls trigger_job() in Hermes,
+ * setting state=scheduled and next_run_at=now in jobs.json — signalling the
+ * scheduler to run the job on its next tick.
+ */
+export async function triggerJobViaGateway(
+  hermesJobId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `${GATEWAY_BASE}/api/jobs/${encodeURIComponent(hermesJobId)}/run`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: `Gateway returned ${res.status}: ${text}`.slice(0, 500) };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err).slice(0, 500) };
   }
 }
 
