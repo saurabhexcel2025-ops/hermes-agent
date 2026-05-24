@@ -53,6 +53,20 @@ function cronSyncFailureResponse(
 // ── Helpers ───────────────────────────────────────────────────
 
 function recordToApiJob(job: CronJobRecord) {
+  // Hermes stores schedule as JSON: { kind: "* * * * *" }
+  // CH stores schedule as raw cron string. Normalise both to raw cron for the API.
+  let normalizedSchedule: string | null = null;
+  if (job.schedule) {
+    try {
+      // Try parsing as Hermes JSON format { kind: "..." }
+      const parsed = JSON.parse(job.schedule);
+      normalizedSchedule = typeof parsed.kind === "string" ? parsed.kind : null;
+    } catch {
+      // Not JSON — treat as raw cron expression
+      normalizedSchedule = job.schedule !== "?" ? job.schedule : null;
+    }
+  }
+
   return {
     id: job.id,
     name: job.name,
@@ -63,7 +77,7 @@ function recordToApiJob(job: CronJobRecord) {
     base_url: job.base_url,
     schedule: job.schedule_display && job.schedule_display !== "?"
       ? job.schedule_display
-      : job.schedule && job.schedule !== "?" ? job.schedule : null,
+      : normalizedSchedule,
     schedule_display: job.schedule_display && job.schedule_display !== "?"
       ? job.schedule_display
       : null,

@@ -176,7 +176,7 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     model: typeof job.model === "string" ? job.model : "",
     provider: typeof job.provider === "string" ? job.provider : "",
     base_url: typeof job.base_url === "string" ? job.base_url : null,
-    schedule_display: job.schedule_display ?? "",
+    schedule_display: job.schedule_display ?? (typeof job.schedule === "object" && job.schedule !== null ? (job.schedule as {display?: string}).display ?? "" : ""),
     enabled: job.enabled !== false ? 1 : 0,
     state: job.state ?? (job.enabled !== false ? "scheduled" : "paused"),
     deliver: job.deliver ?? "none",
