@@ -252,12 +252,12 @@ export function importHermesJobs(): {
            safeSchedule, safeScheduleDisplay,
            row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
            row.last_status, row.last_delivery_error, ts,
-           row.workdir ?? null]
+           row.workdir ?? existing.workdir ?? '']
         : [row.name, row.prompt, row.skills, row.model, row.provider, row.base_url,
            row.schedule, row.schedule_display, row.repeat_json, row.enabled, row.state,
            row.deliver, row.script, row.profile_name, row.next_run_at, row.last_run_at,
            row.last_status, row.last_delivery_error, ts,
-           row.workdir ?? null];
+           row.workdir ?? existing.workdir ?? ''];
       db()
         .prepare(
           `UPDATE cron_jobs SET ${updateFields}
