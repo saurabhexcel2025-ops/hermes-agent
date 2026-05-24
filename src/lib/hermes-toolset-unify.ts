@@ -5,7 +5,8 @@
 import { HERMES_PLATFORMS } from "./hermes-toolset-catalog";
 import type { PlatformToolsets } from "./profile-config-builder";
 
-function sortedUnique(ids: string[]): string[] {
+/** Sort + dedupe an array of strings. */
+export function sortedUnique(ids: string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))].sort();
 }
 
@@ -18,11 +19,6 @@ export function unionToolsetsFromPlatforms(toolsets: PlatformToolsets): string[]
     }
   }
   return sortedUnique([...seen]);
-}
-
-/** Sort + dedupe an array of strings. */
-export function dedupeSorted(items: string[]): string[] {
-  return [...new Set(items.map((item) => item.trim()).filter(Boolean))].sort();
 }
 
 function normalizeListsForCompare(toolsets: PlatformToolsets): Record<string, string> {

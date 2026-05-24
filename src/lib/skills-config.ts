@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 
 import { buildProfileHermesPathBundle } from "./hermes-profile-paths";
 
@@ -180,64 +180,11 @@ export function buildDisabledYamlLines(
 }
 
 /**
- * Resolve config.yaml path for a given profile.
- */
-export function configPathForProfile(profile: string): string {
-  return buildProfileHermesPathBundle(profile).config;
-}
-
-/**
  * Global skills catalog at HERMES_HOME/skills (shared across all profiles).
  * Per-profile customisation is handled via the disabled-skills config, not via separate roots.
  */
 export function skillsRootForProfile(): string {
   return buildProfileHermesPathBundle("default").skills;
-}
-
-/**
- * Find the SKILL.md file for a given skill name across profile directories.
- */
-export function findSkillFile(skillName: string, _home: string, profile: string): string | null {
-  const searchDirs: string[] = [buildProfileHermesPathBundle(profile).skills];
-  if (profile !== "default") {
-    searchDirs.push(buildProfileHermesPathBundle("default").skills);
-  }
-
-  for (const baseDir of searchDirs) {
-    if (!existsSync(baseDir)) continue;
-
-    const directPath = baseDir + "/" + skillName + "/SKILL.md";
-    if (existsSync(directPath)) return directPath;
-
-    try {
-      const walk = (dir: string): string | null => {
-        for (const item of readdirSync(dir)) {
-          const fullPath = dir + "/" + item;
-          try {
-            const st = statSync(fullPath);
-            if (st.isDirectory()) {
-              if (item === skillName && existsSync(fullPath + "/SKILL.md")) {
-                return fullPath + "/SKILL.md";
-              }
-              const result = walk(fullPath);
-              if (result) return result;
-            }
-          }
-          catch {
-            // skip unreadable entries
-          }
-        }
-        return null;
-      };
-      const found = walk(baseDir);
-      if (found) return found;
-    }
-    catch {
-      // skip unreadable directories
-    }
-  }
-
-  return null;
 }
 
 /**
