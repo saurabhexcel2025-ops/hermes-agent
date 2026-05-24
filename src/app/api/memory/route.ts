@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getMemoryProviderType } from "@/lib/memory-providers";
 import { logApiError } from "@/lib/api-logger";
 import type { ApiResponse } from "@/types/hermes";
-import type { MemoryData } from "@/lib/memory-providers";
+import type { MemoryReadResult } from "@/lib/memory-providers";
 
 // ── Shared Error Responses ──────────────────────────────────────
 
@@ -22,8 +22,8 @@ const NO_PROVIDER_ERROR = () =>
     { status: 404 }
   );
 
-function dormantResponse(): NextResponse<ApiResponse<MemoryData>> {
-  return NextResponse.json<ApiResponse<MemoryData>>({
+function dormantResponse(): NextResponse<ApiResponse<MemoryReadResult>> {
+  return NextResponse.json<ApiResponse<MemoryReadResult>>({
     data: {
       facts: [], total: 0, dbSize: 0,
       available: true, provider: "hindsight",
@@ -33,8 +33,8 @@ function dormantResponse(): NextResponse<ApiResponse<MemoryData>> {
   });
 }
 
-function noMemoryResponse(): NextResponse<ApiResponse<MemoryData>> {
-  return NextResponse.json<ApiResponse<MemoryData>>({
+function noMemoryResponse(): NextResponse<ApiResponse<MemoryReadResult>> {
+  return NextResponse.json<ApiResponse<MemoryReadResult>>({
     data: {
       facts: [], total: 0, dbSize: 0, available: false, provider: "none",
       message: "No memory provider configured. Run: hermes memory setup",
@@ -68,10 +68,10 @@ export async function GET() {
   if (providerType === "holographic") {
     try {
       const result = await withHolographic((p) => p.readFacts());
-      return NextResponse.json<ApiResponse<MemoryData>>({ data: result });
+      return NextResponse.json<ApiResponse<MemoryReadResult>>({ data: result });
     } catch (error) {
       logApiError("GET /api/memory", "holographic read", error);
-      return NextResponse.json<ApiResponse<MemoryData>>(
+      return NextResponse.json<ApiResponse<MemoryReadResult>>(
         { error: "Could not read holographic memory database" },
         { status: 500 }
       );
