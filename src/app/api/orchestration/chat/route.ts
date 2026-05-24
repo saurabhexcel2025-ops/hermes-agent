@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
+import { requireAuth } from "@/lib/api-auth";
 import { getAgentLlmEndpoints } from "@/lib/hermes-agent-runtime";
 
 const DEFAULT_MODEL = "hermes-agent";
@@ -22,6 +23,9 @@ function handleError(error: unknown, context: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
+
   try {
     const body = await request.json();
     const { messages, model, stream } = body;

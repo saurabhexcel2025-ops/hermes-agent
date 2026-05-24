@@ -2,7 +2,7 @@
 // Chat Utilities — Extracted from monolithic chat page
 // ═══════════════════════════════════════════════════════════════
 
-import type { ChatSession, ChatMessage } from "@/types/chat";
+import type { ChatSession, ChatMessage, ApiMessage } from "@/types/chat";
 import { CHAT_STORAGE_KEY, CHAT_MAX_SESSIONS } from "@/types/chat";
 
 // ── localStorage helpers ───────────────────────────────────────
@@ -158,10 +158,8 @@ export function createAssistantMessage(content = ""): ChatMessage {
 
 // ── API message helpers ─────────────────────────────────────────
 
-export interface ApiMessage {
-  role: string;
-  content: string;
-}
+// Re-export from types for backward compatibility
+export type { ApiMessage } from "@/types/chat";
 
 export function toApiMessages(messages: ChatMessage[], newText: string): ApiMessage[] {
   return [
