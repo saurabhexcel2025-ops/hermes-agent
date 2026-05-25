@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import { Save, Check, RotateCcw, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +31,14 @@ export default function ConfigSectionPage() {
   // File editor state
   const [fileContent, setFileContent] = useState("");
   const [originalFileContent, setOriginalFileContent] = useState("");
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup save status timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    };
+  }, []);
 
   const yamlHasChanges = useMemo(
     () => JSON.stringify(values) !== JSON.stringify(originalValues),
@@ -114,7 +122,7 @@ export default function ConfigSectionPage() {
         setOriginalValues({ ...values });
       }
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (err) {
       setSaveStatus("error");
       setError(err instanceof Error ? err.message : "Save failed");
