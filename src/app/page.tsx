@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, memo as reactMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, memo as reactMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -231,13 +231,16 @@ export default function Dashboard() {
   }, [monitor, errorSev]);
 
   // Cancel a mission from the dashboard
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleCancelMission = useCallback(async (missionId: string, missionName: string) => {
     // First click: show confirmation state
     if (cancelConfirmId !== missionId) {
       setCancelConfirmId(missionId);
-      setTimeout(() => setCancelConfirmId((prev) => prev === missionId ? null : prev), 4000);
+      if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+      cancelTimerRef.current = setTimeout(() => setCancelConfirmId((prev) => prev === missionId ? null : prev), 4000);
       return;
     }
+    if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
     setCancelConfirmId(null);
     try {
       const res = await fetch("/api/missions", {
@@ -268,24 +271,6 @@ export default function Dashboard() {
         ? parsed.display
         : newSchedule;
 
-    setDataFields((prev) => {
-      if (!prev.monitor?.cron.jobs) return prev;
-      return {
-        ...prev,
-        monitor: {
-          ...prev.monitor,
-          cron: {
-            ...prev.monitor.cron,
-            jobs: prev.monitor.cron.jobs.map((job) =>
-              job.id === jobId
-                ? { ...job, schedule: scheduleDisplay }
-                : job,
-            ),
-          },
-        },
-      };
-    });
-
     try {
       const putRes = await fetch("/api/cron", {
         method: "PUT",
@@ -297,11 +282,28 @@ export default function Dashboard() {
         showToast(body?.error || "Failed to update cron schedule", "error");
         return;
       }
+      // Optimistic local update (will be reconciled by refreshMonitor)
+      setDataFields((prev) => {
+        if (!prev.monitor?.cron.jobs) return prev;
+        return {
+          ...prev,
+          monitor: {
+            ...prev.monitor,
+            cron: {
+              ...prev.monitor.cron,
+              jobs: prev.monitor.cron.jobs.map((job) =>
+                job.id === jobId
+                  ? { ...job, schedule: scheduleDisplay }
+                  : job,
+              ),
+            },
+          },
+        };
+      });
       showToast("Schedule updated", "success");
     } catch {
       showToast("Failed to update cron schedule", "error");
     } finally {
-      // Refresh monitor to reconcile optimistic update with actual state
       await refreshMonitor();
     }
   }, [showToast, setDataFields, refreshMonitor]);

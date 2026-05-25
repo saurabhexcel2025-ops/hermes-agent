@@ -32,31 +32,12 @@ import Pagination from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
 import { timeAgo } from "@/lib/utils";
 import AppPageShell from "@/components/layout/AppPageShell";
+import type { SessionRecord, SessionSource } from "@/lib/session-repository";
 
 // ── Types ────────────────────────────────────────────────────
 
-type SessionStatus = "active" | "completed" | "failed";
-type SessionSource = "cli" | "cron" | "mission" | "api";
-
-interface Session {
-  id: string;
-  agentType: string;
-  source: SessionSource;
-  missionId: string | null;
-  profileName: string | null;
-  modelId: string | null;
-  provider: string | null;
-  title: string | null;
-  size: number;
-  startedAt: string;
-  endedAt: string | null;
-  status: SessionStatus;
-  exitCode: number | null;
-  error: string | null;
-}
-
 interface SessionsResponse {
-  sessions: Session[];
+  sessions: SessionRecord[];
   total: number;
 }
 
@@ -77,7 +58,7 @@ const SOURCE_META: Record<
 // ── Helpers ─────────────────────────────────────────────────
 
 
-function formatTitle(session: Session): string {
+function formatTitle(session: SessionRecord): string {
   if (session.title) return session.title;
   if (session.source === "cron" && session.profileName) {
     return `Cron: ${session.profileName}`;
@@ -90,7 +71,7 @@ function formatTitle(session: Session): string {
 
 // ── Components ───────────────────────────────────────────────
 
-function SessionCard({ session }: { session: Session }) {
+function SessionCard({ session }: { session: SessionRecord }) {
   const title = formatTitle(session);
   const meta = SOURCE_META[session.source] ?? SOURCE_META.cli;
   const statusColor =
