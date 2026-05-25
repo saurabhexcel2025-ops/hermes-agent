@@ -89,6 +89,19 @@ export interface StoryTheme {
   updatedAt: string;
 }
 
+// ── Shared interfaces ──────────────────────────────────────────
+
+export interface StorySummary {
+  id: string;
+  title: string;
+  premise?: string;
+  status?: string;
+  chapters?: { number: number; title: string; status: string; wordCount: number }[];
+  config?: { genre?: string };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export const STORY_TEMPLATES: StoryTemplate[] = [
   {
     id: "cosmic-voyager",
