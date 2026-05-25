@@ -471,7 +471,7 @@ export default function LogsPage() {
                   {filteredLines.length > 0 ? (
                     filteredLines.map((line, i) => (
                       <LogRow
-                        key={`${i}-${line.slice(0, 48)}`}
+                        key={`${data.name}-${i}`}
                         line={line}
                         searchTerm={search}
                       />

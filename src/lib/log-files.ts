@@ -90,7 +90,7 @@ export function listLogFilesInDir(logsDir: string): LogFileMeta[] {
     if (!file.endsWith(".log")) continue;
     const base = file.slice(0, -4);
     if (sanitizeLogBasename(base) !== base) continue;
-    const filePath = logsDir + "/" + file;
+    const filePath = resolve(logsDir, file);
     const stats = statSync(filePath);
     logs.push({
       name: base,
