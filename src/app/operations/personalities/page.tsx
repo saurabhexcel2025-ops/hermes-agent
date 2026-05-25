@@ -401,6 +401,7 @@ export default function PersonalitiesPage() {
       {/* Edit/Create Modal */}
       {editTarget !== undefined && (
         <EditPersonalityModal
+          key={editTarget?.name ?? 'new'}
           personality={editTarget}
           onClose={() => setEditTarget(undefined)}
           onSaved={handleSaved}

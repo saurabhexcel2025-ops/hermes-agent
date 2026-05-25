@@ -9,7 +9,7 @@ import { pushProfileToHermes, pushRootToHermes } from "@/lib/hermes-profile-sync
 import { resolveSafeProfileName } from "@/lib/path-security";
 
 /** Shared upsert logic used by both POST (create) and PUT (update). */
-async function upsertPersonality(request: NextRequest, logLabel: string) {
+async function upsertPersonality(request: NextRequest, _logLabel: string) {
   ensureDb();
   const body = (await request.json()) as Record<string, unknown>;
   const profile = typeof body.profile === "string" ? body.profile : "default";
