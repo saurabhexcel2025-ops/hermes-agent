@@ -291,7 +291,7 @@ function readHermesSessionsFromStateDb(): HermesSessionRow[] {
     const rows = hermesDb
       .prepare(
         `SELECT id, source, model, title, started_at, ended_at, end_reason, message_count, api_call_count
-         FROM sessions ORDER BY started_at DESC LIMIT 5000`,
+         FROM sessions ORDER BY started_at DESC`,
       )
       .all() as HermesSessionRow[];
     hermesDb.close();
@@ -367,11 +367,26 @@ function buildMissionIdByJobId(): Map<string, string> {
  * Completed sessions in Hermes are updated to "completed"/"failed"
  * status here — their end state is always driven by Hermes.
  */
-export function syncHermesSessionsToDb(): { synced: number } {
+export function syncHermesSessionsToDb(): { synced: number; skipped: number } {
   const hermesSessions = readHermesSessionsFromStateDb();
   const missionIdByJobId = buildMissionIdByJobId();
   const validMissionIds = buildValidMissionIdSet();
   const database = db();
+
+  // ── Step 1: Clean up stale mission_id references ─────────────
+  // NULL out mission_ids that point to soft-deleted or missing missions
+  // to prevent FK violations on subsequent upserts.
+  try {
+    database.prepare(/* sql */ `
+      UPDATE sessions
+      SET mission_id = NULL
+      WHERE source = 'cron'
+        AND mission_id IS NOT NULL
+        AND mission_id NOT IN (SELECT id FROM missions WHERE deleted_at IS NULL)
+    `).run();
+  } catch {
+    // non-fatal — the individual try/catch below will handle any remaining FK issues
+  }
 
   const upsert = database.prepare(/* sql */ `
     INSERT INTO sessions (
@@ -395,7 +410,8 @@ export function syncHermesSessionsToDb(): { synced: number } {
   `);
 
   const tx = database.transaction(() => {
-    let count = 0;
+    let synced = 0;
+    let skipped = 0;
     for (const row of hermesSessions) {
       const startedAt = new Date(row.started_at * 1000).toISOString();
       const endedAt = row.ended_at
@@ -424,22 +440,32 @@ export function syncHermesSessionsToDb(): { synced: number } {
         // api_server sessions treated as cli
       }
 
-      upsert.run(
-        row.id,
-        row.source === "api_server" ? "cli" : row.source,
-        missionId,
-        row.model ?? null,
-        title,
-        size,
-        startedAt,
-        endedAt,
-        status,
-        exitCode,
-      );
-      count++;
+      try {
+        upsert.run(
+          row.id,
+          row.source === "api_server" ? "cli" : row.source,
+          missionId,
+          row.model ?? null,
+          title,
+          size,
+          startedAt,
+          endedAt,
+          status,
+          exitCode,
+        );
+        synced++;
+      } catch {
+        // FK violation or other transient error — skip this session
+        // so it doesn't kill the entire transaction
+        skipped++;
+      }
     }
-    return count;
+    return { synced, skipped };
   });
 
-  return { synced: tx() };
+  const result = tx();
+  if (result.skipped > 0) {
+    console.warn(`[syncHermesSessionsToDb] skipped ${result.skipped} sessions due to FK/constraint errors`);
+  }
+  return { synced: result.synced, skipped: result.skipped };
 }
