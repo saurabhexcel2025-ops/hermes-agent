@@ -244,13 +244,17 @@ export default function SessionDetailPage() {
     );
   }, [data?.messages]);
 
-  // Filtered messages
+  // Filtered messages — use index directly when no filter (avoids creating wrapper objects)
   const filteredMessages = useMemo(() => {
     if (!data?.messages) return [];
     if (!roleFilter) return data.messages.map((msg, i) => ({ msg, originalIndex: i }));
-    return data.messages
-      .map((msg, i) => ({ msg, originalIndex: i }))
-      .filter(({ msg }) => (msg.role || "unknown").toLowerCase() === roleFilter);
+    const result: Array<{ msg: SessionMessage; originalIndex: number }> = [];
+    for (let i = 0; i < data.messages.length; i++) {
+      if ((data.messages[i].role || "unknown").toLowerCase() === roleFilter) {
+        result.push({ msg: data.messages[i], originalIndex: i });
+      }
+    }
+    return result;
   }, [data?.messages, roleFilter]);
 
   // Scroll to next message of a given role from current scroll position

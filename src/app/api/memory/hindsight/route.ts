@@ -262,14 +262,8 @@ async function handleUpdateMentalModel(
 
 async function handleHealth() {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`http://127.0.0.1:9177/health`, { signal: controller.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      return { available: true, mode: "external", status: "healthy" };
-    }
-    return { available: false, error: "Hindsight server not responding" };
+    const result = await apiGet<{ ok?: boolean; status?: string }>("/health", 3000);
+    return { available: true, mode: "external", status: result.status ?? "healthy" };
   } catch (e) {
     return {
       available: false,

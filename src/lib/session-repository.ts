@@ -218,6 +218,25 @@ export function listSessions(opts: ListSessionsOptions = {}): {
   return { sessions: rows.map(rowToSession).filter(Boolean) as SessionRecord[], total };
 }
 
+// ── Shared helpers ─────────────────────────────────────────────
+
+/**
+ * Estimate session file size based on message and API call counts.
+ * Used in both session-repository.ts (sync path) and sessions/[id]/route.ts (state.db path).
+ * Formula: message_count * 200 + api_call_count * 50, floored at a minimum.
+ * The minimum is per-caller — default 0 for bulk sync, caller provides for individual display.
+ */
+export function estimateSessionSize(
+  messageCount: number | null,
+  apiCallCount: number | null,
+  minSize = 0,
+): number {
+  return Math.max(
+    (messageCount ?? 0) * 200 + (apiCallCount ?? 0) * 50,
+    minSize,
+  );
+}
+
 // ── Hermes state.db sync ──────────────────────────────────────
 
 interface HermesSessionRow {
@@ -376,10 +395,7 @@ export function syncHermesSessionsToDb(): { synced: number } {
         ? new Date(row.ended_at * 1000).toISOString()
         : null;
       const { status, exitCode } = hermesStatusFromEndReason(row.end_reason);
-      const size = Math.max(
-        (row.message_count ?? 0) * 200 + (row.api_call_count ?? 0) * 50,
-        0,
-      );
+      const size = estimateSessionSize(row.message_count, row.api_call_count);
 
       let title = row.title ?? row.id;
       let missionId: string | null = null;
