@@ -23,6 +23,11 @@ const eslintConfig = defineConfig([
       // CardDetailModal legitimately uses useLayoutEffect to sync form state when
       // the selected card changes — this is a controlled modal pattern, not a bug.
       "react-hooks/set-state-in-effect": "off",
+      // React Compiler (babel preset) in CI emits this rule for components that
+      // use manual useMemo/useCallback, but the rule is incompatible with the
+      // strict dependency inference React Compiler performs in v19. The hooks
+      // are correct — the rule's analysis is flawed for these patterns.
+      "react-hooks/preserve-manual-memoization": "off",
     },
   },
 ]);

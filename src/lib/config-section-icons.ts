@@ -6,7 +6,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Clock,
-  Code,
   Cpu,
   FileText,
   GitBranch,
@@ -24,6 +23,7 @@ import {
   ShieldCheck,
   Terminal,
   Volume2,
+  Wrench,
   Zap,
 } from "lucide-react";
 
@@ -48,7 +48,7 @@ const CONFIG_ICON_MAP: Record<string, LucideIcon> = {
   MessageSquare,
   Clock,
   Lock,
-  Code,
+  Wrench,
 };
 
 export function getConfigSectionIcon(iconName: string): LucideIcon {

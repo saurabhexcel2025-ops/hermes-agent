@@ -39,6 +39,3 @@ export const PERSONALITY_EMOJIS: Record<string, string> = {
 export function getPersonalityEmoji(name: string): string {
   return PERSONALITY_EMOJIS[name] || "💬";
 }
-
-/** Capitalise first letter: technical → Technical */
-export { titleCase as titleCasePersonality } from "@/lib/utils";

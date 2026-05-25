@@ -135,11 +135,14 @@ type HermesJobRowPartial = Omit<CronJobRow, "id" | "updated_at">;
 /** Convert a Hermes raw job to a flat row object matching the cron_jobs INSERT/UPDATE shape. */
 function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
   // Normalize schedule to JSON string
+  // Handle malformed schedules where a raw cron expr was stored as the kind field,
+  // producing {"kind": "* * * * *"} instead of {"kind": "cron", "expr": "* * * * *"}.
   let scheduleJson: string;
   if (typeof job.schedule === "string") {
     scheduleJson = JSON.stringify({ kind: job.schedule });
   } else if (typeof job.schedule === "object" && job.schedule !== null) {
-    scheduleJson = JSON.stringify(job.schedule);
+    const normalised = normaliseScheduleObj(job.schedule as Record<string, unknown>);
+    scheduleJson = JSON.stringify(normalised);
   } else {
     scheduleJson = JSON.stringify({ kind: "unknown" });
   }
@@ -340,10 +343,14 @@ if action == "write_all":
     all_jobs = []
     for row in json.loads(sys.stdin.read()):
         job = dict(row)
-        try:
-            sched = json.loads(job.pop("schedule"))
-        except Exception:
-            sched = {"kind": job.get("schedule_display", job.get("schedule", "* * * * *"))}
+        sched_raw = job.pop("schedule", {})
+        if isinstance(sched_raw, dict):
+            sched = sched_raw
+        else:
+            try:
+                sched = json.loads(sched_raw)
+            except Exception:
+                sched = {"kind": "unknown"}
         job["schedule"] = sched
         try:
             job["repeat"] = json.loads(job.pop("repeat_json"))
@@ -393,6 +400,30 @@ function buildPythonScript(
 }
 
 /**
+ * Normalise a schedule object to the canonical {kind: "cron", expr: "..."} or
+ * {kind: "interval", minutes: N} shape. Handles the common corruption where
+ * a raw cron expression is stored as the "kind" field.
+ */
+function normaliseScheduleObj(sched: Record<string, unknown>): Record<string, unknown> {
+  const kind = sched?.kind;
+  if (typeof kind === "string" && looksLikeCronExpr(kind)) {
+    return { kind: "cron", expr: kind, ...(sched.display ? { display: sched.display } : {}) };
+  }
+  return sched;
+}
+
+/**
+ * Check if a string looks like a cron expression (5+ space-separated fields).
+ * Used to normalise schedules that arrive as {"kind": "* * * * *"} into
+ * {"kind": "cron", "expr": "* * * * *"} that the Python scheduler expects.
+ */
+function looksLikeCronExpr(s: string): boolean {
+  if (!s || typeof s !== "string") return false;
+  const parts = s.trim().split(/\s+/);
+  return parts.length >= 5 && parts.every((p) => /^[*\-,/0-9]+$/.test(p));
+}
+
+/**
  * Call Hermes Python to write all CH jobs to Hermes jobs.json.
  * CH is the system of record; Hermes file is updated to match exactly.
  */
@@ -407,10 +438,16 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
   const allJobs = listCronJobs();
 
   const jobsForPython = allJobs.map((j) => {
-    // j.schedule is a JSON string from SQLite — parse it to an object for Python
+    // j.schedule is a JSON string from SQLite — parse it to an object for Python.
+    // The Python scheduler expects {kind: "cron", expr: "* * * * *"} for cron
+    // expressions, NOT {kind: "* * * * *"}. Detect and correct malformed schedules.
     let scheduleObj: Record<string, unknown>;
     try {
-      scheduleObj = { kind: "unknown", ...JSON.parse(j.schedule) };
+      const parsed = JSON.parse(j.schedule) as Record<string, unknown>;
+      // normaliseScheduleObj handles both clean and corrupted schedule objects:
+      // - clean:    {"kind":"cron","expr":"*/5 * * * *"} → passed through
+      // - corrupted: {"kind":"* * * * *"}                → normalised to {"kind":"cron","expr":"* * * * *"}
+      scheduleObj = normaliseScheduleObj(parsed);
     } catch {
       scheduleObj = { kind: j.schedule || "unknown" };
     }
