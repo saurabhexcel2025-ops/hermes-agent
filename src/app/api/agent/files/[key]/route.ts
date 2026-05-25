@@ -26,6 +26,20 @@ import { normalizePlatformToolsets } from "@/lib/hermes-toolset-normalize";
 
 const MANAGED_KEYS = new Set<string>(["soul", "agent", "user", "memory", "config", "hermes"]);
 
+/** Build a path lookup map from a Hermes path bundle. */
+function getBundlePathMap(bundle: ReturnType<typeof buildProfileHermesPathBundle>): Record<string, string> {
+  return {
+    soul: bundle.soul,
+    agent: bundle.agents,
+    user: bundle.userMemory,
+    memory: bundle.agentMemory,
+    config: bundle.config,
+    hermes: bundle.hermes,
+    env: bundle.env,
+    auth: bundle.auth,
+  };
+}
+
 function resolveFilePath(
   key: string,
   profileParam: string | null,
@@ -42,35 +56,8 @@ function resolveFilePath(
   }
   const profile = prof.profile;
 
-  if (profile === "default") {
-    const bundle = buildProfileHermesPathBundle("default");
-    const pathMap: Record<string, string> = {
-      soul: bundle.soul,
-      agent: bundle.agents,
-      user: bundle.userMemory,
-      memory: bundle.agentMemory,
-      config: bundle.config,
-      hermes: bundle.hermes,
-      env: bundle.env,
-      auth: bundle.auth,
-    };
-    const resolvedPath = pathMap[key];
-    if (!resolvedPath) return null;
-    return { path: resolvedPath, name: fileConfig.name, description: fileConfig.description };
-  }
-
-  const bundle = buildProfileHermesPathBundle(profile);
-  const pathMap: Record<string, string> = {
-    soul: bundle.soul,
-    agent: bundle.agents,
-    user: bundle.userMemory,
-    memory: bundle.agentMemory,
-    config: bundle.config,
-    hermes: bundle.hermes,
-    env: bundle.env,
-    auth: bundle.auth,
-  };
-
+  const bundle = buildProfileHermesPathBundle(profile === "default" ? "default" : profile);
+  const pathMap = getBundlePathMap(bundle);
   const resolvedPath = pathMap[key];
   if (!resolvedPath) return null;
 
