@@ -68,13 +68,9 @@ function recordToApiJob(job: CronJobRecord) {
     }
   }
 
-  const resolvedSchedule = job.schedule_display && job.schedule_display !== "?"
-    ? job.schedule_display
-    : normalizedSchedule;
-
-  const resolvedScheduleDisplay = job.schedule_display && job.schedule_display !== "?"
-    ? job.schedule_display
-    : null;
+  const hasValidDisplay = job.schedule_display && job.schedule_display !== "?";
+  const resolvedSchedule = hasValidDisplay ? job.schedule_display : normalizedSchedule;
+  const resolvedScheduleDisplay = hasValidDisplay ? job.schedule_display : null;
 
   return {
     id: job.id,

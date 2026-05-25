@@ -160,7 +160,9 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     last_status: job.last_status ?? null,
     last_delivery_error: job.last_delivery_error ?? null,
     created_at: job.created_at ?? new Date().toISOString(),
-    workdir: (job as Record<string, unknown>).workdir as string | null ?? null,
+    workdir: typeof (job as Record<string, unknown>).workdir === "string"
+      ? (job as Record<string, unknown>).workdir as string
+      : null,
   };
 }
 
