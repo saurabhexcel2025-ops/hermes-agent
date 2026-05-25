@@ -18,6 +18,9 @@ import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
 import {
   listSessions,
+  getSession,
+  createSession,
+  updateSession,
   type AgentType,
   type SessionSource,
   type SessionStatus,
@@ -30,15 +33,17 @@ const ALL_AGENT_TYPES = ["hermes"] as const;
 const ALL_SOURCES = ["cli", "cron", "mission", "api"] as const;
 
 // ── Debounced sync: fires at most once per 30s ───────────────
-// Uses a module-level Promise chain instead of a mutable timestamp.
-// This avoids the mutable state anti-pattern while preserving the
-// debounce semantics for concurrent requests.
+// Uses a module-level Promise to track whether a sync window is
+// active. ensureSyncLayer() is called OUTSIDE the Promise so it
+// fires immediately on the first call; subsequent calls within
+// 30s are no-ops until the window expires.
 let pendingSync: Promise<void> | null = null;
 
 function triggerSyncOnce(): void {
   if (pendingSync) return;
+  // Call OUTSIDE the Promise so it runs immediately, not after 30s delay.
+  ensureSyncLayer();
   pendingSync = new Promise<void>((resolve) => {
-    ensureSyncLayer();
     setTimeout(() => {
       pendingSync = null;
       resolve();

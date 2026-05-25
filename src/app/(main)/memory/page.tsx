@@ -1,11 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // Memory Manager — Hindsight knowledge-graph memory browser
 // ═══════════════════════════════════════════════════════════════
-// Holographic provider was removed — the page now renders the
-// full HindsightBrowser directly (no provider-branching needed).
-// The page skeleton is minimal; HindsightBrowser handles its own
-// loading state internally.
-// ═══════════════════════════════════════════════════════════════
 
 "use client";
 

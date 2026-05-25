@@ -116,6 +116,17 @@ function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }
 }
 
 // ── Compact Stat Pill ─────────────────────────────────────────
+const STAT_COLOR_CLASSES: Record<AccentColor, string> = {
+  cyan: "border-neon-cyan/20 text-neon-cyan",
+  purple: "border-neon-purple/20 text-neon-purple",
+  green: "border-neon-green/20 text-neon-green",
+  pink: "border-neon-pink/20 text-neon-pink",
+  orange: "border-neon-orange/20 text-neon-orange",
+  red: "border-red-500/20 text-red-400",
+  blue: "border-blue-500/20 text-blue-400",
+  yellow: "border-yellow-500/20 text-yellow-400",
+};
+
 function StatPill({
   icon: Icon,
   label,
@@ -141,17 +152,6 @@ function StatPill({
 // ── Template Category Constants (module-level — don't re-create on every render) ──
 
 const DEFAULT_PLATFORMS = ["discord", "telegram", "slack", "whatsapp"] as const;
-
-const STAT_COLOR_CLASSES: Record<AccentColor, string> = {
-  cyan: "border-neon-cyan/20 text-neon-cyan",
-  purple: "border-neon-purple/20 text-neon-purple",
-  green: "border-neon-green/20 text-neon-green",
-  pink: "border-neon-pink/20 text-neon-pink",
-  orange: "border-neon-orange/20 text-neon-orange",
-  red: "border-red-500/20 text-red-400",
-  blue: "border-blue-500/20 text-blue-400",
-  yellow: "border-yellow-500/20 text-yellow-400",
-};
 
 
 export default function Dashboard() {
@@ -439,8 +439,9 @@ export default function Dashboard() {
 
   const collapsedTemplateStrip = useMemo(() => {
     if (templates.length <= 8) return templates;
+    // Custom templates first (true > false), then alphabetical by name
     const sorted = [...templates].sort((a, b) => {
-      if (a.isCustom !== b.isCustom) return a.isCustom ? 1 : -1;
+      if (a.isCustom !== b.isCustom) return a.isCustom ? -1 : 1;
       return (a.name || "").localeCompare(b.name || "");
     });
     return sorted.slice(0, 12);

@@ -1,10 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // /api/memory/route.ts — Memory provider dispatcher
 //
-// Holographic memory provider was removed — the memory page now
-// renders HindsightBrowser directly. All write operations go
-// through /api/memory/hindsight; this endpoint returns status
-// info only.
+// Hindsight: dormant status (facts managed via agent tools)
+// None: tell the user to run `hermes memory setup`
 // ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
