@@ -63,7 +63,7 @@ export async function GET(
             }
           }
         } catch (err) {
-          logApiError("GET /api/skills/[path]", "reading linked files in " + subdirPath, err);
+          logApiError("GET /api/skills/[...path]", "reading linked files in " + subdirPath, err);
         }
       }
     }

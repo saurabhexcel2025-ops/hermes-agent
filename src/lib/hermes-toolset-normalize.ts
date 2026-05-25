@@ -18,12 +18,10 @@ const HERMES_CLI_SUBSUMED = new Set([
   "image_gen",
   "memory",
   "messaging",
-  "search",
   "session_search",
   "skills",
   "terminal",
   "todo",
-  "tts",
   "vision",
   "web",
 ]);

@@ -47,6 +47,9 @@ export default function BehaviourPage() {
   const driftCount = profiles.filter((p) => p.syncStatus === "drift").length;
   const syncErrorCount = profiles.filter((p) => p.syncStatus === "error").length;
 
+  const profileSyncBody = (slug: string) =>
+    slug === "default" ? { root: true } : { slug };
+
   const runProfileSync = async (
     body: Record<string, unknown>,
     successMessage: string,
@@ -74,6 +77,33 @@ export default function BehaviourPage() {
     }
   };
 
+  const syncFetch = async (
+    url: string,
+    body: Record<string, unknown>,
+    successMessage: string,
+    errorMessage: string,
+  ): Promise<void> => {
+    setSyncBusy(true);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
+      if (!res.ok || data.data?.success === false) {
+        showToast(data.error ?? errorMessage, "error");
+        return;
+      }
+      showToast(successMessage, "success");
+      await loadProfiles();
+    } catch {
+      showToast(errorMessage, "error");
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
   const handlePushAll = () =>
     void runProfileSync(
       { all: true },
@@ -82,76 +112,35 @@ export default function BehaviourPage() {
 
   const handlePushOne = (slug: string) =>
     void runProfileSync(
-      slug === "default" ? { root: true } : { slug },
+      profileSyncBody(slug),
       slug === "default"
         ? "Pushed Bob to Hermes. Model defaults re-applied to config.yaml."
         : `Pushed ${slug} to Hermes`,
     );
 
-  const handleImportDiscovered = async () => {
-    setSyncBusy(true);
-    try {
-      const res = await fetch("/api/agent/profiles/sync/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ importAllDiscovered: true }),
-      });
-      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
-      if (!res.ok || data.data?.success === false) {
-        showToast(data.error ?? "Import failed", "error");
-        return;
-      }
-      showToast("Imported discovered profiles from Hermes disk", "success");
-      await loadProfiles();
-    } catch {
-      showToast("Import failed", "error");
-    } finally {
-      setSyncBusy(false);
-    }
-  };
+  const handleImportDiscovered = () =>
+    void syncFetch(
+      "/api/agent/profiles/sync/import",
+      { importAllDiscovered: true },
+      "Imported discovered profiles from Hermes disk",
+      "Import failed",
+    );
 
-  const handlePullAll = async () => {
-    setSyncBusy(true);
-    try {
-      const res = await fetch("/api/agent/profiles/sync/pull", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ all: true, importDiscovered: true }),
-      });
-      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
-      if (!res.ok || data.data?.success === false) {
-        showToast(data.error ?? "Pull failed", "error");
-        return;
-      }
-      showToast("All profiles pulled from Hermes", "success");
-      await loadProfiles();
-    } catch {
-      showToast("Pull failed", "error");
-    } finally {
-      setSyncBusy(false);
-    }
-  };
+  const handlePullAll = () =>
+    void syncFetch(
+      "/api/agent/profiles/sync/pull",
+      { all: true, importDiscovered: true },
+      "All profiles pulled from Hermes",
+      "Pull failed",
+    );
 
-  const handlePullOne = async (slug: string) => {
-    setSyncBusy(true);
-    try {
-      const body = slug === "default" ? { root: true } : { slug };
-      const res = await fetch("/api/agent/profiles/sync/pull", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
-      if (!res.ok || data.data?.success === false) {
-        showToast(data.error ?? `Pull failed for ${slug}`, "error");
-        return;
-      }
-      showToast(`Pulled ${slug} from Hermes`, "success");
-      await loadProfiles();
-    } finally {
-      setSyncBusy(false);
-    }
-  };
+  const handlePullOne = (slug: string) =>
+    void syncFetch(
+      "/api/agent/profiles/sync/pull",
+      profileSyncBody(slug),
+      `Pulled ${slug} from Hermes`,
+      `Pull failed for ${slug}`,
+    );
 
   const loadProfiles = useCallback(async () => {
     setLoading(true);
