@@ -203,7 +203,7 @@ export function updateCronJob(
   }
   if (input.workdir !== undefined) {
     sets.push("workdir = ?");
-    vals.push(input.workdir ?? null);
+    vals.push(input.workdir ?? "");
   }
 
   vals.push(id);

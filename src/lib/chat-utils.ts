@@ -208,3 +208,51 @@ export async function readChatStream(
     }
   }
 }
+
+// ── Streaming chat API call ────────────────────────────────────
+
+/**
+ * Send a chat request to the Hermes Gateway via the CH API proxy.
+ * Streams the response via onDelta callback. Returns true on success.
+ */
+export async function streamChatResponse(
+  apiMessages: { role: string; content: string }[],
+  sendModel: string,
+  controller: AbortController,
+  onDelta: (delta: string) => void,
+  onError: (msg: string) => void,
+): Promise<boolean> {
+  try {
+    const res = await fetch("/api/orchestration/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: apiMessages,
+        model: sendModel,
+        stream: true,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Request failed" }));
+      onError(err.error || "Chat request failed");
+      return false;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      onError("No response stream available");
+      return false;
+    }
+
+    await readChatStream(reader, onDelta);
+    return true;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return false;
+    }
+    onError(err instanceof Error ? err.message : "Chat failed");
+    return false;
+  }
+}

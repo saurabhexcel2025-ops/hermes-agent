@@ -32,55 +32,10 @@ import {
   createUserMessage,
   createAssistantMessage,
   toApiMessages,
-  readChatStream,
+  streamChatResponse,
 } from "@/lib/chat-utils";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { useGatewayHealth } from "@/hooks/useGatewayHealth";
-
-// ── Shared streaming logic ─────────────────────────────────────
-
-async function streamChatResponse(
-  apiMessages: { role: string; content: string }[],
-  sendModel: string,
-  controller: AbortController,
-  onDelta: (delta: string) => void,
-  onError: (msg: string) => void,
-): Promise<boolean> {
-  try {
-    const res = await fetch("/api/orchestration/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: apiMessages,
-        model: sendModel,
-        stream: true,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Request failed" }));
-      onError(err.error || "Chat request failed");
-      return false;
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) {
-      onError("No response stream available");
-      return false;
-    }
-
-    await readChatStream(reader, onDelta);
-    return true;
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      // Intentional abort — no toast
-      return false;
-    }
-    onError(err instanceof Error ? err.message : "Chat failed");
-    return false;
-  }
-}
 
 // ── Page component ─────────────────────────────────────────────
 

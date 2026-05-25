@@ -50,6 +50,23 @@ function cronSyncFailureResponse(
   );
 }
 
+// ── Repeat parsing helper ──────────────────────────────────────
+
+function parseRepeatBody(
+  repeat: unknown,
+): { times: number | null; completed: number } | undefined {
+  if (typeof repeat === "boolean") {
+    return { times: repeat ? null : 1, completed: 0 };
+  } else if (typeof repeat === "object" && repeat !== null) {
+    const r = repeat as { times?: number | null; completed?: number };
+    return {
+      times: r.times ?? null,
+      completed: r.completed ?? 0,
+    };
+  }
+  return undefined;
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function recordToApiJob(job: CronJobRecord) {
@@ -67,6 +84,14 @@ function recordToApiJob(job: CronJobRecord) {
     }
   }
 
+  const resolvedSchedule = job.schedule_display && job.schedule_display !== "?"
+    ? job.schedule_display
+    : normalizedSchedule;
+
+  const resolvedScheduleDisplay = job.schedule_display && job.schedule_display !== "?"
+    ? job.schedule_display
+    : null;
+
   return {
     id: job.id,
     name: job.name,
@@ -75,12 +100,8 @@ function recordToApiJob(job: CronJobRecord) {
     model: job.model,
     provider: job.provider,
     base_url: job.base_url,
-    schedule: job.schedule_display && job.schedule_display !== "?"
-      ? job.schedule_display
-      : normalizedSchedule,
-    schedule_display: job.schedule_display && job.schedule_display !== "?"
-      ? job.schedule_display
-      : null,
+    schedule: resolvedSchedule,
+    schedule_display: resolvedScheduleDisplay,
     enabled: job.enabled,
     state: job.state,
     deliver: job.deliver,
@@ -93,6 +114,7 @@ function recordToApiJob(job: CronJobRecord) {
     hermes_job_id: job.hermes_job_id,
     source: job.source,
     orphan: job.orphan,
+    workdir: job.workdir,
     created_at: job.created_at,
   };
 }
@@ -250,15 +272,7 @@ export async function POST(request: NextRequest) {
     const resolvedProvider = (provider as string | undefined)?.trim() || registryDefault?.provider || "";
 
     // Resolve repeat
-    let repeatObj: { times: number | null; completed: number } | undefined;
-    if (typeof repeat === "boolean") {
-      repeatObj = { times: repeat ? null : 1, completed: 0 };
-    } else if (typeof repeat === "object" && repeat !== null) {
-      repeatObj = {
-        times: repeat.times ?? null,
-        completed: repeat.completed ?? 0,
-      };
-    }
+    const repeatObj = parseRepeatBody(repeat);
 
     const newJob = createCronJob({
       name: (name as string).trim(),
@@ -395,21 +409,17 @@ export async function PUT(request: NextRequest) {
     if (updates.state !== undefined) updatePayload.state = updates.state as string;
 
     if (updates.schedule !== undefined) {
-      const rawParsed = parseSchedule(updates.schedule as string);
-      if (rawParsed.kind === "invalid") {
-        return NextResponse.json({ error: rawParsed.message }, { status: 400 });
-      }
       const schedParsed = parseScheduleToJson(updates.schedule as string);
+      const parsed = parseSchedule(updates.schedule as string);
+      if (parsed.kind === "invalid") {
+        return NextResponse.json({ error: (parsed as { message: string }).message }, { status: 400 });
+      }
       updatePayload.schedule = updates.schedule as string;
       updatePayload.schedule_display = schedParsed.scheduleDisplay;
     }
 
     if (updates.repeat !== undefined) {
-      if (typeof updates.repeat === "boolean") {
-        updatePayload.repeat = { times: updates.repeat ? null : 1, completed: 0 };
-      } else if (typeof updates.repeat === "object" && updates.repeat !== null) {
-        updatePayload.repeat = updates.repeat as { times: number | null; completed?: number };
-      }
+      updatePayload.repeat = parseRepeatBody(updates.repeat);
     }
 
     const updated = updateCronJob(id, updatePayload);
