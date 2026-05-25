@@ -100,7 +100,6 @@ function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index
 
   const config = ROLE_META[role] || ROLE_META.system;
   const isLong = content && content.length > 200;
-  const displayContent = expanded ? content : "";
 
   return (
     <div ref={(el) => { if (el) messageRefs.current.set(index, el); else messageRefs.current.delete(index); }} className={`rounded-xl border ${config.bg} overflow-hidden`}>
@@ -158,7 +157,7 @@ function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index
             </button>
           </div>
           <pre className="text-sm text-white/80 font-mono whitespace-pre-wrap break-words">
-            {displayContent || "(no content)"}
+            {content || "(no content)"}
           </pre>
         {Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0 && (
           <div className="mt-3 pt-3 border-t border-white/5 space-y-2">

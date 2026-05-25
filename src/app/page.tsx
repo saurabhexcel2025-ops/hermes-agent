@@ -423,8 +423,9 @@ export default function Dashboard() {
     [missions],
   );
 
-  // Snapshot current time for render — capture once on mount
-  const [now] = useState(() => Date.now());
+  // Timestamp for cron scheduling comparisons — computed fresh per render
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
 
   // Group templates by category for the dispatch section
   const templateGroups = useMemo(

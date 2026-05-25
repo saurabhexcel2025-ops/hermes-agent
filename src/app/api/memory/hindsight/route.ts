@@ -39,7 +39,6 @@ async function requestWithTimeout<T = Record<string, unknown>>(
   }
   try {
     const res = await fetch(url, init);
-    clearTimeout(timer);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Hindsight ${method} ${path}: ${res.status} ${text}`);
