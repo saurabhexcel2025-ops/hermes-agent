@@ -127,7 +127,7 @@ export default function DefaultsGrid({
                       type="button"
                       onClick={() => {
                         if (!onSetAllAux || !selected) return;
-                        const others = auxTypes.filter((t) => t !== slot);
+                        const others = TASK_TYPES.filter((t) => t !== slot);
                         if (others.length > 0) {
                           void onSetAllAux(others, selected);
                         }

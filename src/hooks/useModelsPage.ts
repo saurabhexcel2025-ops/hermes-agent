@@ -54,6 +54,13 @@ export function useModelsPage() {
     setLoading(true);
     setError(null);
     try {
+      // First, sync models from ~/.hermes/config.yaml — ensures we show
+      // live data even if the user changed defaults externally via hermes CLI
+      const importRes = await fetch("/api/models/import", { method: "POST" });
+      if (!importRes.ok) {
+        console.warn(`Model auto-import failed (${importRes.status}) — showing cached data`);
+      }
+
       const [mRes, cRes, dRes, driftRes, fbRes, fbCfgRes] = await Promise.all([
         fetch(`/api/models`),
         fetch("/api/credentials"),
