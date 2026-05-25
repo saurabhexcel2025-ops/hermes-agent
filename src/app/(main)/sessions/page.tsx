@@ -160,6 +160,9 @@ export default function SessionsPage() {
     void loadSessions(0);
   }, [loadSessions]);
 
+  // Stable reference for downstream useMemo hooks — prevents unnecessary recomputation
+  // on renders where data hasn't changed. Using data?.sessions as dependency is safe:
+  // it only produces a new reference when the API response changes.
   const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
 
   const sources = useMemo(() => {

@@ -245,8 +245,8 @@ export default function SessionDetailPage() {
     );
   }, [data?.messages]);
 
-  // Filtered messages — use index directly when no filter (avoids creating wrapper objects)
-  const filteredMessages = useMemo(() => {
+  // Filtered messages — use original index directly when no filter (avoids creating wrapper objects)
+  const filteredMessages: Array<{ msg: SessionMessage; originalIndex: number }> = useMemo(() => {
     if (!data?.messages) return [];
     if (!roleFilter) return data.messages.map((msg, i) => ({ msg, originalIndex: i }));
     const result: Array<{ msg: SessionMessage; originalIndex: number }> = [];

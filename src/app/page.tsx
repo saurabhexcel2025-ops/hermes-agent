@@ -102,7 +102,7 @@ const CRON_BADGE_STYLES: Record<string, StatusBadgeDef> = {
 
 function MissionStatusBadge({ status }: { status: string }) {
   const def = MISSION_BADGE_STYLES[status] || MISSION_BADGE_STYLES.queued;
-  return <StatusBadge def={{ ...def, label: status.charAt(0).toUpperCase() + status.slice(1) }} />;
+  return <StatusBadge def={{ ...def, label: titleCase(status) }} />;
 }
 
 function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }) {
@@ -111,7 +111,7 @@ function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }
       <StatusBadge def={{ bg: "bg-white/5", text: "text-white/40", icon: <Pause className="w-2.5 h-2.5" />, label: "Paused" }} />
     );
   }
-  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: state.charAt(0).toUpperCase() + state.slice(1) };
+  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: titleCase(state) };
   return <StatusBadge def={def} />;
 }
 
@@ -355,7 +355,7 @@ export default function Dashboard() {
     interface PollConfig {
       url: string;
       ms: number;
-      extract: (d: { data?: unknown }) => Record<string, unknown> | null;
+      extract: (d: { data?: unknown }) => Partial<typeof data> | null;
       init?: RequestInit;
     }
 
@@ -365,7 +365,7 @@ export default function Dashboard() {
         ms: 10000,
         extract: (d) => {
           if (!d?.data) return null;
-          return { monitor: d.data as unknown as MonitorData } as unknown as Record<string, unknown>;
+          return { monitor: d.data as MonitorData };
         },
       },
       {
@@ -373,7 +373,7 @@ export default function Dashboard() {
         ms: 15000,
         extract: (d) => {
           if (!d?.data) return null;
-          return { processes: (d.data as unknown as { processes?: HermesProcess[] }).processes || [] };
+          return { processes: (d.data as { processes?: HermesProcess[] }).processes ?? [] };
         },
       },
       {
@@ -381,7 +381,7 @@ export default function Dashboard() {
         ms: 15000,
         extract: (d) => {
           if (!d?.data) return null;
-          return { missions: (d.data as unknown as { missions?: MissionBrief[] }).missions || [] };
+          return { missions: (d.data as { missions?: MissionBrief[] }).missions ?? [] };
         },
       },
     ];
@@ -852,8 +852,8 @@ export default function Dashboard() {
                   <div className="text-xs text-neon-green">No recent errors</div>
                 </div>
               )}
-              {filteredErrors.map((err) => (
-                <div key={`${err.source}-${err.timestamp}-${err.message.slice(0, 40)}`} className="px-4 py-2 border-b border-white/5 last:border-0">
+              {filteredErrors.map((err, idx) => (
+                <div key={`${err.source}-${err.timestamp}-${err.message.slice(0, 40)}-${idx}`} className="px-4 py-2 border-b border-white/5 last:border-0">
                   <div className="text-[10px] text-red-400/80 font-mono truncate">{err.message}</div>
                   <div className="text-[10px] text-white/20 font-mono mt-0.5">
                     {err.source} {err.timestamp && `· ${err.timestamp}`}
