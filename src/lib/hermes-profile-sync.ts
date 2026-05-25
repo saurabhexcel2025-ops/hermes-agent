@@ -42,7 +42,7 @@ import {
   resolvePlatformToolsets,
 } from "./profile-config-builder";
 import { collectSkillDirectoryNames, skillsRootForProfile } from "./skills-config";
-import { getActiveHermesHome } from "./hermes-agent-runtime";
+
 import { loadSeedPlatformToolsets } from "./seed-profile-toolsets";
 import {
   getSkill,
@@ -290,7 +290,6 @@ export function pushAllProfiles(options?: {
 }
 
 function catalogKeysForPull(): string[] {
-  const _home = getActiveHermesHome();
   return collectSkillDirectoryNames(skillsRootForProfile());
 }
 

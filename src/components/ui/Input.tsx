@@ -133,7 +133,6 @@ export function Toggle({
   description?: string;
   color?: string;
 }) {
-  const _colors = toggleColorMap[color] || toggleColorMap.cyan;
   return (
     <div className="flex items-center justify-between py-2">
       <div>
