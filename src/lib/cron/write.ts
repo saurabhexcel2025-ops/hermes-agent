@@ -136,30 +136,43 @@ export function updateCronJob(
   const sets: string[] = ["updated_at = ?"];
   const vals: unknown[] = [ts];
 
-  if (input.name !== undefined) {
-    sets.push("name = ?");
-    vals.push(input.name.trim());
+  // ── Field mapping: [key, sqlColumn?, transform?] ──────────────
+  // Defines how each UpdateCronJobInput field maps to a SQL column and value.
+  // Avoids 24 repetitive `if (input.X !== undefined)` blocks.
+  type FieldDef = readonly [
+    key: keyof UpdateCronJobInput,
+    sql?: string,
+    transform?: (v: unknown) => unknown,
+  ];
+  const FIELD_MAP: FieldDef[] = [
+    ["name", undefined, (v) => (v as string).trim()],
+    ["prompt"],
+    ["skills", undefined, (v) => JSON.stringify(v)],
+    ["model"],
+    ["provider"],
+    ["base_url"],
+    ["deliver"],
+    ["script"],
+    ["profile_name"],
+    ["state"],
+    ["next_run_at"],
+    ["last_run_at"],
+    ["last_status"],
+    ["last_delivery_error"],
+    ["hermes_job_id"],
+    ["enabled", undefined, (v) => (v ? 1 : 0)],
+    ["orphan", undefined, (v) => (v ? 1 : 0)],
+    ["workdir", undefined, (v) => (v as string | null) ?? ""],
+  ];
+
+  for (const [key, sql, transform] of FIELD_MAP) {
+    if (input[key] !== undefined) {
+      sets.push(`${sql ?? key} = ?`);
+      vals.push(transform ? transform(input[key]) : input[key]);
+    }
   }
-  if (input.prompt !== undefined) {
-    sets.push("prompt = ?");
-    vals.push(input.prompt);
-  }
-  if (input.skills !== undefined) {
-    sets.push("skills = ?");
-    vals.push(JSON.stringify(input.skills));
-  }
-  if (input.model !== undefined) {
-    sets.push("model = ?");
-    vals.push(input.model);
-  }
-  if (input.provider !== undefined) {
-    sets.push("provider = ?");
-    vals.push(input.provider);
-  }
-  if (input.base_url !== undefined) {
-    sets.push("base_url = ?");
-    vals.push(input.base_url);
-  }
+
+  // ── Schedule (special handling: parse + generate display) ────
   if (input.schedule !== undefined) {
     const parsed = parseScheduleToJson(input.schedule);
     sets.push("schedule = ?", "schedule_display = ?");
@@ -169,57 +182,11 @@ export function updateCronJob(
     sets.push("schedule_display = ?");
     vals.push(input.schedule_display);
   }
+
+  // ── Repeat (special handling: serialize) ─────────────────────
   if (input.repeat !== undefined) {
     sets.push("repeat_json = ?");
     vals.push(parseRepeatJson(input.repeat));
-  }
-  if (input.enabled !== undefined) {
-    sets.push("enabled = ?");
-    vals.push(input.enabled ? 1 : 0);
-  }
-  if (input.state !== undefined) {
-    sets.push("state = ?");
-    vals.push(input.state);
-  }
-  if (input.deliver !== undefined) {
-    sets.push("deliver = ?");
-    vals.push(input.deliver);
-  }
-  if (input.script !== undefined) {
-    sets.push("script = ?");
-    vals.push(input.script);
-  }
-  if (input.profile_name !== undefined) {
-    sets.push("profile_name = ?");
-    vals.push(input.profile_name);
-  }
-  if (input.next_run_at !== undefined) {
-    sets.push("next_run_at = ?");
-    vals.push(input.next_run_at);
-  }
-  if (input.last_run_at !== undefined) {
-    sets.push("last_run_at = ?");
-    vals.push(input.last_run_at);
-  }
-  if (input.last_status !== undefined) {
-    sets.push("last_status = ?");
-    vals.push(input.last_status);
-  }
-  if (input.last_delivery_error !== undefined) {
-    sets.push("last_delivery_error = ?");
-    vals.push(input.last_delivery_error);
-  }
-  if (input.hermes_job_id !== undefined) {
-    sets.push("hermes_job_id = ?");
-    vals.push(input.hermes_job_id);
-  }
-  if (input.orphan !== undefined) {
-    sets.push("orphan = ?");
-    vals.push(input.orphan ? 1 : 0);
-  }
-  if (input.workdir !== undefined) {
-    sets.push("workdir = ?");
-    vals.push(input.workdir ?? "");
   }
 
   vals.push(id);

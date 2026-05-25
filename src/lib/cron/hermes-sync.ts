@@ -126,6 +126,17 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     skills = [];
   }
 
+  // Resolve schedule_display: prefer top-level field, fall back to nested display/Kind in schedule object,
+  // guarding against Hermes' "?" fallback from _schedule_display_for_job() which would overwrite valid CH values.
+  const resolvedScheduleDisplay = (() => {
+    if (job.schedule_display && job.schedule_display !== "?") return job.schedule_display;
+    if (typeof job.schedule === "object" && job.schedule !== null) {
+      const s = job.schedule as { display?: string; Kind?: string };
+      return s.display ?? s.Kind ?? "";
+    }
+    return "";
+  })();
+
   return {
     schedule: scheduleJson,
     repeat_json: repeatJson,
@@ -135,7 +146,7 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     model: typeof job.model === "string" ? job.model : "",
     provider: typeof job.provider === "string" ? job.provider : "",
     base_url: typeof job.base_url === "string" ? job.base_url : null,
-    schedule_display: (job.schedule_display && job.schedule_display !== "?") ? job.schedule_display : (typeof job.schedule === "object" && job.schedule !== null ? (job.schedule as {display?: string; Kind?: string}).display ?? (job.schedule as {Kind?: string}).Kind ?? "" : ""),
+    schedule_display: resolvedScheduleDisplay,
     enabled: job.enabled !== false ? 1 : 0,
     state: job.state ?? (job.enabled !== false ? "scheduled" : "paused"),
     deliver: job.deliver ?? "none",
