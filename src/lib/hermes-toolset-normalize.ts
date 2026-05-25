@@ -5,7 +5,7 @@
 // Store compact lists: dedupe per platform; drop entries subsumed by hermes-cli.
 
 import type { PlatformToolsets } from "./profile-config-builder";
-import { dedupeSorted } from "./hermes-toolset-unify";
+import { sortedUnique } from "./hermes-toolset-unify";
 
 /** Toolset names commonly expanded when hermes-cli is saved from `hermes tools`. */
 const HERMES_CLI_SUBSUMED = new Set([
@@ -31,7 +31,7 @@ const HERMES_CLI_SUBSUMED = new Set([
 const PLATFORM_BUNDLE_PREFIX = "hermes-";
 
 function normalizePlatformList(toolsets: string[]): string[] {
-  const deduped = dedupeSorted(toolsets);
+  const deduped = sortedUnique(toolsets);
   const hasHermesCli = deduped.includes("hermes-cli");
   if (!hasHermesCli) {
     return deduped;
@@ -41,13 +41,13 @@ function normalizePlatformList(toolsets: string[]): string[] {
   const granular = deduped.filter((name) => !name.startsWith(PLATFORM_BUNDLE_PREFIX));
   const redundant = granular.every((name) => HERMES_CLI_SUBSUMED.has(name));
   if (redundant && granular.length > 0) {
-    return dedupeSorted(platformBundles.length > 0 ? platformBundles : ["hermes-cli"]);
+    return sortedUnique(platformBundles.length > 0 ? platformBundles : ["hermes-cli"]);
   }
 
   const withoutSubsumed = deduped.filter(
     (name) => name.startsWith(PLATFORM_BUNDLE_PREFIX) || !HERMES_CLI_SUBSUMED.has(name),
   );
-  return dedupeSorted(withoutSubsumed);
+  return sortedUnique(withoutSubsumed);
 }
 
 export function normalizePlatformToolsets(toolsets: PlatformToolsets): PlatformToolsets {

@@ -94,7 +94,6 @@ export default function DefaultsGrid({
   onSetAllAux,
   busyTaskType = null,
 }: DefaultsGridProps) {
-  const auxTypes = TASK_TYPES.filter((t) => t !== "agent");
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -128,7 +127,7 @@ export default function DefaultsGrid({
                       type="button"
                       onClick={() => {
                         if (!onSetAllAux || !selected) return;
-                        const others = auxTypes.filter((t) => t !== slot);
+                        const others = TASK_TYPES.filter((t) => t !== slot);
                         if (others.length > 0) {
                           void onSetAllAux(others, selected);
                         }

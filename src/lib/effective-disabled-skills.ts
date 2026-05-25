@@ -1,11 +1,10 @@
 import { existsSync, readFileSync } from "fs";
 
 import { getAgentRoot } from "./agent-root-repository";
-import { getActiveHermesHome } from "./hermes-agent-runtime";
+import { buildProfileHermesPathBundle } from "./hermes-profile-paths";
 import {
   collectSkillDirectoryNames,
   computeEffectiveDisabledFromYaml,
-  configPathForProfile,
   normalizeDisabledSkillKeys,
   skillsRootForProfile,
 } from "./skills-config";
@@ -19,8 +18,7 @@ export function listCatalogSkillKeys(): string[] {
   for (const row of listSkills()) {
     keys.add(row.skillKey);
   }
-  const _home = getActiveHermesHome();
-    for (const name of collectSkillDirectoryNames(skillsRootForProfile())) {
+  for (const name of collectSkillDirectoryNames(skillsRootForProfile())) {
     keys.add(name);
   }
   return [...keys].sort();
@@ -35,29 +33,28 @@ export function resolveEffectiveDisabledSkills(
   options?: { refreshFromDisk?: boolean },
 ): Set<string> {
   const catalogKeys = listCatalogSkillKeys();
-  const _home = getActiveHermesHome();
 
-  let fromDb: string[] =
+  const fromDb: string[] =
     profile === "default"
       ? disabledSkillsFromJson(getAgentRoot().disabledSkillsJson)
       : getDisabledSkills(profile);
 
+  const configPath = buildProfileHermesPathBundle(profile).config;
   const useDisk =
     options?.refreshFromDisk === true ||
-    (fromDb.length === 0 && existsSync(configPathForProfile(profile)));
+    (fromDb.length === 0 && existsSync(configPath));
 
-  if (useDisk) {
-    const configPath = configPathForProfile(profile);
-    if (existsSync(configPath)) {
-      const yaml = readFileSync(configPath, "utf-8");
-      fromDb = computeEffectiveDisabledFromYaml(yaml, catalogKeys);
-    }
+  if (useDisk && existsSync(configPath)) {
+    const yaml = readFileSync(configPath, "utf-8");
+    return new Set(normalizeDisabledSkillKeys(
+      computeEffectiveDisabledFromYaml(yaml, catalogKeys),
+      catalogKeys,
+    ));
   }
 
   return new Set(normalizeDisabledSkillKeys(fromDb, catalogKeys));
 }
 
 export function catalogKeysForSkillsRoot(): string[] {
-  const _home = getActiveHermesHome();
   return collectSkillDirectoryNames(skillsRootForProfile());
 }
