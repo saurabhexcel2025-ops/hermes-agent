@@ -232,6 +232,14 @@ export default function Dashboard() {
 
   // Cancel a mission from the dashboard
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup cancel-confirm timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+    };
+  }, []);
+
   const handleCancelMission = useCallback(async (missionId: string, missionName: string) => {
     // First click: show confirmation state
     if (cancelConfirmId !== missionId) {

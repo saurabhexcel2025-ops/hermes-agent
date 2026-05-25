@@ -309,31 +309,31 @@ export async function GET(request: NextRequest) {
 
     switch (action) {
       case "list":
-        result = (await handleList(bank, query, limit)) as unknown as Record<string, unknown>;
+        result = await handleList(bank, query, limit);
         break;
       case "recall":
         if (!query) {
           return NextResponse.json({ error: "query is required for recall" }, { status: 400 });
         }
-        result = (await handleRecall(bank, query)) as unknown as Record<string, unknown>;
+        result = await handleRecall(bank, query);
         break;
       case "reflect":
         if (!query) {
           return NextResponse.json({ error: "query is required for reflect" }, { status: 400 });
         }
-        result = (await handleReflect(bank, query, budget)) as unknown as Record<string, unknown>;
+        result = await handleReflect(bank, query, budget);
         break;
       case "directives":
-        result = (await handleDirectives(bank)) as unknown as Record<string, unknown>;
+        result = await handleDirectives(bank);
         break;
       case "mental-models":
-        result = (await handleMentalModels(bank)) as unknown as Record<string, unknown>;
+        result = await handleMentalModels(bank);
         break;
       case "health":
-        result = (await handleHealth()) as unknown as Record<string, unknown>;
+        result = await handleHealth();
         break;
       case "count":
-        result = (await handleCount(bank)) as unknown as Record<string, unknown>;
+        result = await handleCount(bank);
         break;
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
@@ -376,7 +376,7 @@ export async function POST(request: NextRequest) {
         if (!content || typeof content !== "string" || content.trim().length === 0) {
           return NextResponse.json({ error: "Content is required" }, { status: 400 });
         }
-        result = (await handleRetain(bank, content.trim(), tags)) as unknown as Record<string, unknown>;
+        result = await handleRetain(bank, content.trim(), tags);
         break;
       }
       case "create-directive": {
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
         if (!name || !dirContent) {
           return NextResponse.json({ error: "name and content are required" }, { status: 400 });
         }
-        result = (await handleCreateDirective(bank, name, dirContent, priority, tags)) as unknown as Record<string, unknown>;
+        result = await handleCreateDirective(bank, name, dirContent, priority, tags);
         break;
       }
       case "create-model": {
@@ -392,7 +392,7 @@ export async function POST(request: NextRequest) {
         if (!name || !mQuery) {
           return NextResponse.json({ error: "name and query are required" }, { status: 400 });
         }
-        result = (await handleCreateMentalModel(bank, name, mQuery, tags)) as unknown as Record<string, unknown>;
+        result = await handleCreateMentalModel(bank, name, mQuery, tags);
         break;
       }
       case "update-directive": {
@@ -400,7 +400,7 @@ export async function POST(request: NextRequest) {
         if (!id) {
           return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
-        result = (await handleUpdateDirective(bank, id, { name, content: uContent, priority, is_active, tags })) as unknown as Record<string, unknown>;
+        result = await handleUpdateDirective(bank, id, { name, content: uContent, priority, is_active, tags });
         break;
       }
       case "update-model": {
@@ -408,7 +408,7 @@ export async function POST(request: NextRequest) {
         if (!id) {
           return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
-        result = (await handleUpdateMentalModel(bank, id, { name, query: umQuery, tags })) as unknown as Record<string, unknown>;
+        result = await handleUpdateMentalModel(bank, id, { name, query: umQuery, tags });
         break;
       }
       case "refresh-model": {
@@ -416,7 +416,7 @@ export async function POST(request: NextRequest) {
         if (!id) {
           return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
-        result = (await handleRefreshMentalModel(bank, id)) as unknown as Record<string, unknown>;
+        result = await handleRefreshMentalModel(bank, id);
         break;
       }
       default:
@@ -445,9 +445,9 @@ export async function DELETE(request: NextRequest) {
 
     let result: Record<string, unknown>;
     if (type === "directive") {
-      result = (await handleDeleteDirective(bank, id)) as unknown as Record<string, unknown>;
+      result = await handleDeleteDirective(bank, id);
     } else {
-      result = (await handleDeleteMentalModel(bank, id)) as unknown as Record<string, unknown>;
+      result = await handleDeleteMentalModel(bank, id);
     }
 
     return NextResponse.json<ApiResponse<Record<string, unknown>>>({ data: result });

@@ -90,14 +90,23 @@ const ROLE_META: Record<string, {
 function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index: number; messageRefs: React.MutableRefObject<Map<number, HTMLDivElement>> }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const role = (msg.role || "unknown").toLowerCase();
   const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content, null, 2);
   const summary = useMemo(() => messageSummary(content), [content]);
 
+  // Cleanup the copied-state timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(content || "");
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   const config = ROLE_META[role] || ROLE_META.system;
@@ -169,8 +178,10 @@ function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index
             {msg.tool_calls.map((tc: unknown, i: number) => {
               const toolCall = tc as Record<string, unknown>;
               const fn = toolCall.function as Record<string, unknown> | undefined;
+              const fnName = String(fn?.name || "unknown");
+              const tcKey = `toolcall-${i}-${fnName.replace(/[^a-zA-Z0-9]/g, "-")}`;
               return (
-                <div key={i} className="bg-dark-900/50 rounded-lg p-3 text-xs font-mono">
+                <div key={tcKey} className="bg-dark-900/50 rounded-lg p-3 text-xs font-mono">
                   <span className="text-neon-green">{String(fn?.name || "unknown")}</span>
                   <pre className="mt-1 text-white/40 whitespace-pre-wrap">
                     {typeof fn?.arguments === "string"
