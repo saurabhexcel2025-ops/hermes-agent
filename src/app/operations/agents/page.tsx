@@ -50,34 +50,7 @@ export default function BehaviourPage() {
   const profileSyncBody = (slug: string) =>
     slug === "default" ? { root: true } : { slug };
 
-  const runProfileSync = async (
-    body: Record<string, unknown>,
-    successMessage: string,
-  ): Promise<boolean> => {
-    setSyncBusy(true);
-    try {
-      const res = await fetch("/api/agent/profiles/sync/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json()) as { error?: string; data?: { success?: boolean } };
-      if (!res.ok || data.data?.success === false) {
-        showToast(data.error ?? "Push failed", "error");
-        return false;
-      }
-      showToast(successMessage, "success");
-      await loadProfiles();
-      return true;
-    } catch {
-      showToast("Push failed", "error");
-      return false;
-    } finally {
-      setSyncBusy(false);
-    }
-  };
-
-  const syncFetch = async (
+  const doSync = async (
     url: string,
     body: Record<string, unknown>,
     successMessage: string,
@@ -105,21 +78,25 @@ export default function BehaviourPage() {
   };
 
   const handlePushAll = () =>
-    void runProfileSync(
+    void doSync(
+      "/api/agent/profiles/sync/push",
       { all: true },
       "All profiles pushed to Hermes. Model defaults re-applied to config.yaml.",
+      "Push failed",
     );
 
   const handlePushOne = (slug: string) =>
-    void runProfileSync(
+    void doSync(
+      "/api/agent/profiles/sync/push",
       profileSyncBody(slug),
       slug === "default"
         ? "Pushed Bob to Hermes. Model defaults re-applied to config.yaml."
         : `Pushed ${slug} to Hermes`,
+      "Push failed",
     );
 
   const handleImportDiscovered = () =>
-    void syncFetch(
+    void doSync(
       "/api/agent/profiles/sync/import",
       { importAllDiscovered: true },
       "Imported discovered profiles from Hermes disk",
@@ -127,7 +104,7 @@ export default function BehaviourPage() {
     );
 
   const handlePullAll = () =>
-    void syncFetch(
+    void doSync(
       "/api/agent/profiles/sync/pull",
       { all: true, importDiscovered: true },
       "All profiles pulled from Hermes",
@@ -135,7 +112,7 @@ export default function BehaviourPage() {
     );
 
   const handlePullOne = (slug: string) =>
-    void syncFetch(
+    void doSync(
       "/api/agent/profiles/sync/pull",
       profileSyncBody(slug),
       `Pulled ${slug} from Hermes`,

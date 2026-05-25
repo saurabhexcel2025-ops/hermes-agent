@@ -105,6 +105,10 @@ export default function SkillsPage() {
 
   const { showToast, toastElement } = useToast();
 
+  // Shared URL builder for skill API calls (GET and PUT)
+  const skillApiUrl = (name: string) =>
+    `/api/skills/${encodeURIComponent(name)}?profile=${selectedProfile}`;
+
   const importSkillsFromHermes = async () => {
     setImporting(true);
     try {
@@ -208,9 +212,7 @@ export default function SkillsPage() {
     setEditContent("");
     setEditOriginal("");
     try {
-      const res = await fetch(
-        `/api/skills/${encodeURIComponent(skill.name)}?profile=${selectedProfile}`,
-      );
+      const res = await fetch(skillApiUrl(skill.name));
       const d = await res.json();
       if (!res.ok) {
         showToast(d?.error || "Failed to load skill", "error");
@@ -230,14 +232,11 @@ export default function SkillsPage() {
     if (!editingSkill || savingEdit) return;
     setSavingEdit(true);
     try {
-      const res = await fetch(
-        `/api/skills/${encodeURIComponent(editingSkill)}?profile=${selectedProfile}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: editContent }),
-        },
-      );
+      const res = await fetch(skillApiUrl(editingSkill), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editContent }),
+      });
       const d = await res.json();
       if (!res.ok) {
         throw new Error(d?.error || "Failed to save skill");
@@ -263,9 +262,7 @@ export default function SkillsPage() {
     }
     setExpandedSkill(skill.name);
     try {
-      const res = await fetch(
-        `/api/skills/${encodeURIComponent(skill.name)}?profile=${selectedProfile}`,
-      );
+      const res = await fetch(skillApiUrl(skill.name));
       const d = await res.json();
       if (!res.ok) {
         setSkillContent("// " + (d?.error || res.statusText || "Failed to load"));
