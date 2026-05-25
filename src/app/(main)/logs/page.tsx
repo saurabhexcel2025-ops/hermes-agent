@@ -212,6 +212,7 @@ export default function LogsPage() {
     setAutoScroll(scrollTop < 50);
   };
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filteredFiles = useMemo(() => {
     if (!data?.availableLogs) return [];
     const q = fileQuery.trim().toLowerCase();
