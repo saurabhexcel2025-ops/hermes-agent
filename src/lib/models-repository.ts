@@ -168,9 +168,7 @@ export function getDefaultModel(taskType: TaskType): ModelRecord | null {
 }
 
 export function getModelDefaults(): ModelDefaults {
-  // emptyModelDefaults() returns Record<TaskType, string | null> which is
-  // structurally identical to ModelDefaults — the cast is safe.
-  const defaults = emptyModelDefaults() as ModelDefaults;
+  const defaults = emptyModelDefaults();
   
   const rows = db()
     .prepare("SELECT task_type, model_id FROM model_defaults")
@@ -345,8 +343,6 @@ export function setDefaultModel(taskType: TaskType, modelId: string | null): Mod
  * for that slot.
  */
 export function upsertModel(input: {
-  /** Accepted for API compatibility with hermes-import.ts; not used in SQL. */
-  importKey: string;
   name: string;
   provider: string;
   modelId: string;
