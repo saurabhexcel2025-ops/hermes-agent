@@ -439,7 +439,7 @@ export default function LogsPage() {
                   </p>
                 </div>
               </div>
-            ) : (
+            ) : data ? (
               <div
                 ref={terminalRef}
                 onScroll={handleScroll}
@@ -453,11 +453,9 @@ export default function LogsPage() {
                   </div>
                   <span className="text-xs text-white/40 font-mono ml-2 truncate">
                     {activeLog}.log
-                    {data && (
-                      <span className="text-white/20 ml-2">
-                        (showing {data.showingLines}/{data.totalLines})
-                      </span>
-                    )}
+                    <span className="text-white/20 ml-2">
+                      (showing {data.showingLines}/{data.totalLines})
+                    </span>
                   </span>
                 </div>
 
@@ -483,7 +481,7 @@ export default function LogsPage() {
                   )}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

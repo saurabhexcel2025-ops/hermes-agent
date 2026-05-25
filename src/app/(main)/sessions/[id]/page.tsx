@@ -30,8 +30,11 @@ interface SessionMessage {
   name?: string;
   tool_calls?: unknown[];
   tool_call_id?: string;
+  tool_name?: string | null;
+  finish_reason?: string | null;
+  reasoning?: string | null;
+  timestamp?: number;
   raw?: string;
-  [key: string]: unknown;
 }
 
 interface SessionData {

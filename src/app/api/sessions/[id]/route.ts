@@ -114,7 +114,7 @@ export async function GET(
 
   // ── Step 2: Legacy file-based sessions (~/.hermes/sessions/) ──────────
   const sessionsPath = getActiveHermesPaths().sessions;
-  const fullPath = sessionsPath + "/" + sanitizedId;
+  const fullPath = join(sessionsPath, sanitizedId);
   let filePath = "";
 
   if (existsSync(fullPath)) {

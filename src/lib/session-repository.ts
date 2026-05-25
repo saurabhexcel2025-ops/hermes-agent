@@ -275,14 +275,16 @@ function readHermesSessionsFromStateDb(): HermesSessionRow[] {
   const stateDbPath = join(root, "state.db");
   if (!existsSync(stateDbPath)) return [];
 
+  let hermesDb: Database.Database | null = null;
   try {
-    const hermesDb = new Database(stateDbPath, { readonly: true });
+    hermesDb = new Database(stateDbPath, { readonly: true });
 
     const tables = hermesDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
       .all();
     if (tables.length === 0) {
       hermesDb.close();
+      hermesDb = null;
       return [];
     }
 
@@ -293,10 +295,15 @@ function readHermesSessionsFromStateDb(): HermesSessionRow[] {
       )
       .all() as HermesSessionRow[];
     hermesDb.close();
+    hermesDb = null;
 
     return rows;
   } catch {
     return [];
+  } finally {
+    if (hermesDb) {
+      try { hermesDb.close(); } catch { /* already closed or never fully opened */ }
+    }
   }
 }
 

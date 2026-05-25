@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { db, now } from "@/lib/db";
 import { logApiError } from "@/lib/api-logger";
@@ -68,12 +69,12 @@ export class LogSync implements SyncSource {
 
       // Read from both gateway.log and errors.log
       const gatewayErrors = readErrorLines(
-        logDir + "/gateway.log",
+        join(logDir, "gateway.log"),
         "gateway",
         this.maxEntriesPerSource
       );
       const agentErrors = readErrorLines(
-        logDir + "/errors.log",
+        join(logDir, "errors.log"),
         "agent",
         this.maxEntriesPerSource
       );

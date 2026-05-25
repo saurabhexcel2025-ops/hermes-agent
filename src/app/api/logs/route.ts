@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync, readFileSync, statSync, writeFileSync } from "fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
@@ -13,6 +13,8 @@ import { requireAuth } from "@/lib/api-auth";
 import { ApiResponse } from "@/types/hermes";
 import type { LogFileMeta } from "@/lib/log-files";
 
+const CHUNK_SIZE = 64 * 1024; // 64KB — read from end of file in chunks
+
 export interface LogGetData {
   name: string;
   totalLines: number;
@@ -21,6 +23,72 @@ export interface LogGetData {
   modified: string;
   lines: string[];
   availableLogs: LogFileMeta[];
+}
+
+/**
+ * Read the last `maxLines` lines from a file efficiently by reading
+ * from the end in chunks. Avoids loading multi-MB log files entirely
+ * into memory just to show the last 200 lines.
+ */
+function readLastLines(filePath: string, maxLines: number): {
+  allLines: number;
+  lines: string[];
+} {
+  const stats = statSync(filePath);
+  const fileSize = stats.size;
+
+  // Small file: read entirely via readFileSync (also supports test mocks)
+  if (fileSize <= CHUNK_SIZE) {
+    const content = readFileSync(filePath, "utf-8");
+    const allLines = content.split("\n").filter((l) => l.length > 0);
+    return {
+      allLines: allLines.length,
+      lines: allLines.slice(-maxLines).reverse(),
+    };
+  }
+
+  // Large file: read chunks from the end
+  const fd = openSync(filePath, "r");
+  try {
+    let collected = "";
+    let bytesToRead = Math.min(CHUNK_SIZE, fileSize);
+    let offset = fileSize - bytesToRead;
+    let lineCount = 0;
+
+    // Read chunks from the end until we have enough lines or hit the start
+    while (offset >= 0 && lineCount < maxLines) {
+      const buf = Buffer.alloc(bytesToRead);
+      readSync(fd, buf, 0, bytesToRead, offset);
+      const chunk = buf.toString("utf-8");
+      collected = chunk + collected;
+
+      // Count lines in what we've collected
+      lineCount = 0;
+      for (let i = 0; i < collected.length; i++) {
+        if (collected[i] === "\n") lineCount++;
+      }
+
+      if (lineCount >= maxLines) break;
+
+      // Move back and read the previous chunk
+      offset -= CHUNK_SIZE;
+      if (offset < 0) {
+        // Read from start with adjusted size
+        bytesToRead = CHUNK_SIZE + offset;
+        offset = 0;
+      } else {
+        bytesToRead = CHUNK_SIZE;
+      }
+    }
+
+    const allLines = collected.split("\n").filter((l) => l.length > 0);
+    return {
+      allLines: allLines.length,
+      lines: allLines.slice(-maxLines).reverse(),
+    };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -77,9 +145,7 @@ export async function GET(request: NextRequest) {
     }
 
     const stats = statSync(logPath);
-    const content = readFileSync(logPath, "utf-8");
-    const allLines = content.split("\n").filter((line) => line.length > 0);
-    const lines = allLines.slice(-maxLines).reverse();
+    const { allLines, lines } = readLastLines(logPath, maxLines);
 
     // Fallback timestamp: use file mtime for lines that have no parseable timestamp.
     // Format must match RE_SPACE_TS so the frontend parseLogLine() recognizes it.
@@ -103,7 +169,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json<ApiResponse<LogGetData>>({
       data: {
         name: safeName,
-        totalLines: allLines.length,
+        totalLines: allLines,
         showingLines: lines.length,
         size: stats.size,
         modified: stats.mtime.toISOString(),

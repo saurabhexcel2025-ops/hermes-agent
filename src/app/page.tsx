@@ -438,7 +438,7 @@ export default function Dashboard() {
   );
 
   const collapsedTemplateStrip = useMemo(() => {
-    if (templates.length <= 8) return templates;
+    if (templates.length <= 12) return templates;
     // Custom templates first (true > false), then alphabetical by name
     const sorted = [...templates].sort((a, b) => {
       if (a.isCustom !== b.isCustom) return a.isCustom ? -1 : 1;
