@@ -237,6 +237,10 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     icon: "Wrench",
     color: "purple",
     fields: [],
+    // Note: complexKeys here serves as a static fallback hint for config index page.
+    // The actual keys are derived dynamically from loaded values in ConfigSectionPage
+    // (see sectionId === "platform_toolsets" branch) so new platforms added by Hermes
+    // appear automatically without schema changes.
     complexKeys: ["cli", "discord", "telegram", "slack", "whatsapp", "signal", "homeassistant"],
   },
   code_execution: {
@@ -266,7 +270,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "discord",
     label: "Discord",
     description: "Discord platform-specific settings",
-    icon: "MessageSquare",
+    icon: "MessageCircle",
     color: "purple",
     fields: [
       { key: "auto_thread", label: "Auto Thread", type: "boolean", description: "Automatically create threads for responses" },
