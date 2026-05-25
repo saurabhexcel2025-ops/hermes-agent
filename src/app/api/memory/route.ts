@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getMemoryProviderType } from "@/lib/memory-providers";
 import { logApiError } from "@/lib/api-logger";
+import { requireAuth } from "@/lib/api-auth";
 import type { ApiResponse } from "@/types/hermes";
 import type { MemoryReadResult } from "@/lib/memory-providers";
 
@@ -111,6 +112,8 @@ export async function GET() {
 
 // POST — Add a new memory fact (holographic only)
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
   return dispatchMemoryAction({
     hindsight: () => HINDSIGHT_EDIT_ERROR,
     holographic: async () => {
@@ -137,6 +140,8 @@ export async function POST(request: NextRequest) {
 
 // PUT — Update an existing memory fact (holographic only)
 export async function PUT(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
   return dispatchMemoryAction({
     hindsight: () => HINDSIGHT_EDIT_ERROR,
     holographic: async () => {
@@ -164,6 +169,8 @@ export async function PUT(request: NextRequest) {
 
 // DELETE — Remove a memory fact (holographic only)
 export async function DELETE(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
   return dispatchMemoryAction({
     hindsight: () => HINDSIGHT_DELETE_ERROR,
     holographic: async () => {

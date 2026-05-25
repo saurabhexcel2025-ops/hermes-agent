@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import {
-  categorizeLogFileGroup,
-  compareLogFileNames,
+  listLogFilesInDir,
   logFileUnderLogsDir,
   sanitizeLogBasename,
 } from "@/lib/log-files";
@@ -43,25 +42,11 @@ export async function GET(request: NextRequest) {
 
     const availableLogs: LogFileMeta[] = [];
     try {
-      const files = readdirSync(logsDir);
-      for (const file of files) {
-        if (!file.endsWith(".log")) continue;
-        const base = file.slice(0, -4);
-        if (sanitizeLogBasename(base) !== base) continue;
-        const filePath = logsDir + "/" + file;
-        const stats = statSync(filePath);
-        availableLogs.push({
-          name: base,
-          size: stats.size,
-          modified: stats.mtime.toISOString(),
-          group: categorizeLogFileGroup(base),
-        });
-      }
+      const files = listLogFilesInDir(logsDir);
+      availableLogs.push(...files);
     } catch (err) {
       logApiError("GET /api/logs", "listing available logs", err);
     }
-
-    availableLogs.sort((a, b) => compareLogFileNames(a.name, b.name));
 
     const rawName = searchParams.get("name");
     const safeName =
@@ -175,13 +160,10 @@ export async function DELETE(request: NextRequest) {
       });
     }
 
-    const files = readdirSync(logsDir);
+    const files = listLogFilesInDir(logsDir);
     let cleared = 0;
     for (const file of files) {
-      if (!file.endsWith(".log")) continue;
-      const base = file.slice(0, -4);
-      if (sanitizeLogBasename(base) !== base) continue;
-      const filePath = resolve(logsDir, file);
+      const filePath = resolve(logsDir, file.name + ".log");
       if (logFileUnderLogsDir(resolvedLogsDir, filePath)) {
         writeFileSync(filePath, "");
         cleared++;
