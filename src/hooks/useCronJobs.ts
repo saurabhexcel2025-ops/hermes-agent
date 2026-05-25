@@ -27,6 +27,8 @@ export function useCronJobs() {
     transform: (raw) => raw as CronData,
   });
 
+  const jobs = (data?.jobs as CronJob[]) ?? [];
+
   const handleToggle = useCallback(
     async (id: string) => {
       const job = data?.jobs.find((j: CronJob) => j.id === id);
@@ -90,6 +92,7 @@ export function useCronJobs() {
 
   return {
     data,
+    jobs,
     loading,
     loadJobs,
     handleToggle,

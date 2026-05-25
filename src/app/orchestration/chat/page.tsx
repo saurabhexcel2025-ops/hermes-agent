@@ -414,10 +414,11 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col min-w-0">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {!hasActiveSession && messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center py-24">
+            {/* Gateway status banners — shown regardless of session state */}
+            {!hasActiveSession && messages.length === 0 && (
+              <>
                 {gatewayOnline === false && (
-                  <div className="w-full max-w-md mb-6 p-4 bg-neon-red/10 border border-neon-red/20 rounded-lg text-left">
+                  <div className="w-full max-w-md mx-auto mb-6 p-4 bg-neon-red/10 border border-neon-red/20 rounded-lg text-left">
                     <div className="flex items-center gap-2 text-neon-red mb-1">
                       <AlertTriangle className="w-4 h-4" />
                       <span className="text-sm font-semibold">Gateway Offline</span>
@@ -429,7 +430,7 @@ export default function ChatPage() {
                   </div>
                 )}
                 {gatewayOnline !== false && agentDefaultModelSet === false && (
-                  <div className="w-full max-w-md mb-6 p-4 bg-neon-orange/10 border border-neon-orange/20 rounded-lg text-left">
+                  <div className="w-full max-w-md mx-auto mb-6 p-4 bg-neon-orange/10 border border-neon-orange/20 rounded-lg text-left">
                     <div className="flex items-center gap-2 text-neon-orange mb-1">
                       <AlertTriangle className="w-4 h-4" />
                       <span className="text-sm font-semibold">Model not ready for chat</span>
@@ -443,37 +444,33 @@ export default function ChatPage() {
                   </div>
                 )}
                 {gatewayOnline === null && (
-                  <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center gap-2 mb-4 justify-center">
                     <Loader2 className="w-3 h-3 text-white/30 animate-spin" />
                     <span className="text-xs text-white/30">Checking gateway connection...</span>
                   </div>
                 )}
-                <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                  <MessageCircle className="w-8 h-8 text-white/30" />
-                </div>
-                <h3 className="text-lg font-semibold text-white/60 mb-1">
-                  Chat with your agent
-                </h3>
-                <p className="text-sm text-white/40 mb-2 max-w-md">
-                  Type a message below to start a new conversation.
-                </p>
-                {gatewayOnline !== false && (
-                  <p className="text-xs text-white/20 font-mono">
-                    Connected via Gateway API Server at localhost:8642
-                  </p>
-                )}
-              </div>
-            ) : messages.length === 0 && hasActiveSession ? (
+              </>
+            )}
+            {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-24">
                 <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
                   <MessageCircle className="w-8 h-8 text-white/30" />
                 </div>
                 <h3 className="text-lg font-semibold text-white/60 mb-1">
-                  {sessions.find((s) => s.id === activeSessionId)?.title || "New Chat"}
+                  {hasActiveSession
+                    ? sessions.find((s) => s.id === activeSessionId)?.title || "New Chat"
+                    : "Chat with your agent"}
                 </h3>
                 <p className="text-sm text-white/40 mb-2 max-w-md">
-                  Send a message to begin.
+                  {hasActiveSession
+                    ? "Send a message to begin."
+                    : "Type a message below to start a new conversation."}
                 </p>
+                {!hasActiveSession && gatewayOnline !== false && (
+                  <p className="text-xs text-white/20 font-mono">
+                    Connected via Gateway API Server at localhost:8642
+                  </p>
+                )}
               </div>
             ) : (
               messages.map((msg) => (
