@@ -11,7 +11,6 @@ import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { CONFIG_SECTIONS } from "@/lib/config-schema";
-import { getConfigSectionIcon } from "@/lib/config-section-icons";
 import { iconColorMap, colorBorderMap } from "@/lib/theme";
 
 // ── Category definitions (mirrors sidebar groups) ─────────
@@ -78,7 +77,7 @@ function SectionCard({
     >
       <div className="flex items-center justify-between mb-3">
         <span className={iconClass}>
-          {createElement(getConfigSectionIcon(section.icon))}
+          {createElement(section.icon)}
         </span>
         <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-white/60 group-hover:translate-x-1 transition-all" />
       </div>
