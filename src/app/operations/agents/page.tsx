@@ -153,7 +153,6 @@ export default function BehaviourPage() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const loadProfiles = useCallback(async () => {
     setLoading(true);
     try {

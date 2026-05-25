@@ -232,7 +232,6 @@ export default function SessionDetailPage() {
   }, [sessionId]);
 
   // Count messages by role
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const roleCounts = useMemo(() => {
     if (!data?.messages) return {};
     return data.messages.reduce(
@@ -246,7 +245,6 @@ export default function SessionDetailPage() {
   }, [data?.messages]);
 
   // Filtered messages
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filteredMessages = useMemo(() => {
     if (!data?.messages) return [];
     if (!roleFilter) return data.messages.map((msg, i) => ({ msg, originalIndex: i }));
@@ -256,7 +254,6 @@ export default function SessionDetailPage() {
   }, [data?.messages, roleFilter]);
 
   // Scroll to next message of a given role from current scroll position
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const scrollToNextRole = useCallback((role: string) => {
     if (!data?.messages) return;
     const roleMessages = data.messages

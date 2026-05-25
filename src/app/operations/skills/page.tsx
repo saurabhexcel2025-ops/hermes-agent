@@ -126,7 +126,6 @@ export default function SkillsPage() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const loadSkills = useCallback(async () => {
     setLoading(true);
     try {
