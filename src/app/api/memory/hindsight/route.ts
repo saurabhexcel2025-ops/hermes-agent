@@ -11,6 +11,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
 import type { ApiResponse } from "@/types/hermes";
 
+// ── Tags normalization ───────────────────────────────────────
+
+function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(
+    tags
+      .filter((t): t is string => typeof t === "string" && t.trim() !== "")
+      .map(t => t.trim().toLowerCase())
+  )];
+}
+
 // ── Constants ────────────────────────────────────────────────
 
 const HINDSIGHT_BASE_URL = "http://localhost:9177";
@@ -200,9 +211,7 @@ async function handleUpdateDirective(
   if (updates.content !== undefined) body.content = updates.content;
   if (updates.priority !== undefined) body.priority = updates.priority;
   if (updates.is_active !== undefined) body.is_active = String(updates.is_active) === "true";
-  if (updates.tags !== undefined) {
-    body.tags = Array.isArray(updates.tags) ? updates.tags : String(updates.tags).split(",");
-  }
+  if (updates.tags !== undefined) body.tags = normalizeTags(updates.tags);
   const result = await apiPatch(`/v1/default/banks/${bank}/directives/${id}`, body);
   return { success: true, directive: result };
 }
@@ -252,9 +261,7 @@ async function handleUpdateMentalModel(
   const body: Record<string, unknown> = {};
   if (updates.name !== undefined) body.name = updates.name;
   if (updates.query !== undefined) body.source_query = updates.query;
-  if (updates.tags !== undefined) {
-    body.tags = Array.isArray(updates.tags) ? updates.tags : String(updates.tags).split(",");
-  }
+  if (updates.tags !== undefined) body.tags = normalizeTags(updates.tags);
   const result = await apiPatch(`/v1/default/banks/${bank}/mental-models/${id}`, body);
   return { success: true, model: result };
 }

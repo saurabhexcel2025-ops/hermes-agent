@@ -278,8 +278,6 @@ export default function SessionDetailPage() {
     if (firstEl) firstEl.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [data?.messages]);
 
-  // Reuse roleMeta for filter-button styling
-
   if (loading) {
     return (
       <AppPageShell>

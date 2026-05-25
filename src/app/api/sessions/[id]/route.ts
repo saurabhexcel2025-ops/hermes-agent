@@ -85,7 +85,7 @@ export async function GET(
           messages.length * 300,
         );
 
-        return NextResponse.json({
+        const response = NextResponse.json({
           data: {
             id: sanitizedId,
             filename: sanitizedId,
@@ -101,13 +101,14 @@ export async function GET(
               : null,
           },
         });
+        hermesDb.close();
+        return response;
       }
-
-      hermesDb.close();
     } catch (err) {
       logApiError("GET /api/sessions/[id]", "reading Hermes state.db for " + sanitizedId, err);
-      if (hermesDb) { try { hermesDb.close(); } catch { /* DB already closed */ } }
       // Non-fatal — fall through to file-based lookup
+    } finally {
+      if (hermesDb) { try { hermesDb.close(); } catch { /* already closed */ } }
     }
   }
 
@@ -144,7 +145,7 @@ export async function GET(
             data: {
               id: sanitizedId,
               filename: sessionPath.split("/").pop(),
-              format: dbSession.missionId ? "mission-output" : "db",
+              format: "mission-output",
               title: dbSession.title || sanitizedId,
               model: dbSession.modelId || "",
               source: dbSession.source,

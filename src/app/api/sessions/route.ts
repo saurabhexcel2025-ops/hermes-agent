@@ -17,9 +17,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
 import {
-  createSession,
-  updateSession,
-  getSession,
   listSessions,
   type AgentType,
   type SessionSource,
