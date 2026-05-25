@@ -42,7 +42,9 @@ export async function GET() {
 }
 
 // POST, PUT, DELETE — not supported via the dashboard for current providers
-export async function POST(request: NextRequest) {
+async function handleWrite(
+  request: NextRequest,
+): Promise<NextResponse> {
   const auth = requireAuth(request);
   if (auth) return auth;
   return NextResponse.json(
@@ -51,20 +53,6 @@ export async function POST(request: NextRequest) {
   );
 }
 
-export async function PUT(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth) return auth;
-  return NextResponse.json(
-    { error: "Memory management via the dashboard is not supported for the current provider. Use agent tools instead." },
-    { status: 400 },
-  );
-}
-
-export async function DELETE(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth) return auth;
-  return NextResponse.json(
-    { error: "Memory management via the dashboard is not supported for the current provider. Use agent tools instead." },
-    { status: 400 },
-  );
-}
+export const POST = handleWrite;
+export const PUT = handleWrite;
+export const DELETE = handleWrite;

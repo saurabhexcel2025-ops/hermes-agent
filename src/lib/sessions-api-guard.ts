@@ -41,14 +41,17 @@ export function sessionsApiRateLimitExceeded(request: NextRequest): boolean {
   const key = getSessionsApiClientKey(request);
   const now = Date.now();
   const max = maxRatePerWindow();
-  let arr = windowHits.get(key) || [];
-  arr = arr.filter((t) => now - t < RATE_WINDOW_MS);
-  if (arr.length >= max) {
+  const existing = windowHits.get(key) || [];
+  const arr = existing.filter((t) => now - t < RATE_WINDOW_MS);
+  if (arr.length === 0) {
+    windowHits.delete(key);
+  } else {
     windowHits.set(key, arr);
+  }
+  if (arr.length >= max) {
     return true;
   }
-  arr.push(now);
-  windowHits.set(key, arr);
+  windowHits.set(key, [...arr, now]);
   return false;
 }
 

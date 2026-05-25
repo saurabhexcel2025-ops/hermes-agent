@@ -324,7 +324,7 @@ function buildValidMissionIdSet(): Set<string> {
  *   Hermes job ID (e.g. "9514116b5b0d")
  *     -> cron_jobs.hermes_job_id = job ID
  *     -> cron_jobs.id = cron_job UUID
- *     -> missions.cron_job_id = cron_job UUID  (NOT cron_jobs.id)
+ *     -> missions.cron_job_id = cron_jobs.id (FK to cron_jobs)
  *     -> missions.id = mission UUID
  */
 function buildMissionIdByJobId(): Map<string, string> {

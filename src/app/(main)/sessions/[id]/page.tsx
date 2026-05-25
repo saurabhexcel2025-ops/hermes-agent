@@ -46,7 +46,6 @@ interface SessionData {
   size: number;
   created: string;
 }
-
 // ── Role-to-meta mapping (module-level, shared by MessageBubble and page) ──
 const ROLE_META: Record<string, {
   icon: React.ReactNode; color: string; bg: string; bgSolid: string; text: string; label: string;
