@@ -1,7 +1,15 @@
+// ═══════════════════════════════════════════════════════════════
+// /api/memory/route.ts — Memory provider dispatcher
+//
+// Holographic branch removed: the memory page now renders
+// HindsightBrowser directly, so holographic read/write routes
+// are permanently orphaned. Hindsight operations go through
+// /api/memory/hindsight instead.
+// ═══════════════════════════════════════════════════════════════
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getMemoryProviderType } from "@/lib/memory-providers";
-import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
 import type { ApiResponse } from "@/types/hermes";
 import type { MemoryReadResult } from "@/lib/memory-providers";
@@ -12,14 +20,6 @@ const HINDSIGHT_EDIT_ERROR = NextResponse.json(
   {
     error:
       "Hindsight facts are managed through agent tools (hindsight_retain). Dashboard editing is not supported for Hindsight.",
-  },
-  { status: 400 }
-);
-
-const HINDSIGHT_DELETE_ERROR = NextResponse.json(
-  {
-    error:
-      "Hindsight facts are managed through agent tools (hindsight_retain). Dashboard deletion is not supported for Hindsight.",
   },
   { status: 400 }
 );
@@ -49,151 +49,55 @@ function noMemoryResponse(): NextResponse<ApiResponse<MemoryReadResult>> {
   });
 }
 
-async function withHolographic<T>(
-  fn: (provider: import("@/lib/memory-providers").MemoryProvider) => Promise<T>,
-): Promise<T> {
-  const { holographicProvider } = await import("@/lib/memory-providers/holographic");
-  return fn(holographicProvider);
-}
-
-// ── Provider Dispatch Helper ──────────────────────────────────────
-// Consolidates the repeated hindsight/holographic/none dispatch
-// pattern that was duplicated across GET/POST/PUT/DELETE handlers.
-
-type ProviderHandler = {
-  hindsight?: () => NextResponse;
-  holographic: () => Promise<NextResponse>;
-};
-
-async function dispatchMemoryAction(
-  handler: ProviderHandler,
-  options?: { requireProvider?: boolean },
-): Promise<NextResponse> {
+// ── GET — Read memory status (holographic branch removed) ──────
+// For Hindsight embedded: dormant status (facts managed via agent tools)
+// This endpoint is no longer called by the memory page — kept for API parity.
+export async function GET() {
   const providerType = getMemoryProviderType();
 
-  if (providerType === "hindsight") {
-    if (handler.hindsight) return handler.hindsight();
-    return options?.requireProvider ? NO_PROVIDER_ERROR : noMemoryResponse();
-  }
+  if (providerType === "hindsight") return dormantResponse();
+  if (providerType === "none") return noMemoryResponse();
 
-  if (providerType === "holographic") {
-    return handler.holographic();
-  }
-
-  return options?.requireProvider ? NO_PROVIDER_ERROR : noMemoryResponse();
+  // holographic — no longer reachable via the UI, but keep dormant for API compat
+  return dormantResponse();
 }
 
-const HINDSIGHT_DORMANT_HANDLER = {
-  hindsight: () => dormantResponse() as unknown as NextResponse<ApiResponse<MemoryReadResult>>,
-};
-
-// ── Provider-aware dispatch ────────────────────────────────────
-
-// GET — Read memory facts
-// For Hindsight embedded: shows status only (facts managed via agent tools)
-// For Holographic: reads SQLite directly
-export async function GET() {
-  return dispatchMemoryAction({
-    ...HINDSIGHT_DORMANT_HANDLER,
-    holographic: async () => {
-      try {
-        const result = await withHolographic((p) => p.readFacts());
-        return NextResponse.json<ApiResponse<MemoryReadResult>>({ data: result });
-      } catch (error) {
-        logApiError("GET /api/memory", "holographic read", error);
-        return NextResponse.json<ApiResponse<MemoryReadResult>>(
-          { error: "Could not read holographic memory database" },
-          { status: 500 }
-        );
-      }
-    },
-  });
-}
-
-// POST — Add a new memory fact (holographic only)
+// POST, PUT, DELETE — holographic-only; Hindsight redirects to error
 export async function POST(request: NextRequest) {
   const auth = requireAuth(request);
   if (auth) return auth;
-  return dispatchMemoryAction({
-    hindsight: () => HINDSIGHT_EDIT_ERROR,
-    holographic: async () => {
-      try {
-        const body = await request.json();
-        const { content, category = "general", tags = "", trust_score = 0.7 } = body;
-        if (!content || typeof content !== "string" || content.trim().length === 0) {
-          return NextResponse.json({ error: "Content is required" }, { status: 400 });
-        }
-        const result = await withHolographic((p) =>
-          p.addFact({ content: content.trim(), category, tags, trust_score })
-        );
-        if (!result.success) {
-          return NextResponse.json({ error: result.error || "Failed to add fact" }, { status: 500 });
-        }
-        return NextResponse.json({ data: { success: true, fact: result.fact } });
-      } catch (error) {
-        logApiError("POST /api/memory", "adding fact", error);
-        return NextResponse.json({ error: "Failed to add fact" }, { status: 500 });
-      }
-    },
-  }, { requireProvider: true });
+
+  const providerType = getMemoryProviderType();
+  if (providerType === "hindsight") return HINDSIGHT_EDIT_ERROR;
+  if (providerType === "none") return NO_PROVIDER_ERROR;
+
+  // holographic — orphaned; redirect to error
+  return NextResponse.json({ error: "Holographic memory is no longer supported via the dashboard." }, { status: 410 });
 }
 
-// PUT — Update an existing memory fact (holographic only)
 export async function PUT(request: NextRequest) {
   const auth = requireAuth(request);
   if (auth) return auth;
-  return dispatchMemoryAction({
-    hindsight: () => HINDSIGHT_EDIT_ERROR,
-    holographic: async () => {
-      try {
-        const body = await request.json();
-        const { id, content, category, tags, trust_score } = body;
-        if (!id || typeof id !== "number") {
-          return NextResponse.json({ error: "Valid fact ID is required" }, { status: 400 });
-        }
-        const result = await withHolographic((p) =>
-          p.updateFact({ id, content, category, tags, trust_score })
-        );
-        if (!result.success) {
-          const status = result.error?.includes("not found") ? 404 : 500;
-          return NextResponse.json({ error: result.error }, { status });
-        }
-        return NextResponse.json({ data: { success: true, id: result.id } });
-      } catch (error) {
-        logApiError("PUT /api/memory", "updating fact", error);
-        return NextResponse.json({ error: "Failed to update fact" }, { status: 500 });
-      }
-    },
-  }, { requireProvider: true });
+
+  const providerType = getMemoryProviderType();
+  if (providerType === "hindsight") return HINDSIGHT_EDIT_ERROR;
+  if (providerType === "none") return NO_PROVIDER_ERROR;
+
+  return NextResponse.json({ error: "Holographic memory is no longer supported via the dashboard." }, { status: 410 });
 }
 
-// DELETE — Remove a memory fact (holographic only)
 export async function DELETE(request: NextRequest) {
   const auth = requireAuth(request);
   if (auth) return auth;
-  return dispatchMemoryAction({
-    hindsight: () => HINDSIGHT_DELETE_ERROR,
-    holographic: async () => {
-      try {
-        const { searchParams } = new URL(request.url);
-        const id = parseInt(searchParams.get("id") || "", 10);
-        if (isNaN(id)) {
-          return NextResponse.json({ error: "Valid fact ID is required" }, { status: 400 });
-        }
-        const result = await withHolographic((p) => p.deleteFact(id));
-        if (!result.success) {
-          const status = result.error?.includes("not found")
-            ? 404
-            : result.error?.includes("busy")
-              ? 503
-              : 500;
-          return NextResponse.json({ error: result.error }, { status });
-        }
-        return NextResponse.json({ data: { success: true, id: result.id } });
-      } catch (error) {
-        logApiError("DELETE /api/memory", "deleting fact", error);
-        return NextResponse.json({ error: "Failed to delete fact" }, { status: 500 });
-      }
-    },
-  }, { requireProvider: true });
+
+  const providerType = getMemoryProviderType();
+  if (providerType === "hindsight") {
+    return NextResponse.json(
+      { error: "Hindsight facts are managed through agent tools (hindsight_retain). Dashboard deletion is not supported for Hindsight." },
+      { status: 400 }
+    );
+  }
+  if (providerType === "none") return NO_PROVIDER_ERROR;
+
+  return NextResponse.json({ error: "Holographic memory is no longer supported via the dashboard." }, { status: 410 });
 }
