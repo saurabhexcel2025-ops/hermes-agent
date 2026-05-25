@@ -22,6 +22,7 @@ import {
   resolveHermesVenvPython,
 } from "../hermes-package-path";
 import { spawnAsync, formatProcessError } from "../process-utils";
+import { looksLikeCronExpression } from "../schedule/parse-schedule";
 
 import type {
   CronJobRow,
@@ -375,21 +376,10 @@ function buildPythonScript(
  */
 function normaliseScheduleObj(sched: Record<string, unknown>): Record<string, unknown> {
   const kind = sched?.kind;
-  if (typeof kind === "string" && looksLikeCronExpr(kind)) {
+  if (typeof kind === "string" && looksLikeCronExpression(kind)) {
     return { kind: "cron", expr: kind, ...(sched.display ? { display: sched.display } : {}) };
   }
   return sched;
-}
-
-/**
- * Check if a string looks like a cron expression (5+ space-separated fields).
- * Used to normalise schedules that arrive as {"kind": "* * * * *"} into
- * {"kind": "cron", "expr": "* * * * *"} that the Python scheduler expects.
- */
-function looksLikeCronExpr(s: string): boolean {
-  if (!s || typeof s !== "string") return false;
-  const parts = s.trim().split(/\s+/);
-  return parts.length >= 5 && parts.every((p) => /^[*\-,/0-9]+$/.test(p));
 }
 
 /**

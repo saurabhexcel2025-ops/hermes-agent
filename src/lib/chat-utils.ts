@@ -29,12 +29,16 @@ export function saveSessions(sessions: ChatSession[]): void {
 
 // ── ID generation ───────────────────────────────────────────────
 
+export function generateId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+}
+
 export function generateMessageId(): string {
-  return `msg_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+  return generateId("msg");
 }
 
 export function generateSessionId(): string {
-  return `session_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+  return generateId("session");
 }
 
 // ── Download helpers ────────────────────────────────────────────
