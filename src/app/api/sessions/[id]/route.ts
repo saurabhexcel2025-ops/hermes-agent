@@ -101,7 +101,6 @@ export async function GET(
               : null,
           },
         });
-        hermesDb.close();
         return response;
       }
     } catch (err) {

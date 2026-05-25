@@ -108,10 +108,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const availableLogs: LogFileMeta[] = [];
+    let availableLogs: LogFileMeta[] = [];
     try {
-      const files = listLogFilesInDir(logsDir);
-      availableLogs.push(...files);
+      availableLogs = listLogFilesInDir(logsDir);
     } catch (err) {
       logApiError("GET /api/logs", "listing available logs", err);
     }
