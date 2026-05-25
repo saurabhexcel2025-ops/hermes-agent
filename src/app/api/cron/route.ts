@@ -51,23 +51,6 @@ function cronSyncFailureResponse(
   );
 }
 
-// ── Repeat parsing helper (shared: see normalizeRepeat in lib/cron/write.ts) ──
-
-function parseRepeatBody(
-  repeat: unknown,
-): { times: number | null; completed: number } | undefined {
-  if (typeof repeat === "boolean") {
-    return { times: repeat ? null : 1, completed: 0 };
-  } else if (typeof repeat === "object" && repeat !== null) {
-    const r = repeat as { times?: number | null; completed?: number };
-    return {
-      times: r.times ?? null,
-      completed: r.completed ?? 0,
-    };
-  }
-  return undefined;
-}
-
 // ── Helpers ───────────────────────────────────────────────────
 
 function recordToApiJob(job: CronJobRecord) {
@@ -273,7 +256,7 @@ export async function POST(request: NextRequest) {
     const resolvedProvider = (provider as string | undefined)?.trim() || registryDefault?.provider || "";
 
     // Resolve repeat
-    const repeatObj = parseRepeatBody(repeat);
+    const repeatObj = normalizeRepeat(repeat);
 
     const newJob = createCronJob({
       name: (name as string).trim(),
@@ -420,7 +403,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (updates.repeat !== undefined) {
-      updatePayload.repeat = parseRepeatBody(updates.repeat);
+      updatePayload.repeat = normalizeRepeat(updates.repeat);
     }
 
     const updated = updateCronJob(id, updatePayload);

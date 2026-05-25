@@ -88,18 +88,6 @@ export function useCronJobs() {
     loadJobs();
   }, [showToast, loadJobs]);
 
-  const handleSync = useCallback(async () => {
-    const { ok, error } = await safeApiCall("/api/cron", {
-      method: "POST",
-      body: { action: "sync" },
-    });
-    showToast(
-      ok ? "Sync complete" : (error ?? "Sync failed"),
-      ok ? undefined : "error",
-    );
-    loadJobs();
-  }, [showToast, loadJobs]);
-
   return {
     data,
     loading,
@@ -108,6 +96,5 @@ export function useCronJobs() {
     handleDelete,
     handleRun,
     handlePauseAll,
-    handleSync,
   };
 }
