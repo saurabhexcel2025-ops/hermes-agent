@@ -24,7 +24,10 @@ export interface LogGetData {
   availableLogs: LogFileMeta[];
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
+
   try {
     const { searchParams } = new URL(request.url);
     const parsedLines = parseInt(searchParams.get("lines") || "200", 10);

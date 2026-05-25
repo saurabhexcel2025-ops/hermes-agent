@@ -321,7 +321,6 @@ export default function Dashboard() {
         processesRes,
         missionsRes,
         defaultsRes,
-        modelsRes,
       ] = await Promise.all([
           fetch("/api/status", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/config", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
@@ -331,22 +330,11 @@ export default function Dashboard() {
           fetch("/api/agents", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/missions", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/models/defaults", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
-          fetch("/api/models", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
         ]);
 
       if (!signal.aborted) {
         const agentDefaultId = defaultsRes.data?.defaults?.agent as string | undefined;
-        const models = (modelsRes.data?.models ?? []) as Array<{
-          id: string;
-          name: string;
-          modelId: string;
-        }>;
-        const match = agentDefaultId
-          ? models.find((m) => m.id === agentDefaultId)
-          : undefined;
-        setRegistryAgentModelLabel(
-          match ? `${match.name} (${match.modelId})` : agentDefaultId ?? null,
-        );
+        setRegistryAgentModelLabel(agentDefaultId ?? null);
         setData({
           status: statusRes.data,
           config: configRes.data,
