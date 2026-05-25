@@ -51,15 +51,11 @@ async function withHolographic<T>(
 
 // ── Provider-aware dispatch ────────────────────────────────────
 
-function checkProvider() {
-  return getMemoryProviderType();
-}
-
 // GET — Read memory facts
 // For Hindsight embedded: shows status only (facts managed via agent tools)
 // For Holographic: reads SQLite directly
 export async function GET() {
-  const providerType = checkProvider();
+  const providerType = getMemoryProviderType();
 
   if (providerType === "hindsight") {
     return dormantResponse();
@@ -83,7 +79,7 @@ export async function GET() {
 
 // POST — Add a new memory fact (holographic only)
 export async function POST(request: NextRequest) {
-  const providerType = checkProvider();
+  const providerType = getMemoryProviderType();
 
   if (providerType === "hindsight") {
     return HINDSIGHT_ERROR("editing");
@@ -118,7 +114,7 @@ export async function POST(request: NextRequest) {
 
 // PUT — Update an existing memory fact (holographic only)
 export async function PUT(request: NextRequest) {
-  const providerType = checkProvider();
+  const providerType = getMemoryProviderType();
 
   if (providerType === "hindsight") {
     return HINDSIGHT_ERROR("editing");
@@ -154,7 +150,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE — Remove a memory fact (holographic only)
 export async function DELETE(request: NextRequest) {
-  const providerType = checkProvider();
+  const providerType = getMemoryProviderType();
 
   if (providerType === "hindsight") {
     return HINDSIGHT_ERROR("deletion");

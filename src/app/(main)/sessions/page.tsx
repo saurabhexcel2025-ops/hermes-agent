@@ -28,6 +28,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import { SearchInput } from "@/components/ui/Input";
 import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import Badge from "@/components/ui/Badge";
+import Pagination from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
 import { timeAgo } from "@/lib/utils";
 import AppPageShell from "@/components/layout/AppPageShell";
@@ -273,33 +274,14 @@ export default function SessionsPage() {
               ))}
             </div>
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-white/10">
-                <button
-                  onClick={() => {
-                    const newPage = Math.max(0, page - 1);
-                    setPage(newPage);
-                    void loadSessions(newPage * PAGE_SIZE);
-                  }}
-                  disabled={page === 0}
-                  className="text-xs font-mono px-3 py-1.5 rounded bg-white/5 text-white/40 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-xs text-white/30 font-mono">
-                  Page {page + 1} of {totalPages}
-                </span>
-                <button
-                  onClick={() => {
-                    const newPage = Math.min(totalPages - 1, page + 1);
-                    setPage(newPage);
-                    void loadSessions(newPage * PAGE_SIZE);
-                  }}
-                  disabled={page >= totalPages - 1}
-                  className="text-xs font-mono px-3 py-1.5 rounded bg-white/5 text-white/40 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={(newPage) => {
+                  setPage(newPage);
+                  void loadSessions(newPage * PAGE_SIZE);
+                }}
+              />
             )}
           </>
         )}

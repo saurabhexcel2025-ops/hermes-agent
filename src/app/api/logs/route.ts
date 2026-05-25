@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
-import { relative, resolve } from "path";
+import { resolve } from "path";
 
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import {
   categorizeLogFileGroup,
   compareLogFileNames,
+  logFileUnderLogsDir,
   sanitizeLogBasename,
 } from "@/lib/log-files";
 import { requireAuth } from "@/lib/api-auth";
 import { ApiResponse } from "@/types/hermes";
 import type { LogFileMeta } from "@/lib/log-files";
-
-function logFileUnderLogsDir(logsDir: string, logPath: string): boolean {
-  const R = resolve(logsDir);
-  const C = resolve(logPath);
-  if (C === R) return false;
-  const rel = relative(R, C);
-  return rel !== "" && !rel.startsWith("..") && !rel.includes("..");
-}
 
 export interface LogGetData {
   name: string;
