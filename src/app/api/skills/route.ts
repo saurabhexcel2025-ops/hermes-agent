@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         lastModified = st.mtime.toISOString();
       }
       catch {
-        // use db metadata
+        // statSync not essential — fall back to DB metadata if file unavailable
       }
       const category = row.category || row.skillKey.split("/")[0] || "uncategorized";
       return {
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
         });
       }
       catch {
-        // skip
+        // disk-only skill file may have been removed since scan; skip silently
       }
     }
 
