@@ -332,20 +332,21 @@ export default function ConfigSectionPage() {
               <div className="space-y-2">
                 {fileContent.split("\n").map((line, i) => {
                   const trimmed = line.trim();
+                  const lineKey = `env-${i}-${line.slice(0, 24).replace(/[^a-zA-Z0-9]/g, "-")}`;
                   if (!trimmed || trimmed.startsWith("#")) {
                     return (
-                      <div key={i} className="text-xs text-white/30 font-mono">
+                      <div key={lineKey} className="text-xs text-white/30 font-mono">
                         {line || "\u00A0"}
                       </div>
                     );
                   }
                   const eqIdx = line.indexOf("=");
-                  if (eqIdx < 0) return <div key={i} className="text-xs font-mono text-white/50">{line}</div>;
+                  if (eqIdx < 0) return <div key={lineKey} className="text-xs font-mono text-white/50">{line}</div>;
                   const key = line.slice(0, eqIdx).trim();
                   const val = line.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
                   const masked = val.length > 8 ? val.slice(0, 4) + "..." + val.slice(-4) : "****";
                   return (
-                    <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                    <div key={lineKey} className="flex items-center gap-2 text-xs font-mono">
                       <span className="text-neon-cyan w-48 flex-shrink-0 truncate">{key}</span>
                       <span className="text-white/50">=</span>
                       <span className="text-white/30">{masked}</span>
