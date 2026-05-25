@@ -35,6 +35,7 @@ import {
 
 import {
   parseScheduleToJson,
+  normalizeRepeat,
 } from "@/lib/cron/write";
 
 import { getDefaultModel } from "@/lib/models-repository";
@@ -50,7 +51,7 @@ function cronSyncFailureResponse(
   );
 }
 
-// ── Repeat parsing helper ──────────────────────────────────────
+// ── Repeat parsing helper (shared: see normalizeRepeat in lib/cron/write.ts) ──
 
 function parseRepeatBody(
   repeat: unknown,

@@ -10,7 +10,6 @@
 //
 // Hermes venv: $HERMES_HOME/hermes-agent/venv/bin/python3 (see hermes-package-path.ts)
 
-import { spawn } from "child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -22,6 +21,7 @@ import {
   resolveHermesAgentPackage,
   resolveHermesVenvPython,
 } from "../hermes-package-path";
+import { spawnAsync, formatProcessError } from "../process-utils";
 
 import type {
   CronJobRow,
@@ -33,52 +33,8 @@ import { getCronJob, getCronJobByHermesId, listCronJobs } from "./read";
 import { updateCronJob } from "./write";
 
 /**
- * Run an executable with args, optional stdin input, and return { stdout, stderr }.
- * Async wrapper around child_process.spawn. Does NOT go through a shell.
- * Compatible with Turbopack/Next.js bundling (no child_process/promises).
+ * Resolve Hermes cron runtime paths (agent package + Python binary).
  */
-function spawnAsync(
-  cmd: string,
-  args: string[],
-  opts: { input?: string; encoding?: string; timeout?: number; killSignal?: NodeJS.Signals } = {}
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    child.stdout!.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
-    child.stderr!.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-
-    if (opts.timeout && opts.timeout > 0) {
-      timer = setTimeout(() => {
-        child.kill((opts.killSignal || "SIGTERM") as NodeJS.Signals);
-      }, opts.timeout);
-    }
-
-    child.on("close", (code) => {
-      if (timer) clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(stderr || stdout || `exit code ${code}`));
-      } else {
-        resolve({ stdout, stderr });
-      }
-    });
-    child.on("error", (err) => {
-      if (timer) clearTimeout(timer);
-      reject(err);
-    });
-
-    if (opts.input) {
-      child.stdin!.write(opts.input);
-      child.stdin!.end();
-    } else {
-      child.stdin!.end();
-    }
-  });
-}
-
 function resolveHermesCronRuntime(hermesHome: string): {
   ok: true;
   hermesAgentPath: string;
@@ -501,8 +457,7 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
     return { ok: true };
   } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const e = err as { stderr?: string; stdout?: string; message?: string };
-    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    const message = formatProcessError(err);
     logApiError("syncAllJobsToHermes", "python write_all", new Error(String(message).slice(0, 500)));
     return { ok: false, error: String(message).slice(0, 500) };
   }
@@ -560,8 +515,7 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
     return { ok: true };
   } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const e = err as { stderr?: string; stdout?: string; message?: string };
-    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    const message = formatProcessError(err);
     return { ok: false, error: String(message).slice(0, 500) };
   }
 }

@@ -23,6 +23,22 @@ export function parseScheduleToJson(
   };
 }
 
+/** Normalize a raw repeat value (boolean or object) to canonical shape. */
+export function normalizeRepeat(
+  repeat: unknown,
+): { times: number | null; completed: number } | undefined {
+  if (typeof repeat === "boolean") {
+    return { times: repeat ? null : 1, completed: 0 };
+  } else if (typeof repeat === "object" && repeat !== null) {
+    const r = repeat as { times?: number | null; completed?: number };
+    return {
+      times: r.times ?? null,
+      completed: r.completed ?? 0,
+    };
+  }
+  return undefined;
+}
+
 /** Serialize repeat for SQLite storage (exported for tests). */
 export function parseRepeatJson(
   repeat?: { times: number | null; completed?: number }
