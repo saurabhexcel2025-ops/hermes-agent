@@ -165,13 +165,8 @@ export default function SessionsPage() {
   // it only produces a new reference when the API response changes.
   const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
 
-  const sources = useMemo(() => {
-    const srcs = new Set<SessionSource>();
-    for (const s of sessions) {
-      srcs.add(s.source);
-    }
-    return Array.from(srcs).sort() as SessionSource[];
-  }, [sessions]);
+  // All known session source types — always show filter buttons regardless of current page contents
+  const sources = Object.keys(SOURCE_META) as SessionSource[];
 
   const filteredSessions = useMemo(() => {
     if (!search) return sessions;
@@ -206,7 +201,7 @@ export default function SessionsPage() {
               accentColor="orange"
             />
           </div>
-          {sources.length > 1 && (
+          {sources.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-4 h-4 text-white/30 flex-shrink-0" />
               <button
