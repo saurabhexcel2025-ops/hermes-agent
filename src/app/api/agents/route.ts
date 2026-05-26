@@ -7,6 +7,7 @@
 
 import { NextResponse } from "next/server";
 
+import { db } from "@/lib/db";
 import { ensureSyncLayer } from "@/lib/sync";
 import { logApiError } from "@/lib/api-logger";
 import type { HermesProcess } from "@/types/hermes";
@@ -15,8 +16,6 @@ export async function GET() {
   try {
     // Ensure sync layer is active so process data is fresh
     ensureSyncLayer();
-
-    const { db } = await import("@/lib/db");
 
     // Read from the agent_processes table
     const rows = db()

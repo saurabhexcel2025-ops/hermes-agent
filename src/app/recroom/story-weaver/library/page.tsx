@@ -7,12 +7,7 @@ import { BookOpen, Sparkles, Clock, CheckCircle2, Loader2, BookMarked, Trash2 } 
 import AppPageShell from "@/components/layout/AppPageShell";
 import PageHeader from "@/components/layout/PageHeader";
 import { timeAgo } from "@/lib/utils";
-
-interface StorySummary {
-  id: string; title: string; premise?: string; status?: string;
-  chapters?: { number: number; title: string; status: string; wordCount: number }[];
-  config?: { genre?: string }; createdAt?: string; updatedAt?: string;
-}
+import type { StorySummary } from "@/types/recroom";
 
 export default function LibraryPage() {
   const router = useRouter();

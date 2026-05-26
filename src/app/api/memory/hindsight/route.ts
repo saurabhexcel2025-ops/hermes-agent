@@ -11,6 +11,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
 import type { ApiResponse } from "@/types/hermes";
 
+// ── Tags normalization ───────────────────────────────────────
+
+function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(
+    tags
+      .filter((t): t is string => typeof t === "string" && t.trim() !== "")
+      .map(t => t.trim().toLowerCase())
+  )];
+}
+
 // ── Constants ────────────────────────────────────────────────
 
 const HINDSIGHT_BASE_URL = "http://localhost:9177";
@@ -39,7 +50,6 @@ async function requestWithTimeout<T = Record<string, unknown>>(
   }
   try {
     const res = await fetch(url, init);
-    clearTimeout(timer);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Hindsight ${method} ${path}: ${res.status} ${text}`);
@@ -201,9 +211,7 @@ async function handleUpdateDirective(
   if (updates.content !== undefined) body.content = updates.content;
   if (updates.priority !== undefined) body.priority = updates.priority;
   if (updates.is_active !== undefined) body.is_active = String(updates.is_active) === "true";
-  if (updates.tags !== undefined) {
-    body.tags = Array.isArray(updates.tags) ? updates.tags : String(updates.tags).split(",");
-  }
+  if (updates.tags !== undefined) body.tags = normalizeTags(updates.tags);
   const result = await apiPatch(`/v1/default/banks/${bank}/directives/${id}`, body);
   return { success: true, directive: result };
 }
@@ -253,23 +261,15 @@ async function handleUpdateMentalModel(
   const body: Record<string, unknown> = {};
   if (updates.name !== undefined) body.name = updates.name;
   if (updates.query !== undefined) body.source_query = updates.query;
-  if (updates.tags !== undefined) {
-    body.tags = Array.isArray(updates.tags) ? updates.tags : String(updates.tags).split(",");
-  }
+  if (updates.tags !== undefined) body.tags = normalizeTags(updates.tags);
   const result = await apiPatch(`/v1/default/banks/${bank}/mental-models/${id}`, body);
   return { success: true, model: result };
 }
 
 async function handleHealth() {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`http://127.0.0.1:9177/health`, { signal: controller.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      return { available: true, mode: "external", status: "healthy" };
-    }
-    return { available: false, error: "Hindsight server not responding" };
+    const result = await apiGet<{ ok?: boolean; status?: string }>("/health", 3000);
+    return { available: true, mode: "external", status: result.status ?? "healthy" };
   } catch (e) {
     return {
       available: false,
@@ -309,31 +309,31 @@ export async function GET(request: NextRequest) {
 
     switch (action) {
       case "list":
-        result = (await handleList(bank, query, limit)) as unknown as Record<string, unknown>;
+        result = await handleList(bank, query, limit);
         break;
       case "recall":
         if (!query) {
           return NextResponse.json({ error: "query is required for recall" }, { status: 400 });
         }
-        result = (await handleRecall(bank, query)) as unknown as Record<string, unknown>;
+        result = await handleRecall(bank, query);
         break;
       case "reflect":
         if (!query) {
           return NextResponse.json({ error: "query is required for reflect" }, { status: 400 });
         }
-        result = (await handleReflect(bank, query, budget)) as unknown as Record<string, unknown>;
+        result = await handleReflect(bank, query, budget);
         break;
       case "directives":
-        result = (await handleDirectives(bank)) as unknown as Record<string, unknown>;
+        result = await handleDirectives(bank);
         break;
       case "mental-models":
-        result = (await handleMentalModels(bank)) as unknown as Record<string, unknown>;
+        result = await handleMentalModels(bank);
         break;
       case "health":
-        result = (await handleHealth()) as unknown as Record<string, unknown>;
+        result = await handleHealth();
         break;
       case "count":
-        result = (await handleCount(bank)) as unknown as Record<string, unknown>;
+        result = await handleCount(bank);
         break;
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
@@ -376,7 +376,7 @@ export async function POST(request: NextRequest) {
         if (!content || typeof content !== "string" || content.trim().length === 0) {
           return NextResponse.json({ error: "Content is required" }, { status: 400 });
         }
-        result = (await handleRetain(bank, content.trim(), tags)) as unknown as Record<string, unknown>;
+        result = await handleRetain(bank, content.trim(), tags);
         break;
       }
       case "create-directive": {
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
         if (!name || !dirContent) {
           return NextResponse.json({ error: "name and content are required" }, { status: 400 });
         }
-        result = (await handleCreateDirective(bank, name, dirContent, priority, tags)) as unknown as Record<string, unknown>;
+        result = await handleCreateDirective(bank, name, dirContent, priority, tags);
         break;
       }
       case "create-model": {
@@ -392,7 +392,7 @@ export async function POST(request: NextRequest) {
         if (!name || !mQuery) {
           return NextResponse.json({ error: "name and query are required" }, { status: 400 });
         }
-        result = (await handleCreateMentalModel(bank, name, mQuery, tags)) as unknown as Record<string, unknown>;
+        result = await handleCreateMentalModel(bank, name, mQuery, tags);
         break;
       }
       case "update-directive": {
@@ -400,7 +400,7 @@ export async function POST(request: NextRequest) {
         if (!id) {
           return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
-        result = (await handleUpdateDirective(bank, id, { name, content: uContent, priority, is_active, tags })) as unknown as Record<string, unknown>;
+        result = await handleUpdateDirective(bank, id, { name, content: uContent, priority, is_active, tags });
         break;
       }
       case "update-model": {
@@ -408,7 +408,7 @@ export async function POST(request: NextRequest) {
         if (!id) {
           return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
-        result = (await handleUpdateMentalModel(bank, id, { name, query: umQuery, tags })) as unknown as Record<string, unknown>;
+        result = await handleUpdateMentalModel(bank, id, { name, query: umQuery, tags });
         break;
       }
       case "refresh-model": {
@@ -416,7 +416,7 @@ export async function POST(request: NextRequest) {
         if (!id) {
           return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
-        result = (await handleRefreshMentalModel(bank, id)) as unknown as Record<string, unknown>;
+        result = await handleRefreshMentalModel(bank, id);
         break;
       }
       default:
@@ -445,9 +445,9 @@ export async function DELETE(request: NextRequest) {
 
     let result: Record<string, unknown>;
     if (type === "directive") {
-      result = (await handleDeleteDirective(bank, id)) as unknown as Record<string, unknown>;
+      result = await handleDeleteDirective(bank, id);
     } else {
-      result = (await handleDeleteMentalModel(bank, id)) as unknown as Record<string, unknown>;
+      result = await handleDeleteMentalModel(bank, id);
     }
 
     return NextResponse.json<ApiResponse<Record<string, unknown>>>({ data: result });

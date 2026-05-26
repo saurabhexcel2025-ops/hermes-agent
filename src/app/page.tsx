@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, memo as reactMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, memo as reactMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -102,7 +102,7 @@ const CRON_BADGE_STYLES: Record<string, StatusBadgeDef> = {
 
 function MissionStatusBadge({ status }: { status: string }) {
   const def = MISSION_BADGE_STYLES[status] || MISSION_BADGE_STYLES.queued;
-  return <StatusBadge def={{ ...def, label: status.charAt(0).toUpperCase() + status.slice(1) }} />;
+  return <StatusBadge def={{ ...def, label: titleCase(status) }} />;
 }
 
 function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }) {
@@ -111,11 +111,22 @@ function CronStatusBadge({ state, enabled }: { state: string; enabled: boolean }
       <StatusBadge def={{ bg: "bg-white/5", text: "text-white/40", icon: <Pause className="w-2.5 h-2.5" />, label: "Paused" }} />
     );
   }
-  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: state.charAt(0).toUpperCase() + state.slice(1) };
+  const def = CRON_BADGE_STYLES[state] || { bg: "bg-white/5", text: "text-white/40", icon: null, label: titleCase(state) };
   return <StatusBadge def={def} />;
 }
 
 // ── Compact Stat Pill ─────────────────────────────────────────
+const STAT_COLOR_CLASSES: Record<AccentColor, string> = {
+  cyan: "border-neon-cyan/20 text-neon-cyan",
+  purple: "border-neon-purple/20 text-neon-purple",
+  green: "border-neon-green/20 text-neon-green",
+  pink: "border-neon-pink/20 text-neon-pink",
+  orange: "border-neon-orange/20 text-neon-orange",
+  red: "border-red-500/20 text-red-400",
+  blue: "border-blue-500/20 text-blue-400",
+  yellow: "border-yellow-500/20 text-yellow-400",
+};
+
 function StatPill({
   icon: Icon,
   label,
@@ -141,17 +152,6 @@ function StatPill({
 // ── Template Category Constants (module-level — don't re-create on every render) ──
 
 const DEFAULT_PLATFORMS = ["discord", "telegram", "slack", "whatsapp"] as const;
-
-const STAT_COLOR_CLASSES: Record<AccentColor, string> = {
-  cyan: "border-neon-cyan/20 text-neon-cyan",
-  purple: "border-neon-purple/20 text-neon-purple",
-  green: "border-neon-green/20 text-neon-green",
-  pink: "border-neon-pink/20 text-neon-pink",
-  orange: "border-neon-orange/20 text-neon-orange",
-  red: "border-red-500/20 text-red-400",
-  blue: "border-blue-500/20 text-blue-400",
-  yellow: "border-yellow-500/20 text-yellow-400",
-};
 
 
 export default function Dashboard() {
@@ -231,13 +231,24 @@ export default function Dashboard() {
   }, [monitor, errorSev]);
 
   // Cancel a mission from the dashboard
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup cancel-confirm timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+    };
+  }, []);
+
   const handleCancelMission = useCallback(async (missionId: string, missionName: string) => {
     // First click: show confirmation state
     if (cancelConfirmId !== missionId) {
       setCancelConfirmId(missionId);
-      setTimeout(() => setCancelConfirmId((prev) => prev === missionId ? null : prev), 4000);
+      if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+      cancelTimerRef.current = setTimeout(() => setCancelConfirmId((prev) => prev === missionId ? null : prev), 4000);
       return;
     }
+    if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
     setCancelConfirmId(null);
     try {
       const res = await fetch("/api/missions", {
@@ -268,24 +279,6 @@ export default function Dashboard() {
         ? parsed.display
         : newSchedule;
 
-    setDataFields((prev) => {
-      if (!prev.monitor?.cron.jobs) return prev;
-      return {
-        ...prev,
-        monitor: {
-          ...prev.monitor,
-          cron: {
-            ...prev.monitor.cron,
-            jobs: prev.monitor.cron.jobs.map((job) =>
-              job.id === jobId
-                ? { ...job, schedule: scheduleDisplay }
-                : job,
-            ),
-          },
-        },
-      };
-    });
-
     try {
       const putRes = await fetch("/api/cron", {
         method: "PUT",
@@ -297,11 +290,28 @@ export default function Dashboard() {
         showToast(body?.error || "Failed to update cron schedule", "error");
         return;
       }
+      // Optimistic local update (will be reconciled by refreshMonitor)
+      setDataFields((prev) => {
+        if (!prev.monitor?.cron.jobs) return prev;
+        return {
+          ...prev,
+          monitor: {
+            ...prev.monitor,
+            cron: {
+              ...prev.monitor.cron,
+              jobs: prev.monitor.cron.jobs.map((job) =>
+                job.id === jobId
+                  ? { ...job, schedule: scheduleDisplay }
+                  : job,
+              ),
+            },
+          },
+        };
+      });
       showToast("Schedule updated", "success");
     } catch {
       showToast("Failed to update cron schedule", "error");
     } finally {
-      // Refresh monitor to reconcile optimistic update with actual state
       await refreshMonitor();
     }
   }, [showToast, setDataFields, refreshMonitor]);
@@ -321,7 +331,6 @@ export default function Dashboard() {
         processesRes,
         missionsRes,
         defaultsRes,
-        modelsRes,
       ] = await Promise.all([
           fetch("/api/status", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/config", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
@@ -331,22 +340,11 @@ export default function Dashboard() {
           fetch("/api/agents", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/missions", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
           fetch("/api/models/defaults", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
-          fetch("/api/models", { signal }).then((r) => r.json()).catch(() => ({ data: null })),
         ]);
 
       if (!signal.aborted) {
         const agentDefaultId = defaultsRes.data?.defaults?.agent as string | undefined;
-        const models = (modelsRes.data?.models ?? []) as Array<{
-          id: string;
-          name: string;
-          modelId: string;
-        }>;
-        const match = agentDefaultId
-          ? models.find((m) => m.id === agentDefaultId)
-          : undefined;
-        setRegistryAgentModelLabel(
-          match ? `${match.name} (${match.modelId})` : agentDefaultId ?? null,
-        );
+        setRegistryAgentModelLabel(agentDefaultId ?? null);
         setData({
           status: statusRes.data,
           config: configRes.data,
@@ -365,7 +363,7 @@ export default function Dashboard() {
     interface PollConfig {
       url: string;
       ms: number;
-      extract: (d: { data?: unknown }) => Record<string, unknown> | null;
+      extract: (d: { data?: unknown }) => Partial<typeof data> | null;
       init?: RequestInit;
     }
 
@@ -375,7 +373,7 @@ export default function Dashboard() {
         ms: 10000,
         extract: (d) => {
           if (!d?.data) return null;
-          return { monitor: d.data as unknown as MonitorData } as unknown as Record<string, unknown>;
+          return { monitor: d.data as MonitorData };
         },
       },
       {
@@ -383,7 +381,7 @@ export default function Dashboard() {
         ms: 15000,
         extract: (d) => {
           if (!d?.data) return null;
-          return { processes: (d.data as unknown as { processes?: HermesProcess[] }).processes || [] };
+          return { processes: (d.data as { processes?: HermesProcess[] }).processes ?? [] };
         },
       },
       {
@@ -391,7 +389,7 @@ export default function Dashboard() {
         ms: 15000,
         extract: (d) => {
           if (!d?.data) return null;
-          return { missions: (d.data as unknown as { missions?: MissionBrief[] }).missions || [] };
+          return { missions: (d.data as { missions?: MissionBrief[] }).missions ?? [] };
         },
       },
     ];
@@ -433,8 +431,8 @@ export default function Dashboard() {
     [missions],
   );
 
-  // Snapshot current time for render — capture once on mount
-  const [now] = useState(() => Date.now());
+  // Timestamp for cron scheduling comparisons — computed fresh per render
+  const now = new Date().getTime();
 
   // Group templates by category for the dispatch section
   const templateGroups = useMemo(
@@ -447,9 +445,10 @@ export default function Dashboard() {
   );
 
   const collapsedTemplateStrip = useMemo(() => {
-    if (templates.length <= 8) return templates;
+    if (templates.length <= 12) return templates;
+    // Custom templates first (true > false), then alphabetical by name
     const sorted = [...templates].sort((a, b) => {
-      if (a.isCustom !== b.isCustom) return a.isCustom ? 1 : -1;
+      if (a.isCustom !== b.isCustom) return a.isCustom ? -1 : 1;
       return (a.name || "").localeCompare(b.name || "");
     });
     return sorted.slice(0, 12);
@@ -860,8 +859,8 @@ export default function Dashboard() {
                   <div className="text-xs text-neon-green">No recent errors</div>
                 </div>
               )}
-              {filteredErrors.map((err, i) => (
-                <div key={i} className="px-4 py-2 border-b border-white/5 last:border-0">
+              {filteredErrors.map((err, idx) => (
+                <div key={`${err.source}-${err.timestamp}-${err.message.slice(0, 40)}-${idx}`} className="px-4 py-2 border-b border-white/5 last:border-0">
                   <div className="text-[10px] text-red-400/80 font-mono truncate">{err.message}</div>
                   <div className="text-[10px] text-white/20 font-mono mt-0.5">
                     {err.source} {err.timestamp && `· ${err.timestamp}`}

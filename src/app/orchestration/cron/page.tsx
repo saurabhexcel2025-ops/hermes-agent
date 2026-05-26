@@ -293,46 +293,72 @@ export default function CronPage() {
       />
 
       <div className="px-6 py-6">
-        {activeTab === "agent" ? (
-          <CronTabContent
-            isAgent
-            jobs={agent.data?.jobs ?? []}
-            loading={agent.loading}
-            accentColor="orange"
-            icon={Clock}
-            title="No cron jobs"
-            desc="Create your first scheduled job"
-            searchPlaceholder="Search agent jobs..."
-            createLabel="Create Agent Job"
-            onCreate={() => setShowCreate(true)}
-            onToggle={(id) => agent.handleToggle(id)}
-            onDelete={(id) => agent.handleDelete(id)}
-            onRun={(id) => agent.handleRun(id)}
-            onEditAgent={(job) => {
-              setEditingJob(job);
-              setShowCreate(true);
-            }}
-          />
-        ) : (
-          <CronTabContent
-            isAgent={false}
-            jobs={hardware.jobs}
-            loading={hardware.loading}
-            accentColor="cyan"
-            icon={Cpu}
-            title="No system cron jobs"
-            desc="Add a real system cron job"
-            searchPlaceholder="Search system jobs..."
-            createLabel="Create System Job"
-            onCreate={() => setShowHardwareCreate(true)}
-            onToggle={(id) => hardware.handleToggle(id)}
-            onDelete={(id) => hardware.handleDelete(id)}
-            onEditSystem={(job) => {
-              setEditingHardwareJob(job);
-              setShowHardwareCreate(true);
-            }}
-          />
-        )}
+        {(() => {
+          const tabConfig = activeTab === "agent"
+            ? {
+                isAgent: true as const,
+                jobs: agent.data?.jobs ?? [],
+                loading: agent.loading,
+                accentColor: "orange" as const,
+                icon: Clock,
+                title: "No cron jobs",
+                desc: "Create your first scheduled job",
+                searchPlaceholder: "Search agent jobs...",
+                createLabel: "Create Agent Job",
+                onCreate: () => setShowCreate(true),
+                onToggle: (id: string) => agent.handleToggle(id),
+                onDelete: (id: string) => agent.handleDelete(id),
+                onRun: (id: string) => agent.handleRun(id),
+                onEdit: (job: CronJob) => {
+                  setEditingJob(job);
+                  setShowCreate(true);
+                },
+              }
+            : {
+                isAgent: false as const,
+                jobs: hardware.jobs,
+                loading: hardware.loading,
+                accentColor: "cyan" as const,
+                icon: Cpu,
+                title: "No system cron jobs",
+                desc: "Add a real system cron job",
+                searchPlaceholder: "Search system jobs...",
+                createLabel: "Create System Job",
+                onCreate: () => setShowHardwareCreate(true),
+                onToggle: (id: string) => hardware.handleToggle(id),
+                onDelete: (id: string) => hardware.handleDelete(id),
+                onRun: undefined,
+                onEdit: (job: CronJob | SystemCronJob) => {
+                  if ("command" in job) {
+                    setEditingHardwareJob(job);
+                    setShowHardwareCreate(true);
+                  } else {
+                    setEditingJob(job);
+                    setShowCreate(true);
+                  }
+                },
+              };
+
+          return (
+            <CronTabContent
+              isAgent={tabConfig.isAgent}
+              jobs={tabConfig.jobs}
+              loading={tabConfig.loading}
+              accentColor={tabConfig.accentColor}
+              icon={tabConfig.icon}
+              title={tabConfig.title}
+              desc={tabConfig.desc}
+              searchPlaceholder={tabConfig.searchPlaceholder}
+              createLabel={tabConfig.createLabel}
+              onCreate={tabConfig.onCreate}
+              onToggle={tabConfig.onToggle}
+              onDelete={tabConfig.onDelete}
+              onRun={tabConfig.onRun}
+              onEditAgent={tabConfig.isAgent ? tabConfig.onEdit : undefined}
+              onEditSystem={!tabConfig.isAgent ? tabConfig.onEdit : undefined}
+            />
+          );
+        })()}
       </div>
 
       {/* ── Agent Job Modal (create + edit) ── */}

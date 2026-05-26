@@ -79,7 +79,9 @@ function LogRow({
   searchTerm: string;
 }) {
   const p = parseLogLine(line);
-  const isMatch = !!searchTerm && line.toLowerCase().includes(searchTerm.toLowerCase());
+  // filteredLines in the parent already pre-filters by search term,
+  // so every rendered LogRow is already a match when search is active.
+  const isMatch = !!searchTerm;
   return (
     <div
       className={`grid grid-cols-1 sm:grid-cols-[minmax(0,9.5rem)_minmax(0,4.5rem)_1fr] gap-x-3 gap-y-0.5 items-baseline text-xs font-mono py-1.5 border-b border-white/[0.06] ${
@@ -439,7 +441,7 @@ export default function LogsPage() {
                   </p>
                 </div>
               </div>
-            ) : (
+            ) : data ? (
               <div
                 ref={terminalRef}
                 onScroll={handleScroll}
@@ -453,11 +455,9 @@ export default function LogsPage() {
                   </div>
                   <span className="text-xs text-white/40 font-mono ml-2 truncate">
                     {activeLog}.log
-                    {data && (
-                      <span className="text-white/20 ml-2">
-                        (showing {data.showingLines}/{data.totalLines})
-                      </span>
-                    )}
+                    <span className="text-white/20 ml-2">
+                      (showing {data.showingLines}/{data.totalLines})
+                    </span>
                   </span>
                 </div>
 
@@ -471,7 +471,7 @@ export default function LogsPage() {
                   {filteredLines.length > 0 ? (
                     filteredLines.map((line, i) => (
                       <LogRow
-                        key={`${i}-${line.slice(0, 48)}`}
+                        key={`${data.name}-${i}`}
                         line={line}
                         searchTerm={search}
                       />
@@ -483,7 +483,7 @@ export default function LogsPage() {
                   )}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

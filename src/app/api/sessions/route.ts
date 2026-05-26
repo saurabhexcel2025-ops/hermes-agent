@@ -17,26 +17,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
 import {
+  listSessions,
+  getSession,
   createSession,
   updateSession,
-  getSession,
-  listSessions,
   type AgentType,
   type SessionSource,
   type SessionStatus,
 } from "@/lib/session-repository";
 import { ensureSyncLayer } from "@/lib/sync";
 
+// ── Type constants ──────────────────────────────────────────────
+
+const ALL_AGENT_TYPES = ["hermes"] as const;
+const ALL_SOURCES = ["cli", "cron", "mission", "api"] as const;
+
 // ── Debounced sync: fires at most once per 30s ───────────────
-// Uses a module-level Promise chain instead of a mutable timestamp.
-// This avoids the mutable state anti-pattern while preserving the
-// debounce semantics for concurrent requests.
+// Uses a module-level Promise to track whether a sync window is
+// active. ensureSyncLayer() is called OUTSIDE the Promise so it
+// fires immediately on the first call; subsequent calls within
+// 30s are no-ops until the window expires.
 let pendingSync: Promise<void> | null = null;
 
 function triggerSyncOnce(): void {
   if (pendingSync) return;
+  // Call OUTSIDE the Promise so it runs immediately, not after 30s delay.
+  ensureSyncLayer();
   pendingSync = new Promise<void>((resolve) => {
-    ensureSyncLayer();
     setTimeout(() => {
       pendingSync = null;
       resolve();
@@ -58,10 +65,14 @@ function parseQuery(
   const id = u.searchParams.get("id") ?? undefined;
   const rawAgentType = u.searchParams.get("agentType");
   const agentType: AgentType | undefined =
-    rawAgentType && ["hermes"].includes(rawAgentType) ? rawAgentType as AgentType : undefined;
+    rawAgentType && (ALL_AGENT_TYPES as readonly string[]).includes(rawAgentType)
+      ? rawAgentType as AgentType
+      : undefined;
   const rawSource = u.searchParams.get("source");
   const source: SessionSource | undefined =
-    rawSource && ["cli", "cron", "mission", "api"].includes(rawSource) ? rawSource as SessionSource : undefined;
+    rawSource && (ALL_SOURCES as readonly string[]).includes(rawSource)
+      ? rawSource as SessionSource
+      : undefined;
   const missionIdParam = u.searchParams.get("missionId");
   const missionId: string | null | undefined =
     missionIdParam === null ? undefined : missionIdParam;

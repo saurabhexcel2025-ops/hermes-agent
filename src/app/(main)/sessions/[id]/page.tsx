@@ -30,8 +30,11 @@ interface SessionMessage {
   name?: string;
   tool_calls?: unknown[];
   tool_call_id?: string;
+  tool_name?: string | null;
+  finish_reason?: string | null;
+  reasoning?: string | null;
+  timestamp?: number;
   raw?: string;
-  [key: string]: unknown;
 }
 
 interface SessionData {
@@ -46,7 +49,6 @@ interface SessionData {
   size: number;
   created: string;
 }
-
 // ── Role-to-meta mapping (module-level, shared by MessageBubble and page) ──
 const ROLE_META: Record<string, {
   icon: React.ReactNode; color: string; bg: string; bgSolid: string; text: string; label: string;
@@ -88,19 +90,27 @@ const ROLE_META: Record<string, {
 function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index: number; messageRefs: React.MutableRefObject<Map<number, HTMLDivElement>> }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const role = (msg.role || "unknown").toLowerCase();
   const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content, null, 2);
   const summary = useMemo(() => messageSummary(content), [content]);
 
+  // Cleanup the copied-state timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(content || "");
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   const config = ROLE_META[role] || ROLE_META.system;
   const isLong = content && content.length > 200;
-  const displayContent = expanded ? content : "";
 
   return (
     <div ref={(el) => { if (el) messageRefs.current.set(index, el); else messageRefs.current.delete(index); }} className={`rounded-xl border ${config.bg} overflow-hidden`}>
@@ -158,7 +168,7 @@ function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index
             </button>
           </div>
           <pre className="text-sm text-white/80 font-mono whitespace-pre-wrap break-words">
-            {displayContent || "(no content)"}
+            {content || "(no content)"}
           </pre>
         {Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0 && (
           <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
@@ -168,8 +178,10 @@ function MessageBubble({ msg, index, messageRefs }: { msg: SessionMessage; index
             {msg.tool_calls.map((tc: unknown, i: number) => {
               const toolCall = tc as Record<string, unknown>;
               const fn = toolCall.function as Record<string, unknown> | undefined;
+              const fnName = String(fn?.name || "unknown");
+              const tcKey = `toolcall-${i}-${fnName.replace(/[^a-zA-Z0-9]/g, "-")}`;
               return (
-                <div key={i} className="bg-dark-900/50 rounded-lg p-3 text-xs font-mono">
+                <div key={tcKey} className="bg-dark-900/50 rounded-lg p-3 text-xs font-mono">
                   <span className="text-neon-green">{String(fn?.name || "unknown")}</span>
                   <pre className="mt-1 text-white/40 whitespace-pre-wrap">
                     {typeof fn?.arguments === "string"
@@ -244,13 +256,17 @@ export default function SessionDetailPage() {
     );
   }, [data?.messages]);
 
-  // Filtered messages
-  const filteredMessages = useMemo(() => {
+  // Filtered messages — use original index directly when no filter (avoids creating wrapper objects)
+  const filteredMessages: Array<{ msg: SessionMessage; originalIndex: number }> = useMemo(() => {
     if (!data?.messages) return [];
     if (!roleFilter) return data.messages.map((msg, i) => ({ msg, originalIndex: i }));
-    return data.messages
-      .map((msg, i) => ({ msg, originalIndex: i }))
-      .filter(({ msg }) => (msg.role || "unknown").toLowerCase() === roleFilter);
+    const result: Array<{ msg: SessionMessage; originalIndex: number }> = [];
+    for (let i = 0; i < data.messages.length; i++) {
+      if ((data.messages[i].role || "unknown").toLowerCase() === roleFilter) {
+        result.push({ msg: data.messages[i], originalIndex: i });
+      }
+    }
+    return result;
   }, [data?.messages, roleFilter]);
 
   // Scroll to next message of a given role from current scroll position
@@ -274,8 +290,6 @@ export default function SessionDetailPage() {
     const firstEl = messageRefs.current.get(roleMessages[0].index);
     if (firstEl) firstEl.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [data?.messages]);
-
-  // Reuse roleMeta for filter-button styling
 
   if (loading) {
     return (

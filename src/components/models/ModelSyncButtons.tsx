@@ -17,7 +17,6 @@ interface DiffEntry {
 
 interface ModelSyncButtonsProps {
   modelId: string;
-  modelName: string;
   provider: string;
   modelIdString: string;
   onPush: (modelId: string, options?: { pushCredential?: boolean }) => Promise<SyncActionResult>;
@@ -163,14 +162,12 @@ function SyncModal({
 
 export default function ModelSyncButtons({
   modelId,
-  modelName: _modelName,
   provider,
   modelIdString,
   onPush,
   onPull,
   disabled = false,
 }: ModelSyncButtonsProps) {
-  void _modelName;
   const [modalState, setModalState] = useState<{
     direction: "push" | "pull";
     diffs: DiffEntry[];

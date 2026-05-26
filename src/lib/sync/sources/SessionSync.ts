@@ -8,7 +8,7 @@
 
 import { syncHermesSessionsToDb } from "@/lib/session-repository";
 import { logApiError } from "@/lib/api-logger";
-import { setMultipleStats } from "@/lib/system-repository";
+import { db } from "@/lib/db";
 import type { SyncSource, SyncResult } from "@/lib/sync/types";
 
 export class SessionSync implements SyncSource {
@@ -19,10 +19,15 @@ export class SessionSync implements SyncSource {
     try {
       const result = syncHermesSessionsToDb();
 
-      setMultipleStats({
-        "sessions.total": String(result.synced),
-        "sessions.last_sync_time": new Date().toISOString(),
-      });
+      // Record sync status in sync_registry
+      db().prepare(/* sql */ `
+        INSERT OR REPLACE INTO sync_registry (source_name, last_synced_at, status, synced_count, error)
+        VALUES (?, datetime('now'), 'ok', ?, NULL)
+      `).run(this.name, result.synced);
+
+      if (result.skipped > 0) {
+        logApiError("SessionSync", `${result.skipped} sessions skipped (FK violations)`, new Error(`${result.skipped} skipped`));
+      }
 
       return {
         sourceName: this.name,
@@ -32,6 +37,15 @@ export class SessionSync implements SyncSource {
       };
     } catch (err) {
       logApiError("SessionSync", "syncing sessions", err);
+
+      // Record failure in sync_registry
+      try {
+        db().prepare(/* sql */ `
+          INSERT OR REPLACE INTO sync_registry (source_name, last_synced_at, status, synced_count, error)
+          VALUES (?, datetime('now'), 'error', 0, ?)
+        `).run(this.name, String(err));
+      } catch { /* best-effort */ }
+
       return {
         sourceName: this.name,
         success: false,

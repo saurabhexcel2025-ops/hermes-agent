@@ -111,6 +111,11 @@ jest.mock("@/lib/db", () => ({
     hasMissionCategoriesTable: true,
     categoryCount: 2,
   })),
+  getSchemaVersion: jest.fn((db: { prepare: (sql: string) => { get: (key: string) => { value: string } | undefined } }) => {
+    const row = db.prepare("SELECT value FROM meta WHERE key = ?").get("schema_version");
+    return row ? parseInt(row.value, 10) : 0;
+  }),
+  setSchemaVersion: jest.fn(),
   inTransaction: jest.fn((fn: () => unknown) => fn()),
   uuid: jest.fn(() => "test-uuid-" + Math.random().toString(36).slice(2)),
   now: jest.fn(() => "2026-01-01T00:00:00.000Z"),

@@ -7,6 +7,7 @@ import Database, { type Database as _DatabaseType } from "better-sqlite3";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { CH_DATA_DIR } from "./paths";
+import { getSchemaVersion, setSchemaVersion } from "./db-schema";
 import { needsBaselineRebuild, rebuildToBaseline } from "./db/upgrade";
 import { applyProfilesToolsParityUpgrade } from "./db/apply-profiles-tools-upgrade";
 import { applyMissionRepeatMigration } from "./db/apply-mission-repeat-migration";
@@ -88,25 +89,7 @@ export function now(): string {
 
 // ── Migration runner ───────────────────────────────────────────
 
-const SCHEMA_VERSION_KEY = "schema_version";
 const BASELINE_SCHEMA_VERSION = 3;
-
-function getSchemaVersion(database: Database.Database): number {
-  try {
-    const row = database
-      .prepare("SELECT value FROM meta WHERE key = ?")
-      .get(SCHEMA_VERSION_KEY) as { value: string } | undefined;
-    return row ? parseInt(row.value, 10) : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function setSchemaVersion(database: Database.Database, version: number): void {
-  database
-    .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)")
-    .run(SCHEMA_VERSION_KEY, String(version));
-}
 
 function tableExists(database: Database.Database, name: string): boolean {
   const row = database

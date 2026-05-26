@@ -60,8 +60,6 @@ export default function ReaderSettings({ settings, onChange }: {
     saveSettings(next);
   }, [settings, onChange]);
 
-  const _theme = THEMES[settings.pageTheme] || THEMES.dark;
-
   return (
     <>
       {/* Toggle Button */}

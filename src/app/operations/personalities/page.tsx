@@ -8,14 +8,12 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Brain,
   Plus,
-  Trash2,
   Edit3,
   Check,
   Loader2,
   AlertCircle,
   Sparkles,
   Copy,
-  MoreVertical,
   ChevronDown,
 } from "lucide-react";
 import AppPageShell from "@/components/layout/AppPageShell";
@@ -37,33 +35,16 @@ interface Personality {
 function PersonalityCard({
   personality,
   onEdit,
-  onDelete,
   onActivate,
   isActive,
 }: {
   personality: Personality;
   onEdit: (p: Personality) => void;
-  onDelete: (name: string) => void;
   onActivate: (name: string) => void;
   isActive: boolean;
 }) {
   const [textExpanded, setTextExpanded] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const handleDelete = async () => {
-    if (!deleting) {
-      setDeleting(true);
-      setMenuOpen(false);
-      return;
-    }
-    try {
-      await onDelete(personality.name);
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(personality.prompt);
@@ -76,22 +57,8 @@ function PersonalityCard({
       ? personality.prompt.slice(0, 120) + "..."
       : personality.prompt;
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-kebab-menu]')) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
-
   return (
     <div
-      data-kebab-menu
       className={`rounded-xl border transition-all ${
         isActive
           ? "border-neon-cyan/50 bg-neon-cyan/5"
@@ -120,7 +87,7 @@ function PersonalityCard({
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => setTextExpanded(!textExpanded)}
-              className="p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors"
+              className={`p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors ${textExpanded ? "bg-white/5" : ""}`}
               title={textExpanded ? "Collapse" : "Expand prompt"}
             >
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${textExpanded ? "" : "rotate-90"}`} />
@@ -145,32 +112,13 @@ function PersonalityCard({
                 <Sparkles className="w-3.5 h-3.5" />
               </button>
             )}
-            {/* Kebab menu */}
-            <div className="relative" data-kebab-menu>
-              <button
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors"
-                title="Actions"
-              >
-                <MoreVertical className="w-3.5 h-3.5" />
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-10 bg-dark-800 border border-white/10 rounded-lg shadow-xl py-1 min-w-[120px]">
-                  <button
-                    onClick={() => { onEdit(personality); setMenuOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/70 hover:bg-white/5 hover:text-white"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> {deleting ? "Confirm?" : "Delete"}
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => onEdit(personality)}
+              className="p-1.5 rounded-lg text-white/30 hover:bg-white/5 transition-colors"
+              title="Edit personality"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
@@ -201,16 +149,15 @@ function EditPersonalityModal({
     setSaving(true);
     setError(null);
     try {
+      const body = JSON.stringify({ profile: name.trim(), prompt: prompt.trim() });
       const res = await fetch("/api/personalities", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: isEdit
-          ? JSON.stringify({ profile: name.trim(), prompt: prompt.trim() })
-          : JSON.stringify({ profile: name.trim(), prompt: prompt.trim() }),
+        body,
       });
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || `Failed to ${isEdit ? "update" : "create"} personality`);
+        const resBody = await res.json() as { error?: string };
+        throw new Error(resBody.error || `Failed to ${isEdit ? "update" : "create"} personality`);
       }
       onSaved();
     } catch (err) {
@@ -302,7 +249,7 @@ export default function PersonalitiesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activePersonality, setActivePersonality] = useState<string>("");
-  const [editing, setEditing] = useState<Personality | null | undefined>(undefined);
+  const [editTarget, setEditTarget] = useState<Personality | null | undefined>(undefined);
   const { showToast, toastElement } = useToast();
 
   const loadPersonalities = useCallback(async () => {
@@ -330,30 +277,6 @@ export default function PersonalitiesPage() {
     loadPersonalities();
   }, [loadPersonalities]);
 
-  const handleDelete = async (name: string) => {
-    try {
-      const res = await fetch(`/api/personalities?name=${encodeURIComponent(name)}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || "Failed to delete");
-      }
-      showToast(`Deleted personality: ${name}`, "success");
-      if (activePersonality === name) {
-        // Clear active if we deleted it
-        await fetch("/api/config", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ section: "display", values: { personality: "" } }),
-        });
-      }
-      loadPersonalities();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed", "error");
-    }
-  };
-
   const handleActivate = async (name: string) => {
     try {
       const res = await fetch("/api/config", {
@@ -378,7 +301,7 @@ export default function PersonalitiesPage() {
   };
 
   const handleSaved = () => {
-    setEditing(undefined);
+    setEditTarget(undefined);
     loadPersonalities();
     showToast("Personality saved!", "success");
   };
@@ -429,7 +352,7 @@ export default function PersonalitiesPage() {
             variant="primary"
             color="purple"
             icon={Plus}
-            onClick={() => setEditing(null)}
+            onClick={() => setEditTarget(null)}
           >
             New
           </Button>
@@ -454,8 +377,7 @@ export default function PersonalitiesPage() {
               <PersonalityCard
                 key={p.name}
                 personality={p}
-                onEdit={(personality) => setEditing(personality)}
-                onDelete={handleDelete}
+                onEdit={(personality) => setEditTarget(personality)}
                 onActivate={handleActivate}
                 isActive={activePersonality === p.name}
               />
@@ -477,10 +399,11 @@ export default function PersonalitiesPage() {
       </div>
 
       {/* Edit/Create Modal */}
-      {editing !== undefined && (
+      {editTarget !== undefined && (
         <EditPersonalityModal
-          personality={editing}
-          onClose={() => setEditing(undefined)}
+          key={editTarget?.name ?? 'new'}
+          personality={editTarget}
+          onClose={() => setEditTarget(undefined)}
           onSaved={handleSaved}
         />
       )}

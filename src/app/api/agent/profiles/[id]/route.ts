@@ -14,6 +14,7 @@ import {
 } from "@/lib/profiles-repository";
 import { pushProfileToHermes, removeProfileFromDisk } from "@/lib/hermes-profile-sync";
 import { resolveProfileHermesHome } from "@/lib/hermes-profile-paths";
+import { slugifyDisplayName } from "@/lib/profile-slug";
 import type { ApiResponse } from "@/types/hermes";
 
 export async function PUT(
@@ -48,11 +49,7 @@ export async function PUT(
 
     let slug = prof.profile;
     if (name && typeof name === "string" && name.trim().length >= 2) {
-      const newSlug = name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "");
+      const newSlug = slugifyDisplayName(name);
 
       if (newSlug && newSlug !== prof.profile) {
         const newProf = resolveSafeProfileName(newSlug);

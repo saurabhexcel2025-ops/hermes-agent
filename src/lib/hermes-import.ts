@@ -252,6 +252,7 @@ function deriveProviderFromModelId(modelId: string): HermesProvider | null {
   // Bare model names that map to specific providers
   if (lower.includes("claude")) return "anthropic";
   if (lower.includes("gpt")) return "openai";
+  if (lower.includes("minimax-cn")) return "minimax-cn";
   if (lower.includes("minimax")) return "minimax";
   if (lower.includes("gemini")) return "gemini";
   if (lower.includes("opus") || lower.includes("sonnet") || lower.includes("haiku")) return "anthropic";

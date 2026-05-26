@@ -2,6 +2,9 @@
  * Hermes log file basenames (no directory, no .log suffix in API `name` param).
  */
 
+import { existsSync, readdirSync, statSync } from "fs";
+import { relative, resolve } from "path";
+
 export const MAX_LOG_BASENAME_LEN = 128;
 
 export type LogFileGroup = "core" | "system" | "other";
@@ -59,4 +62,44 @@ export function compareLogFileNames(a: string, b: string): number {
   const pb = LOG_SORT_PRIORITY[b] ?? 10;
   if (pa !== pb) return pa - pb;
   return a.localeCompare(b);
+}
+
+/**
+ * Verify that a resolved log file path falls within the logs directory.
+ * Prevents path traversal attacks via symlinks or .. components.
+ */
+export function logFileUnderLogsDir(logsDir: string, logPath: string): boolean {
+  const R = resolve(logsDir);
+  const C = resolve(logPath);
+  if (C === R) return false;
+  const rel = relative(R, C);
+  return rel !== "" && !rel.startsWith("..") && !rel.includes("..");
+}
+
+/**
+ * Collect available `.log` files from a directory.
+ * Returns sorted by name priority (core first, then system, then other).
+ */
+export function listLogFilesInDir(logsDir: string): LogFileMeta[] {
+  if (!existsSync(logsDir)) return [];
+
+  const files = readdirSync(logsDir);
+  const logs: LogFileMeta[] = [];
+
+  for (const file of files) {
+    if (!file.endsWith(".log")) continue;
+    const base = file.slice(0, -4);
+    if (sanitizeLogBasename(base) !== base) continue;
+    const filePath = resolve(logsDir, file);
+    const stats = statSync(filePath);
+    logs.push({
+      name: base,
+      size: stats.size,
+      modified: stats.mtime.toISOString(),
+      group: categorizeLogFileGroup(base),
+    });
+  }
+
+  logs.sort((a, b) => compareLogFileNames(a.name, b.name));
+  return logs;
 }

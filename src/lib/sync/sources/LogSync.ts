@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { db, now } from "@/lib/db";
 import { logApiError } from "@/lib/api-logger";
@@ -22,9 +23,9 @@ function extractTimestamp(line: string): string {
 
 /** Determine severity from a log line. */
 function detectSeverity(line: string): string {
-  if (line.includes(" CRITICAL ")) return "critical";
-  if (line.includes(" ERROR ")) return "error";
-  if (line.includes(" WARNING ") || line.includes(" WARN ")) return "warning";
+  if (/\bCRITICAL\b/i.test(line)) return "critical";
+  if (/\bERROR\b/i.test(line)) return "error";
+  if (/\bWARN(?:ING)?\b/i.test(line)) return "warning";
   return "error";
 }
 
@@ -41,10 +42,9 @@ function readErrorLines(
     const lines = content.split("\n");
     const errorLines = lines.filter(
       (l) =>
-        l.includes(" ERROR ") ||
-        l.includes(" CRITICAL ") ||
-        l.includes("failed") ||
-        l.includes("Error:")
+        /\bERROR\b/i.test(l) ||
+        /\bCRITICAL\b/i.test(l) ||
+        /\bfailed\b/i.test(l)
     );
     return errorLines.slice(-maxLines).map((line) => ({
       source,
@@ -69,12 +69,12 @@ export class LogSync implements SyncSource {
 
       // Read from both gateway.log and errors.log
       const gatewayErrors = readErrorLines(
-        logDir + "/gateway.log",
+        join(logDir, "gateway.log"),
         "gateway",
         this.maxEntriesPerSource
       );
       const agentErrors = readErrorLines(
-        logDir + "/errors.log",
+        join(logDir, "errors.log"),
         "agent",
         this.maxEntriesPerSource
       );

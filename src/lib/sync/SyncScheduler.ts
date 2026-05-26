@@ -90,51 +90,54 @@ export class SyncScheduler {
     const results: SyncResult[] = [];
     const overallStart = performance.now();
 
-    const sourceList = Array.from(this.sources.values());
-    for (const source of sourceList) {
-      const staleness = this.stalenessMs[source.name] ?? 0;
-      const lastSync = this.lastSyncTime.get(source.name) ?? 0;
-      const age = Date.now() - lastSync;
-      if (age < staleness) {
-        // Skip — within freshness window
-        results.push({
-          sourceName: source.name,
-          success: true,
-          syncedCount: 0,
-          durationMs: 0,
-        });
-        continue;
+    try {
+      const sourceList = Array.from(this.sources.values());
+      for (const source of sourceList) {
+        const staleness = this.stalenessMs[source.name] ?? 0;
+        const lastSync = this.lastSyncTime.get(source.name) ?? 0;
+        const age = Date.now() - lastSync;
+        if (age < staleness) {
+          // Skip — within freshness window
+          results.push({
+            sourceName: source.name,
+            success: true,
+            syncedCount: 0,
+            durationMs: 0,
+          });
+          continue;
+        }
+
+        try {
+          const result = await source.sync();
+          this.lastSyncTime.set(source.name, Date.now());
+          results.push(result);
+        } catch (err) {
+          this.lastSyncTime.set(source.name, Date.now());
+          results.push({
+            sourceName: source.name,
+            success: false,
+            syncedCount: 0,
+            error: String(err),
+            durationMs: 0,
+          });
+        }
       }
 
-      try {
-        const result = await source.sync();
-        this.lastSyncTime.set(source.name, Date.now());
-        results.push(result);
-      } catch (err) {
-        this.lastSyncTime.set(source.name, Date.now());
-        results.push({
-          sourceName: source.name,
-          success: false,
-          syncedCount: 0,
-          error: String(err),
-          durationMs: 0,
-        });
-      }
+      const totalDurationMs = Math.round(performance.now() - overallStart);
+      const allSuccessful = results.every((r) => r.success);
+
+      const cycleResult: SyncCycleResult = {
+        startedAt,
+        completedAt: new Date().toISOString(),
+        results,
+        totalDurationMs,
+        allSuccessful,
+      };
+      this.lastCycleResult = cycleResult;
+      return cycleResult;
+    } finally {
+      this.running = false;
     }
-
-    const totalDurationMs = Math.round(performance.now() - overallStart);
-    const allSuccessful = results.every((r) => r.success);
-
-    const cycleResult: SyncCycleResult = {
-      startedAt,
-      completedAt: new Date().toISOString(),
-      results,
-      totalDurationMs,
-      allSuccessful,
-    };
-    this.lastCycleResult = cycleResult;
-    this.running = false;
-    return cycleResult;
   }
 
   /** Run a single named source immediately. */

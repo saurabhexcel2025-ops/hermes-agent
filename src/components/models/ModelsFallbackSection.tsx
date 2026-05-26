@@ -7,7 +7,7 @@ import type { DefaultsModelOption } from "@/components/models/DefaultsGrid";
 import type { TaskType } from "@/lib/hermes-providers";
 import type { FallbackChainEntry, FallbackConfig } from "@/types/hermes";
 
-import FallbackUrlEditModal from "./FallbackUrlEditModal";
+import FallbackUrlEditModal from "@/components/models/FallbackUrlEditModal";
 
 interface ModelsFallbackSectionProps {
   fallbackChain: FallbackChainEntry[];

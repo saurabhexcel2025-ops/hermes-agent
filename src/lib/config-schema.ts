@@ -1,7 +1,35 @@
 // ═══════════════════════════════════════════════════════════════
 // Config Section Definitions — drives the UI form rendering
 // ═══════════════════════════════════════════════════════════════
+//
+// Each SectionDef carries a direct LucideIcon component reference
+// rather than a string name — this eliminates the need for a
+// separate icon-mapping module and prevents drift between the
+// section schema and available icon imports.
 
+import type { LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Clock,
+  Cpu,
+  FileText,
+  GitBranch,
+  Globe,
+  HardDrive,
+  Layers,
+  ListTodo,
+  Lock,
+  MessageCircle,
+  Mic,
+  RotateCcw,
+  ScrollText,
+  Shield,
+  ShieldCheck,
+  Terminal,
+  Volume2,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import type { AccentColor } from "@/types/hermes";
 
 export interface FieldDef {
@@ -19,7 +47,7 @@ export interface SectionDef {
   id: string;
   label: string;
   description: string;
-  icon: string; // lucide icon name
+  icon: LucideIcon;
   color: AccentColor;
   fields: FieldDef[];
   // Sections with complex/nested values that can't be edited inline
@@ -35,7 +63,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "agent",
     label: "Agent Settings",
     description: "Core agent behavior, reasoning, and personality configuration",
-    icon: "Cpu",
+    icon: Cpu,
     color: "cyan",
     fields: [
       { key: "max_turns", label: "Max Turns", type: "number", min: 1, max: 500, description: "Maximum conversation turns before stopping" },
@@ -50,7 +78,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "display",
     label: "Display Settings",
     description: "Visual presentation, streaming, and tool output options",
-    icon: "Activity",
+    icon: Activity,
     color: "green",
     fields: [
       { key: "skin", label: "CLI Skin", type: "string", description: "Visual theme name (e.g. default, ares, mono)" },
@@ -73,7 +101,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "memory",
     label: "Memory Settings",
     description: "Memory provider (Holographic, Hindsight, or others), limits, and user profile",
-    icon: "Layers",
+    icon: Layers,
     color: "pink",
     fields: [
       { key: "memory_enabled", label: "Memory Enabled", type: "boolean", description: "Enable memory system" },
@@ -89,7 +117,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "terminal",
     label: "Terminal Settings",
     description: "Shell backend, timeouts, and container configuration",
-    icon: "Terminal",
+    icon: Terminal,
     color: "orange",
     fields: [
       { key: "backend", label: "Backend", type: "select", options: ["local", "docker", "ssh", "modal", "daytona", "singularity"], description: "Terminal execution backend" },
@@ -105,7 +133,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "compression",
     label: "Compression",
     description: "Automatic context compression to manage token limits",
-    icon: "HardDrive",
+    icon: HardDrive,
     color: "cyan",
     fields: [
       { key: "enabled", label: "Enabled", type: "boolean", description: "Enable automatic context compression" },
@@ -118,7 +146,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "security",
     label: "Security",
     description: "Guardrails, secret handling, and website access controls",
-    icon: "Shield",
+    icon: Shield,
     color: "cyan",
     fields: [
       { key: "tirith_enabled", label: "Tirith Enabled", type: "boolean", description: "Enable Tirith content guardrails" },
@@ -130,7 +158,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "tts",
     label: "Text-to-Speech",
     description: "Voice synthesis provider and voice selection",
-    icon: "Volume2",
+    icon: Volume2,
     color: "pink",
     fields: [
       { key: "provider", label: "Provider", type: "select", options: ["edge", "elevenlabs", "openai", "kokoro", "fish"], description: "TTS provider" },
@@ -140,7 +168,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "stt",
     label: "Speech-to-Text",
     description: "Voice recognition provider and model",
-    icon: "Mic",
+    icon: Mic,
     color: "purple",
     fields: [
       { key: "enabled", label: "Enabled", type: "boolean", description: "Enable speech-to-text" },
@@ -152,7 +180,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "delegation",
     label: "Delegation",
     description: "Sub-agent delegation settings for autonomous tasks",
-    icon: "GitBranch",
+    icon: GitBranch,
     color: "green",
     fields: [
       { key: "model", label: "Model", type: "string", description: "Model used for delegated sub-agents" },
@@ -164,7 +192,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "cron",
     label: "Cron Settings",
     description: "Scheduled job configuration",
-    icon: "ListTodo",
+    icon: ListTodo,
     color: "orange",
     fields: [
       { key: "wrap_response", label: "Wrap Response", type: "boolean", description: "Wrap cron job responses with context" },
@@ -174,7 +202,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "checkpoints",
     label: "Checkpoints",
     description: "Session snapshot and restore settings",
-    icon: "Zap",
+    icon: Zap,
     color: "cyan",
     fields: [
       { key: "enabled", label: "Enabled", type: "boolean", description: "Enable session checkpointing" },
@@ -185,7 +213,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "approvals",
     label: "Approvals",
     description: "Command approval mode and timeout settings",
-    icon: "ShieldCheck",
+    icon: ShieldCheck,
     color: "purple",
     fields: [
       { key: "mode", label: "Mode", type: "select", options: ["manual", "auto"], description: "Approval mode for dangerous commands" },
@@ -196,7 +224,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "browser",
     label: "Browser",
     description: "Browser automation settings and timeouts",
-    icon: "Globe",
+    icon: Globe,
     color: "green",
     fields: [
       { key: "cloud_provider", label: "Cloud Provider", type: "select", options: ["local", "browserbase"], description: "Browser automation backend" },
@@ -211,7 +239,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "session_reset",
     label: "Session Reset",
     description: "Automatic session reset based on idle time or schedule",
-    icon: "RotateCcw",
+    icon: RotateCcw,
     color: "orange",
     fields: [
       { key: "mode", label: "Mode", type: "select", options: ["both", "idle", "scheduled", "off"], description: "When to auto-reset sessions" },
@@ -223,7 +251,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "skills",
     label: "Skills",
     description: "Skill discovery and external directory configuration",
-    icon: "FileText",
+    icon: FileText,
     color: "green",
     fields: [
       { key: "creation_nudge_interval", label: "Creation Nudge Interval", type: "number", min: 1, max: 100, description: "Turns between skill creation reminders" },
@@ -234,16 +262,20 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "platform_toolsets",
     label: "Platform Toolsets",
     description: "Per-platform tool availability (cli, discord, telegram, etc.)",
-    icon: "Wrench",
+    icon: Wrench,
     color: "purple",
     fields: [],
+    // Note: complexKeys here serves as a static fallback hint for config index page.
+    // The actual keys are derived dynamically from loaded values in ConfigSectionPage
+    // (see sectionId === "platform_toolsets" branch) so new platforms added by Hermes
+    // appear automatically without schema changes.
     complexKeys: ["cli", "discord", "telegram", "slack", "whatsapp", "signal", "homeassistant"],
   },
   code_execution: {
     id: "code_execution",
     label: "Code Execution",
     description: "Settings for the code execution sandbox",
-    icon: "Terminal",
+    icon: Terminal,
     color: "green",
     fields: [
       { key: "max_tool_calls", label: "Max Tool Calls", type: "number", min: 1, max: 200, description: "Maximum tool calls per code execution" },
@@ -254,7 +286,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "logging",
     label: "Logging",
     description: "Log level, rotation, and file size settings",
-    icon: "ScrollText",
+    icon: ScrollText,
     color: "green",
     fields: [
       { key: "level", label: "Log Level", type: "select", options: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], description: "Minimum log level to record" },
@@ -266,7 +298,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "discord",
     label: "Discord",
     description: "Discord platform-specific settings",
-    icon: "MessageSquare",
+    icon: MessageCircle,
     color: "purple",
     fields: [
       { key: "auto_thread", label: "Auto Thread", type: "boolean", description: "Automatically create threads for responses" },
@@ -279,7 +311,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "human_delay",
     label: "Human Delay",
     description: "Simulated human-like typing delay settings",
-    icon: "Clock",
+    icon: Clock,
     color: "orange",
     fields: [
       { key: "mode", label: "Mode", type: "select", options: ["off", "natural", "fixed"], description: "Human delay simulation mode" },
@@ -291,7 +323,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "voice",
     label: "Voice",
     description: "Voice recording and auto-TTS settings",
-    icon: "Mic",
+    icon: Mic,
     color: "pink",
     fields: [
       { key: "auto_tts", label: "Auto TTS", type: "boolean", description: "Automatically convert responses to speech" },
@@ -304,7 +336,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "privacy",
     label: "Privacy",
     description: "PII redaction and privacy settings",
-    icon: "Shield",
+    icon: Shield,
     color: "cyan",
     fields: [
       { key: "redact_pii", label: "Redact PII", type: "boolean", description: "Automatically redact personally identifiable information" },
@@ -314,7 +346,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "streaming",
     label: "Streaming",
     description: "Response streaming configuration",
-    icon: "Activity",
+    icon: Activity,
     color: "cyan",
     fields: [
       { key: "enabled", label: "Enabled", type: "boolean", description: "Enable response streaming" },
@@ -324,7 +356,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "smart_model_routing",
     label: "Smart Model Routing",
     description: "Intelligent model routing based on task complexity",
-    icon: "GitBranch",
+    icon: GitBranch,
     color: "purple",
     fields: [
       { key: "enabled", label: "Enabled", type: "boolean", description: "Enable smart model routing" },
@@ -334,7 +366,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "web",
     label: "Web",
     description: "Web search and extraction backend settings",
-    icon: "Globe",
+    icon: Globe,
     color: "green",
     fields: [
       { key: "backend", label: "Backend", type: "select", options: ["parallel", "firecrawl", "builtin"], description: "Web search backend" },
@@ -344,7 +376,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "hermes_md",
     label: "HERMES.md",
     description: "Priority project instructions — loaded every message",
-    icon: "FileText",
+    icon: FileText,
     color: "cyan",
     type: "file",
     filePath: "HERMES.md",
@@ -354,7 +386,7 @@ export const CONFIG_SECTIONS: Record<string, SectionDef> = {
     id: "env",
     label: "Environment Variables",
     description: "API keys and secrets (.env file)",
-    icon: "Lock",
+    icon: Lock,
     color: "orange",
     type: "file",
     filePath: ".env",

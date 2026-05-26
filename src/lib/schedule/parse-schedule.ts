@@ -5,12 +5,11 @@
 
 import type { ParsedSchedule } from "./types";
 
-export type { ParsedSchedule } from "./types";
-
-function looksLikeCronExpression(s: string): boolean {
+/** Check if a string looks like a cron expression (5+ space-separated cron fields). */
+export function looksLikeCronExpression(s: string): boolean {
+  if (!s || typeof s !== "string") return false;
   const parts = s.trim().split(/\s+/);
-  if (parts.length !== 5 && parts.length !== 6) return false;
-  return parts.every((p) => p.length > 0 && !/\s/.test(p));
+  return parts.length >= 5 && parts.every((p) => /^[*\-,\/0-9]+$/.test(p));
 }
 
 /**

@@ -27,6 +27,8 @@ export function useCronJobs() {
     transform: (raw) => raw as CronData,
   });
 
+  const jobs = (data?.jobs as CronJob[]) ?? [];
+
   const handleToggle = useCallback(
     async (id: string) => {
       const job = data?.jobs.find((j: CronJob) => j.id === id);
@@ -88,26 +90,14 @@ export function useCronJobs() {
     loadJobs();
   }, [showToast, loadJobs]);
 
-  const handleSync = useCallback(async () => {
-    const { ok, error } = await safeApiCall("/api/cron", {
-      method: "POST",
-      body: { action: "sync" },
-    });
-    showToast(
-      ok ? "Sync complete" : (error ?? "Sync failed"),
-      ok ? undefined : "error",
-    );
-    loadJobs();
-  }, [showToast, loadJobs]);
-
   return {
     data,
+    jobs,
     loading,
     loadJobs,
     handleToggle,
     handleDelete,
     handleRun,
     handlePauseAll,
-    handleSync,
   };
 }

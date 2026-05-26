@@ -10,6 +10,7 @@ import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { existsSync, readFileSync } from "fs";
 import * as yaml from "js-yaml";
 import { envVarForProvider, isHermesProvider } from "@/lib/hermes-providers";
+import { requireAuth } from "@/lib/api-auth";
 
 interface DiffEntry {
   id: string;
@@ -40,6 +41,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
 
   let raw: unknown;
   try { raw = await request.json(); } catch {

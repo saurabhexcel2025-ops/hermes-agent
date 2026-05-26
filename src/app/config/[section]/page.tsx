@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import { Save, Check, RotateCcw, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -14,7 +14,6 @@ import Button from "@/components/ui/Button";
 import { Toggle, Select, NumberInput, TextInput } from "@/components/ui/Input";
 import { LoadingSpinner, ErrorBanner } from "@/components/ui/LoadingSpinner";
 import { getSectionDef, type FieldDef } from "@/lib/config-schema";
-import { getConfigSectionIcon } from "@/lib/config-section-icons";
 
 export default function ConfigSectionPage() {
   const params = useParams();
@@ -32,6 +31,14 @@ export default function ConfigSectionPage() {
   // File editor state
   const [fileContent, setFileContent] = useState("");
   const [originalFileContent, setOriginalFileContent] = useState("");
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup save status timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    };
+  }, []);
 
   const yamlHasChanges = useMemo(
     () => JSON.stringify(values) !== JSON.stringify(originalValues),
@@ -115,7 +122,7 @@ export default function ConfigSectionPage() {
         setOriginalValues({ ...values });
       }
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (err) {
       setSaveStatus("error");
       setError(err instanceof Error ? err.message : "Save failed");
@@ -219,6 +226,23 @@ export default function ConfigSectionPage() {
           </div>
         );
       default:
+        // Guard against rendering object/array values as "[object Object]"
+        // which would silently corrupt the config.yaml on save.
+        if (typeof value === "object" && value !== null) {
+          return (
+            <div key={field.key} className="space-y-1.5">
+              <label className="text-sm font-medium text-white/70">
+                {field.label}
+              </label>
+              {field.description && (
+                <p className="text-xs text-white/40">{field.description}</p>
+              )}
+              <div className="text-xs text-white/30 bg-dark-800/50 rounded-lg p-3 font-mono max-h-60 overflow-y-auto whitespace-pre-wrap">
+                {JSON.stringify(value, null, 2) || "(not configured)"}
+              </div>
+            </div>
+          );
+        }
         return (
           <TextInput
             key={field.key}
@@ -232,7 +256,7 @@ export default function ConfigSectionPage() {
     }
   };
 
-  const SectionIcon = getConfigSectionIcon(sectionDef.icon);
+  const SectionIcon = sectionDef.icon;
   const showActions =
     !isPlatformToolsetsPreview && (sectionDef.fields.length > 0 || isFileSection);
 
@@ -308,20 +332,21 @@ export default function ConfigSectionPage() {
               <div className="space-y-2">
                 {fileContent.split("\n").map((line, i) => {
                   const trimmed = line.trim();
+                  const lineKey = `env-${i}-${line.slice(0, 24).replace(/[^a-zA-Z0-9]/g, "-")}`;
                   if (!trimmed || trimmed.startsWith("#")) {
                     return (
-                      <div key={i} className="text-xs text-white/30 font-mono">
+                      <div key={lineKey} className="text-xs text-white/30 font-mono">
                         {line || "\u00A0"}
                       </div>
                     );
                   }
                   const eqIdx = line.indexOf("=");
-                  if (eqIdx < 0) return <div key={i} className="text-xs font-mono text-white/50">{line}</div>;
+                  if (eqIdx < 0) return <div key={lineKey} className="text-xs font-mono text-white/50">{line}</div>;
                   const key = line.slice(0, eqIdx).trim();
                   const val = line.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
                   const masked = val.length > 8 ? val.slice(0, 4) + "..." + val.slice(-4) : "****";
                   return (
-                    <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                    <div key={lineKey} className="flex items-center gap-2 text-xs font-mono">
                       <span className="text-neon-cyan w-48 flex-shrink-0 truncate">{key}</span>
                       <span className="text-white/50">=</span>
                       <span className="text-white/30">{masked}</span>

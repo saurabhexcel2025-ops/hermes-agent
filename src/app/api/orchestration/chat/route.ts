@@ -22,6 +22,42 @@ function handleError(error: unknown, context: string) {
   );
 }
 
+/** Shared gateway fetch — both streaming and non-streaming paths use this. */
+async function fetchGateway(
+  apiUrl: string,
+  gatewayBody: Record<string, unknown>,
+  isStreaming: boolean,
+): Promise<Response | NextResponse> {
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(gatewayBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown error");
+    return NextResponse.json(
+      { error: `Gateway error: ${response.status} — ${errorText}` },
+      { status: response.status },
+    );
+  }
+
+  if (isStreaming) {
+    // Return the streaming response directly
+    return new Response(response.body, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
+  // Non-streaming — return JSON
+  const data = await response.json();
+  return NextResponse.json({ data });
+}
+
 export async function POST(request: NextRequest) {
   const auth = requireAuth(request);
   if (auth) return auth;
@@ -44,49 +80,7 @@ export async function POST(request: NextRequest) {
       max_tokens: 4096,
     };
 
-    if (isStreaming) {
-      // Streaming response — forward SSE to the client
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(gatewayBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "Unknown error");
-        return NextResponse.json(
-          { error: `Gateway error: ${response.status} — ${errorText}` },
-          { status: response.status },
-        );
-      }
-
-      // Return the streaming response directly
-      return new Response(response.body, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
-    } else {
-      // Non-streaming — return JSON
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(gatewayBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "Unknown error");
-        return NextResponse.json(
-          { error: `Gateway error: ${response.status} — ${errorText}` },
-          { status: response.status },
-        );
-      }
-
-      const data = await response.json();
-      return NextResponse.json({ data });
-    }
+    return await fetchGateway(apiUrl, gatewayBody, isStreaming);
   } catch (error) {
     return handleError(error, "POST /api/orchestration/chat");
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
-import { exec, execSync, ExecSyncOptions } from "child_process";
+import { exec, execSync } from "child_process";
+import { join } from "path";
 
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth, parseJsonBody } from "@/lib/api-auth";
@@ -26,7 +27,7 @@ import { getChScriptsDir, getChHardwareLogDir, CH_DATA_DIR } from "@/lib/paths";
  *   CH_SCRIPTS_DIR (default: CH_DATA_DIR/scripts)
  */
 
-const DISABLED_STATE_FILE = CH_DATA_DIR + "/.disabled_hardware_crons.json";
+const DISABLED_STATE_FILE = join(CH_DATA_DIR, ".disabled_hardware_crons.json");
 
 /** Load the set of disabled hardware cron job IDs */
 function loadDisabledIds(): Set<string> {
@@ -121,7 +122,7 @@ function serialiseLine(
 
 function readCrontab(): Promise<string> {
   return new Promise<string>((resolve) => {
-    exec("crontab -l", { encoding: "utf-8" } as ExecSyncOptions, (error, stdout) => {
+    exec("crontab -l", { encoding: "utf-8" }, (error, stdout) => {
       resolve(error ? "" : (stdout as string));
     });
   });

@@ -166,17 +166,16 @@ export default function ToolsPage() {
     }
   };
 
+  const profileSyncBody = () =>
+    selectedProfile === "default" ? { root: true } : { slug: selectedProfile };
+
   const pullFromHermes = async () => {
     setSyncing("pull");
     try {
-      const body =
-        selectedProfile === "default"
-          ? { root: true }
-          : { slug: selectedProfile };
       const res = await fetch("/api/agent/profiles/sync/pull", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(profileSyncBody()),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Pull failed");
@@ -193,14 +192,10 @@ export default function ToolsPage() {
   const pushToHermes = async () => {
     setSyncing("push");
     try {
-      const body =
-        selectedProfile === "default"
-          ? { root: true }
-          : { slug: selectedProfile };
       const res = await fetch("/api/agent/profiles/sync/push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(profileSyncBody()),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Push failed");
