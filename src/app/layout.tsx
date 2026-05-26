@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Jost, JetBrains_Mono } from "next/font/google";
 import { SidebarProvider } from "@/components/layout/SidebarContext";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileHeader from "@/components/layout/MobileHeader";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import "./globals.css";
 
-const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const jost = Jost({ variable: "--font-jost", subsets: ["latin"] });
 const jetbrainsMono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Control Hub | Agent Dashboard",
-  description: "Monitor, update, and control your AI agent",
+  title: "SpaceArmour | Mission Control",
+  description: "SpaceArmour AI Agent Mission Control Dashboard",
+  icons: {
+    icon: "/spacearmour-logo.svg",
+    shortcut: "/spacearmour-logo.svg",
+    apple: "/spacearmour-logo.svg",
+  },
 };
 
 export default function RootLayout({
@@ -22,7 +27,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${jost.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="h-full bg-dark-950 text-white">
         <SidebarProvider>

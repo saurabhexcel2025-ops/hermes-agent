@@ -1,5 +1,5 @@
 "use client";
-import { Menu, Terminal } from "lucide-react";
+import { Menu } from "lucide-react";
 import Link from "next/link";
 import { useSidebar } from "./SidebarContext";
 
@@ -16,17 +16,13 @@ export default function MobileHeader() {
       >
         <Menu className="w-5 h-5" />
       </button>
-      <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-        <div className="w-7 h-7 rounded-lg animated-border p-[1.5px]">
-          <div className="w-full h-full bg-dark-900 rounded-[5px] flex items-center justify-center">
-            <Terminal className="w-4 h-4 text-neon-cyan" />
-          </div>
-        </div>
-        <span className="text-sm font-bold tracking-tight">
-          <span className="text-neon-cyan">PT</span>
-          <span className="text-white/40 mx-0.5">/</span>
-          <span className="text-white">Hermes</span>
-        </span>
+      <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+        <img
+          src="/spacearmour-logo.svg"
+          alt="SpaceArmour"
+          className="h-6 w-auto object-contain"
+          draggable={false}
+        />
       </Link>
     </div>
   );

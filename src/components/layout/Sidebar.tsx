@@ -19,7 +19,6 @@ import {
   ChevronLeft,
   ChevronDown,
   X,
-  Terminal,
   Settings,
   RefreshCw,
   AlertTriangle,
@@ -706,23 +705,20 @@ export default function Sidebar() {
       {/* Logo — min-height matches main app chrome (see --ch-shell-header-min-height) */}
 
       <div className="px-4 min-h-[var(--ch-shell-header-min-height)] flex items-center border-b border-white/10">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg animated-border p-[1.5px]">
-            <div className="w-full h-full bg-dark-900 rounded-[5px] flex items-center justify-center">
-              <Terminal className="w-4 h-4 text-neon-cyan" />
-            </div>
-          </div>
-
-          {!collapsed && (
-            <div>
-              <div className="text-sm font-bold tracking-tight">
-                <span className="text-neon-cyan">PT</span>
-
-                <span className="text-white/40 mx-0.5">/</span>
-
-                <span className="text-white">Hermes</span>
+        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          {collapsed ? (
+            <div className="w-8 h-8 rounded-lg animated-border p-[1.5px] flex-shrink-0">
+              <div className="w-full h-full bg-dark-900 rounded-[5px] flex items-center justify-center">
+                <span className="text-[10px] font-bold tracking-tight" style={{ color: "#4DD0F8" }}>SA</span>
               </div>
             </div>
+          ) : (
+            <img
+              src="/spacearmour-logo.svg"
+              alt="SpaceArmour"
+              className="h-7 w-auto object-contain"
+              draggable={false}
+            />
           )}
         </Link>
       </div>

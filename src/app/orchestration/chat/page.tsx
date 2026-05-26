@@ -357,10 +357,13 @@ export default function ChatPage() {
           </div>
           <div className="flex-1 overflow-y-auto">
             {sessionList.map((s) => (
-              <button
+              <div
                 key={s.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setActiveSessionId(s.id)}
-                className={`w-full text-left px-3 py-2 border-b border-white/5 transition-colors hover:bg-white/5 group relative ${
+                onKeyDown={(e) => e.key === "Enter" && setActiveSessionId(s.id)}
+                className={`w-full text-left px-3 py-2 border-b border-white/5 transition-colors hover:bg-white/5 group relative cursor-pointer ${
                   s.id === activeSessionId ? "bg-white/10 border-l-2 border-l-neon-cyan" : ""
                 }`}
                 title={s.title}
@@ -402,7 +405,7 @@ export default function ChatPage() {
                     </button>
                   </div>
                 </div>
-              </button>
+              </div>
             ))}
             {sessionList.length === 0 && (
               <div className="p-3 text-xs text-white/20 italic">No sessions</div>
