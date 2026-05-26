@@ -19,6 +19,7 @@ import {
   MessageSquare,
   HardDrive,
   ChevronRight,
+  Globe,
   Filter,
   Bot,
   Zap,
@@ -52,7 +53,7 @@ const SOURCE_META: Record<
   cli: { label: "CLI", colorClass: "bg-neon-orange/10 text-neon-orange", icon: <Bot className="w-3 h-3" /> },
   cron: { label: "Cron", colorClass: "bg-neon-cyan/10 text-neon-cyan", icon: <Calendar className="w-3 h-3" /> },
   mission: { label: "Mission", colorClass: "bg-neon-green/10 text-neon-green", icon: <Zap className="w-3 h-3" /> },
-  api: { label: "API", colorClass: "bg-neon-purple/10 text-neon-purple", icon: <ChevronRight className="w-3 h-3" /> },
+  api: { label: "API", colorClass: "bg-neon-purple/10 text-neon-purple", icon: <Globe className="w-3 h-3" /> },
 };
 
 // ── Helpers ─────────────────────────────────────────────────

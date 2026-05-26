@@ -437,13 +437,13 @@ export function syncHermesSessionsToDb(): { synced: number; skipped: number } {
               : null;
         }
       } else if (row.source === "api_server") {
-        // api_server sessions treated as cli
+        // api_server sessions mapped to api source
       }
 
       try {
         upsert.run(
           row.id,
-          row.source === "api_server" ? "cli" : row.source,
+          row.source === "api_server" ? "api" : row.source,
           missionId,
           row.model ?? null,
           title,
@@ -467,5 +467,32 @@ export function syncHermesSessionsToDb(): { synced: number; skipped: number } {
   if (result.skipped > 0) {
     console.warn(`[syncHermesSessionsToDb] skipped ${result.skipped} sessions due to FK/constraint errors`);
   }
+
+  // ── Step 3: Close orphaned active sessions ──────────────────
+  // The Hermes Gateway API doesn't set end_reason on completion,
+  // so sessions end up permanently stuck as "active". Close any
+  // session that has actual content, no end state, and is older
+  // than 5 minutes (safely past any in-progress window).
+  try {
+    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { changes } = database
+      .prepare(/* sql */ `
+        UPDATE sessions
+        SET status = 'completed',
+            ended_at = started_at
+        WHERE status = 'active'
+          AND ended_at IS NULL
+          AND source IN ('api', 'cli')
+          AND size > 0
+          AND started_at < ?
+      `)
+      .run(cutoff);
+    if (changes > 0) {
+      console.log(`[syncHermesSessionsToDb] closed ${changes} orphaned active sessions`);
+    }
+  } catch {
+    // non-fatal cleanup
+  }
+
   return { synced: result.synced, skipped: result.skipped };
 }
