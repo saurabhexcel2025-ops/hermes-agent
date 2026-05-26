@@ -399,6 +399,7 @@ export function syncHermesSessionsToDb(): { synced: number; skipped: number } {
       ?, ?
     )
     ON CONFLICT(id) DO UPDATE SET
+      source     = excluded.source,
       title      = excluded.title,
       model_id   = COALESCE(excluded.model_id, model_id),
       mission_id = COALESCE(excluded.mission_id, mission_id),
