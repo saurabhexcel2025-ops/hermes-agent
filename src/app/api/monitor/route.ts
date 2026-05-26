@@ -59,7 +59,7 @@ export async function GET() {
     const pausedJobs = allJobs.filter((j) => !j.enabled);
 
     // ── Sessions (from DB — recent 5) ───────────────────────
-    const { sessions: recentSessions } = listSessions({ limit: 5 });
+    const { sessions: recentSessions, total: totalSessions } = listSessions({ limit: 5 });
 
     // ── Gateway Platforms (from DB) ─────────────────────────
     const platformsRaw = getGatewayPlatforms();
@@ -118,7 +118,7 @@ export async function GET() {
         jobs: allJobs.map(toCronJobBrief),
       },
       sessions: {
-        total: getSystemStatNumber("sessions.total", 0),
+        total: totalSessions,
         recent: recentSessions.map(toSessionBrief),
       },
       gateway: {
