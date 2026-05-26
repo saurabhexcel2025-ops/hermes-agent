@@ -432,8 +432,7 @@ export default function Dashboard() {
   );
 
   // Timestamp for cron scheduling comparisons — computed fresh per render
-  // eslint-disable-next-line react-hooks/purity
-  const now = Date.now();
+  const now = new Date().getTime();
 
   // Group templates by category for the dispatch section
   const templateGroups = useMemo(
