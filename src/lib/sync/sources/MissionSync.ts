@@ -16,7 +16,7 @@ import { join } from "path";
 import { listMissions, updateMission } from "@/lib/mission-repository";
 import { PATHS } from "@/lib/paths";
 import { logApiError } from "@/lib/api-logger";
-import { setMultipleStats } from "@/lib/system-repository";
+import { db } from "@/lib/db";
 import type { SyncSource, SyncResult } from "@/lib/sync/types";
 import type { MissionStatus } from "@/lib/agent-backend/types";
 
@@ -108,10 +108,13 @@ export class MissionSync implements SyncSource {
         }
       }
 
-      setMultipleStats({
-        "missions.last_sync_status": hasErrors ? "errors" : "ok",
-        "missions.last_sync_time": new Date().toISOString(),
-      });
+      // Record sync result in sync_registry
+      try {
+        db().prepare(/* sql */ `
+          INSERT OR REPLACE INTO sync_registry (source_name, last_synced_at, status, synced_count, error)
+          VALUES (?, datetime('now'), ?, ?, ?)
+        `).run(this.name, hasErrors ? "error" : "ok", syncedCount, errors.length > 0 ? errors.join("; ") : null);
+      } catch { /* best-effort */ }
 
       return {
         sourceName: this.name,

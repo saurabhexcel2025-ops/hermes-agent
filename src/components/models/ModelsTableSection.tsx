@@ -119,7 +119,6 @@ export default function ModelsTableSection({
                         <div className="flex items-center justify-end gap-1">
                           <ModelSyncButtons
                             modelId={m.id}
-                            modelName={m.name}
                             provider={m.provider}
                             modelIdString={m.modelId}
                             onPush={onPush}

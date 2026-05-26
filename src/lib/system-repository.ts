@@ -30,11 +30,20 @@ export function setSystemStat(key: string, value: string): void {
 
 // ── Batch ────────────────────────────────────────────────────
 
-/** Get multiple system stats at once. Returns a map of key → value. */
+/** Get multiple system stats at once using a single query. Returns a map of key → value. */
 export function getMultipleStats(keys: string[]): Record<string, string | null> {
+  if (keys.length === 0) return {};
+  const placeholders = keys.map(() => "?").join(", ");
+  const rows = db()
+    .prepare(`SELECT key, value FROM meta WHERE key IN (${placeholders})`)
+    .all(...keys) as Array<{ key: string; value: string }>;
+
   const result: Record<string, string | null> = {};
   for (const key of keys) {
-    result[key] = getSystemStat(key);
+    result[key] = null;
+  }
+  for (const row of rows) {
+    result[row.key] = row.value;
   }
   return result;
 }

@@ -6,7 +6,6 @@ jest.mock("@/lib/hermes-agent-runtime", () => ({
 
 jest.mock("@/lib/api-auth", () => ({
   requireAuth: () => null,
-  requireAuth: () => null,
 }));
 
 const mockExistsSync = jest.fn();

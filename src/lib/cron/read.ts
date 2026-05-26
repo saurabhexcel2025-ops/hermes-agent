@@ -33,7 +33,7 @@ function rowToRecord(row: CronJobRow): CronJobRecord {
     last_delivery_error: row.last_delivery_error,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    workdir: row.workdir ?? null,
+    workdir: row.workdir ?? "",
   };
 }
 

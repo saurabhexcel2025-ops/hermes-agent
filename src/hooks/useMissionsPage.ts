@@ -208,7 +208,6 @@ export function useMissionsPage() {
       constraints: newConstraints.trim() || undefined,
       categoryId: newCategoryId,
       goals: newGoals.split("\n").filter((g) => g.trim()),
-      profile: newProfile || undefined,
       profileName: newProfile || undefined,
       modelId: newModel || undefined,
       provider: newProvider || undefined,

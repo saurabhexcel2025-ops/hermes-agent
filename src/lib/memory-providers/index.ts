@@ -6,13 +6,11 @@
 // is active, then delegates to the appropriate implementation.
 //
 // Supported providers:
-//   - holographic: SQLite direct access (memory_store.db)
 //   - hindsight: Control Hub `/api/memory/hindsight` makes direct HTTP calls to the Hindsight HTTP server (port 9177)
 //   - none: Graceful degradation when no provider configured
 
 import { readFileSync, existsSync } from "fs";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
-import { holographicProvider } from "./holographic";
 
 // ── Shared Types (inlined from former ./types.ts) ─────────────────
 
@@ -185,24 +183,11 @@ const nullProvider: MemoryProvider = {
 
 /** Get the active memory provider based on config */
 export function getMemoryProvider(): MemoryProvider {
-  const configured = getConfiguredProvider();
-  switch (configured) {
-    case "holographic":
-      return holographicProvider;
-    default:
-      // hindsight, none, or any other — no direct provider
-      // Dashboard shows status only, facts managed via agent tools
-      return nullProvider;
-  }
+  // All providers except holographic use nullProvider — facts managed via agent tools
+  return nullProvider;
 }
 
 /** Get the configured provider type without instantiating */
 export function getMemoryProviderType(): MemoryProviderType {
   return getConfiguredProvider();
-}
-
-/** Check if holographic DB exists on disk */
-export function hasHolographicDb(): boolean {
-  const dbPath = getActiveHermesPaths().memoryDb;
-  return existsSync(dbPath);
 }

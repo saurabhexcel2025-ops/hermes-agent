@@ -162,8 +162,7 @@ export function useGatewayHealth(): GatewayHealth & {
     void checkOnline();
     void checkAgentModel();
     void fetchModels();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [checkOnline, checkAgentModel, fetchModels]);
 
   // ── Poll gateway health every 30s ───────────────────────────
   useEffect(() => {

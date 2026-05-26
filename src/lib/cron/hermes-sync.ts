@@ -10,7 +10,6 @@
 //
 // Hermes venv: $HERMES_HOME/hermes-agent/venv/bin/python3 (see hermes-package-path.ts)
 
-import { spawn } from "child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -22,6 +21,8 @@ import {
   resolveHermesAgentPackage,
   resolveHermesVenvPython,
 } from "../hermes-package-path";
+import { spawnAsync, formatProcessError } from "../process-utils";
+import { looksLikeCronExpression } from "../schedule/parse-schedule";
 
 import type {
   CronJobRow,
@@ -33,52 +34,8 @@ import { getCronJob, getCronJobByHermesId, listCronJobs } from "./read";
 import { updateCronJob } from "./write";
 
 /**
- * Run an executable with args, optional stdin input, and return { stdout, stderr }.
- * Async wrapper around child_process.spawn. Does NOT go through a shell.
- * Compatible with Turbopack/Next.js bundling (no child_process/promises).
+ * Resolve Hermes cron runtime paths (agent package + Python binary).
  */
-function spawnAsync(
-  cmd: string,
-  args: string[],
-  opts: { input?: string; encoding?: string; timeout?: number; killSignal?: NodeJS.Signals } = {}
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    child.stdout!.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
-    child.stderr!.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-
-    if (opts.timeout && opts.timeout > 0) {
-      timer = setTimeout(() => {
-        child.kill((opts.killSignal || "SIGTERM") as NodeJS.Signals);
-      }, opts.timeout);
-    }
-
-    child.on("close", (code) => {
-      if (timer) clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(stderr || stdout || `exit code ${code}`));
-      } else {
-        resolve({ stdout, stderr });
-      }
-    });
-    child.on("error", (err) => {
-      if (timer) clearTimeout(timer);
-      reject(err);
-    });
-
-    if (opts.input) {
-      child.stdin!.write(opts.input);
-      child.stdin!.end();
-    } else {
-      child.stdin!.end();
-    }
-  });
-}
-
 function resolveHermesCronRuntime(hermesHome: string): {
   ok: true;
   hermesAgentPath: string;
@@ -170,6 +127,17 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     skills = [];
   }
 
+  // Resolve schedule_display: prefer top-level field, fall back to nested display/Kind in schedule object,
+  // guarding against Hermes' "?" fallback from _schedule_display_for_job() which would overwrite valid CH values.
+  const resolvedScheduleDisplay = (() => {
+    if (job.schedule_display && job.schedule_display !== "?") return job.schedule_display;
+    if (typeof job.schedule === "object" && job.schedule !== null) {
+      const s = job.schedule as { display?: string; Kind?: string };
+      return s.display ?? s.Kind ?? "";
+    }
+    return "";
+  })();
+
   return {
     schedule: scheduleJson,
     repeat_json: repeatJson,
@@ -179,7 +147,7 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     model: typeof job.model === "string" ? job.model : "",
     provider: typeof job.provider === "string" ? job.provider : "",
     base_url: typeof job.base_url === "string" ? job.base_url : null,
-    schedule_display: (job.schedule_display && job.schedule_display !== "?") ? job.schedule_display : (typeof job.schedule === "object" && job.schedule !== null ? (job.schedule as {display?: string; Kind?: string}).display ?? (job.schedule as {Kind?: string}).Kind ?? "" : ""),
+    schedule_display: resolvedScheduleDisplay,
     enabled: job.enabled !== false ? 1 : 0,
     state: job.state ?? (job.enabled !== false ? "scheduled" : "paused"),
     deliver: job.deliver ?? "none",
@@ -193,7 +161,9 @@ function hermesJobToRow(job: HermesJobRaw): HermesJobRowPartial {
     last_status: job.last_status ?? null,
     last_delivery_error: job.last_delivery_error ?? null,
     created_at: job.created_at ?? new Date().toISOString(),
-    workdir: (job as Record<string, unknown>).workdir as string | null ?? null,
+    workdir: typeof (job as Record<string, unknown>).workdir === "string"
+      ? (job as Record<string, unknown>).workdir as string
+      : null,
   };
 }
 
@@ -406,21 +376,10 @@ function buildPythonScript(
  */
 function normaliseScheduleObj(sched: Record<string, unknown>): Record<string, unknown> {
   const kind = sched?.kind;
-  if (typeof kind === "string" && looksLikeCronExpr(kind)) {
+  if (typeof kind === "string" && looksLikeCronExpression(kind)) {
     return { kind: "cron", expr: kind, ...(sched.display ? { display: sched.display } : {}) };
   }
   return sched;
-}
-
-/**
- * Check if a string looks like a cron expression (5+ space-separated fields).
- * Used to normalise schedules that arrive as {"kind": "* * * * *"} into
- * {"kind": "cron", "expr": "* * * * *"} that the Python scheduler expects.
- */
-function looksLikeCronExpr(s: string): boolean {
-  if (!s || typeof s !== "string") return false;
-  const parts = s.trim().split(/\s+/);
-  return parts.length >= 5 && parts.every((p) => /^[*\-,/0-9]+$/.test(p));
 }
 
 /**
@@ -501,8 +460,7 @@ export async function syncAllJobsToHermes(): Promise<{ ok: boolean; error?: stri
     return { ok: true };
   } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const e = err as { stderr?: string; stdout?: string; message?: string };
-    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    const message = formatProcessError(err);
     logApiError("syncAllJobsToHermes", "python write_all", new Error(String(message).slice(0, 500)));
     return { ok: false, error: String(message).slice(0, 500) };
   }
@@ -560,8 +518,7 @@ export async function removeJobFromHermes(hermesJobId: string): Promise<{ ok: bo
     return { ok: true };
   } catch (err: unknown) {
     try { unlinkSync(tmpScript); } catch { /* best-effort */ }
-    const e = err as { stderr?: string; stdout?: string; message?: string };
-    const message = e.stderr ?? e.stdout ?? e.message ?? "Unknown error";
+    const message = formatProcessError(err);
     return { ok: false, error: String(message).slice(0, 500) };
   }
 }

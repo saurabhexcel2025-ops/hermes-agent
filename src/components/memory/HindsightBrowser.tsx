@@ -94,7 +94,6 @@ export default function HindsightBrowser() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
-  const [, setHasRecalled] = useState(false);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("memories");
   const [reflectResult, setReflectResult] = useState<string | null>(null);
@@ -227,7 +226,6 @@ export default function HindsightBrowser() {
             message?: string;
           }
         | undefined;
-      setHasRecalled(true);
       await applyRecallPayload(payload);
     } catch {
       showToast("Recall failed", "error");

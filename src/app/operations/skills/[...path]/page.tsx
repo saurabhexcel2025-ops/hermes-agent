@@ -259,7 +259,7 @@ export default function SkillDetailPage() {
         title={data.name}
         subtitle={subtitle}
         color="green"
-        backHref="/skills"
+        backHref="/operations/skills"
         backLabel="SKILLS"
         actions={
           <button

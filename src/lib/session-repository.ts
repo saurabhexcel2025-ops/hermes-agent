@@ -218,6 +218,25 @@ export function listSessions(opts: ListSessionsOptions = {}): {
   return { sessions: rows.map(rowToSession).filter(Boolean) as SessionRecord[], total };
 }
 
+// ── Shared helpers ─────────────────────────────────────────────
+
+/**
+ * Estimate session file size based on message and API call counts.
+ * Used in both session-repository.ts (sync path) and sessions/[id]/route.ts (state.db path).
+ * Formula: message_count * 200 + api_call_count * 50, floored at a minimum.
+ * The minimum is per-caller — default 0 for bulk sync, caller provides for individual display.
+ */
+export function estimateSessionSize(
+  messageCount: number | null,
+  apiCallCount: number | null,
+  minSize = 0,
+): number {
+  return Math.max(
+    (messageCount ?? 0) * 200 + (apiCallCount ?? 0) * 50,
+    minSize,
+  );
+}
+
 // ── Hermes state.db sync ──────────────────────────────────────
 
 interface HermesSessionRow {
@@ -256,28 +275,35 @@ function readHermesSessionsFromStateDb(): HermesSessionRow[] {
   const stateDbPath = join(root, "state.db");
   if (!existsSync(stateDbPath)) return [];
 
+  let hermesDb: Database.Database | null = null;
   try {
-    const hermesDb = new Database(stateDbPath, { readonly: true });
+    hermesDb = new Database(stateDbPath, { readonly: true });
 
     const tables = hermesDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
       .all();
     if (tables.length === 0) {
       hermesDb.close();
+      hermesDb = null;
       return [];
     }
 
     const rows = hermesDb
       .prepare(
         `SELECT id, source, model, title, started_at, ended_at, end_reason, message_count, api_call_count
-         FROM sessions ORDER BY started_at DESC LIMIT 5000`,
+         FROM sessions ORDER BY started_at DESC`,
       )
       .all() as HermesSessionRow[];
     hermesDb.close();
+    hermesDb = null;
 
     return rows;
   } catch {
     return [];
+  } finally {
+    if (hermesDb) {
+      try { hermesDb.close(); } catch { /* already closed or never fully opened */ }
+    }
   }
 }
 
@@ -305,7 +331,7 @@ function buildValidMissionIdSet(): Set<string> {
  *   Hermes job ID (e.g. "9514116b5b0d")
  *     -> cron_jobs.hermes_job_id = job ID
  *     -> cron_jobs.id = cron_job UUID
- *     -> missions.cron_job_id = cron_job UUID  (NOT cron_jobs.id)
+ *     -> missions.cron_job_id = cron_jobs.id (FK to cron_jobs)
  *     -> missions.id = mission UUID
  */
 function buildMissionIdByJobId(): Map<string, string> {
@@ -341,11 +367,26 @@ function buildMissionIdByJobId(): Map<string, string> {
  * Completed sessions in Hermes are updated to "completed"/"failed"
  * status here — their end state is always driven by Hermes.
  */
-export function syncHermesSessionsToDb(): { synced: number } {
+export function syncHermesSessionsToDb(): { synced: number; skipped: number } {
   const hermesSessions = readHermesSessionsFromStateDb();
   const missionIdByJobId = buildMissionIdByJobId();
   const validMissionIds = buildValidMissionIdSet();
   const database = db();
+
+  // ── Step 1: Clean up stale mission_id references ─────────────
+  // NULL out mission_ids that point to soft-deleted or missing missions
+  // to prevent FK violations on subsequent upserts.
+  try {
+    database.prepare(/* sql */ `
+      UPDATE sessions
+      SET mission_id = NULL
+      WHERE source = 'cron'
+        AND mission_id IS NOT NULL
+        AND mission_id NOT IN (SELECT id FROM missions WHERE deleted_at IS NULL)
+    `).run();
+  } catch {
+    // non-fatal — the individual try/catch below will handle any remaining FK issues
+  }
 
   const upsert = database.prepare(/* sql */ `
     INSERT INTO sessions (
@@ -358,6 +399,7 @@ export function syncHermesSessionsToDb(): { synced: number } {
       ?, ?
     )
     ON CONFLICT(id) DO UPDATE SET
+      source     = excluded.source,
       title      = excluded.title,
       model_id   = COALESCE(excluded.model_id, model_id),
       mission_id = COALESCE(excluded.mission_id, mission_id),
@@ -369,17 +411,15 @@ export function syncHermesSessionsToDb(): { synced: number } {
   `);
 
   const tx = database.transaction(() => {
-    let count = 0;
+    let synced = 0;
+    let skipped = 0;
     for (const row of hermesSessions) {
       const startedAt = new Date(row.started_at * 1000).toISOString();
       const endedAt = row.ended_at
         ? new Date(row.ended_at * 1000).toISOString()
         : null;
       const { status, exitCode } = hermesStatusFromEndReason(row.end_reason);
-      const size = Math.max(
-        (row.message_count ?? 0) * 200 + (row.api_call_count ?? 0) * 50,
-        0,
-      );
+      const size = estimateSessionSize(row.message_count, row.api_call_count);
 
       let title = row.title ?? row.id;
       let missionId: string | null = null;
@@ -398,25 +438,61 @@ export function syncHermesSessionsToDb(): { synced: number } {
               : null;
         }
       } else if (row.source === "api_server") {
-        // api_server sessions treated as cli
+        // api_server sessions mapped to api source
       }
 
-      upsert.run(
-        row.id,
-        row.source === "api_server" ? "cli" : row.source,
-        missionId,
-        row.model ?? null,
-        title,
-        size,
-        startedAt,
-        endedAt,
-        status,
-        exitCode,
-      );
-      count++;
+      try {
+        upsert.run(
+          row.id,
+          row.source === "api_server" ? "api" : row.source,
+          missionId,
+          row.model ?? null,
+          title,
+          size,
+          startedAt,
+          endedAt,
+          status,
+          exitCode,
+        );
+        synced++;
+      } catch {
+        // FK violation or other transient error — skip this session
+        // so it doesn't kill the entire transaction
+        skipped++;
+      }
     }
-    return count;
+    return { synced, skipped };
   });
 
-  return { synced: tx() };
+  const result = tx();
+  if (result.skipped > 0) {
+    console.warn(`[syncHermesSessionsToDb] skipped ${result.skipped} sessions due to FK/constraint errors`);
+  }
+
+  // ── Step 3: Close orphaned active sessions ──────────────────
+  // The Hermes Gateway API doesn't set end_reason on completion,
+  // so sessions end up permanently stuck as "active". Close any
+  // session that has actual content, no end state, and is older
+  // than 5 minutes (safely past any in-progress window).
+  try {
+    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { changes } = database
+      .prepare(/* sql */ `
+        UPDATE sessions
+        SET status = 'completed',
+            ended_at = COALESCE(ended_at, started_at)
+        WHERE status = 'active'
+          AND source IN ('api', 'cli')
+          AND size > 0
+          AND started_at < ?
+      `)
+      .run(cutoff);
+    if (changes > 0) {
+      console.log(`[syncHermesSessionsToDb] closed ${changes} orphaned active sessions`);
+    }
+  } catch {
+    // non-fatal cleanup
+  }
+
+  return { synced: result.synced, skipped: result.skipped };
 }

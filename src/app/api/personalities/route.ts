@@ -8,6 +8,42 @@ import { listProfiles, updateProfileContent } from "@/lib/profiles-repository";
 import { pushProfileToHermes, pushRootToHermes } from "@/lib/hermes-profile-sync";
 import { resolveSafeProfileName } from "@/lib/path-security";
 
+/** Shared upsert logic used by both POST (create) and PUT (update). */
+async function upsertPersonality(request: NextRequest, _logLabel: string) {
+  ensureDb();
+  const body = (await request.json()) as Record<string, unknown>;
+  const profile = typeof body.profile === "string" ? body.profile : "default";
+  const prompt = typeof body.prompt === "string" ? body.prompt : "";
+  if (!prompt.trim()) {
+    return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+  }
+
+  const resolved = resolveSafeProfileName(profile);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error }, { status: 400 });
+  }
+
+  if (resolved.profile === "default") {
+    updateAgentRoot({ soulMd: prompt });
+    const push = pushRootToHermes();
+    if (!push.success) {
+      return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
+    }
+  }
+  else {
+    const updated = updateProfileContent(resolved.profile, { soulMd: prompt });
+    if (!updated) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    const push = pushProfileToHermes(resolved.profile);
+    if (!push.success) {
+      return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({
+    data: { success: true, name: resolved.profile, prompt, source: "SOUL.md" },
+  });
+}
+
 export async function GET() {
   try {
     ensureDb();
@@ -42,41 +78,10 @@ export async function POST(request: NextRequest) {
   if (auth) return auth;
 
   try {
-    ensureDb();
-    const body = (await request.json()) as Record<string, unknown>;
-    const profile = typeof body.profile === "string" ? body.profile : "default";
-    const prompt = typeof body.prompt === "string" ? body.prompt : "";
-    if (!prompt.trim()) {
-      return NextResponse.json({ error: "prompt is required" }, { status: 400 });
-    }
-
-    const resolved = resolveSafeProfileName(profile);
-    if (!resolved.ok) {
-      return NextResponse.json({ error: resolved.error }, { status: 400 });
-    }
-
-    if (resolved.profile === "default") {
-      updateAgentRoot({ soulMd: prompt });
-      const push = pushRootToHermes();
-      if (!push.success) {
-        return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
-      }
-    }
-    else {
-      const updated = updateProfileContent(resolved.profile, { soulMd: prompt });
-      if (!updated) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
-      const push = pushProfileToHermes(resolved.profile);
-      if (!push.success) {
-        return NextResponse.json({ error: push.error ?? "Push failed" }, { status: 500 });
-      }
-    }
-
-    return NextResponse.json({
-      data: { success: true, name: resolved.profile, prompt, source: "SOUL.md" },
-    });
+    return await upsertPersonality(request, "POST /api/personalities");
   }
   catch (error) {
-    logApiError("POST /api/personalities", "updating SOUL identity", error);
+    logApiError("POST /api/personalities", "creating SOUL identity", error);
     return NextResponse.json({ error: "Failed to save personality" }, { status: 500 });
   }
 }
@@ -88,4 +93,15 @@ export async function DELETE() {
   );
 }
 
-export const PUT = POST;
+export async function PUT(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth) return auth;
+
+  try {
+    return await upsertPersonality(request, "PUT /api/personalities");
+  }
+  catch (error) {
+    logApiError("PUT /api/personalities", "updating SOUL identity", error);
+    return NextResponse.json({ error: "Failed to save personality" }, { status: 500 });
+  }
+}

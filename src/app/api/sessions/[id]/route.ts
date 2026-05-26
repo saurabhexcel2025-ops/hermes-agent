@@ -6,7 +6,7 @@ import { join } from "path";
 import { getActiveHermesPaths } from "@/lib/hermes-agent-runtime";
 import { logApiError } from "@/lib/api-logger";
 import { requireAuth } from "@/lib/api-auth";
-import { getSession } from "@/lib/session-repository";
+import { getSession, estimateSessionSize } from "@/lib/session-repository";
 import { PATHS } from "@/lib/paths";
 import {
   getMaxSessionFileBytes,
@@ -35,8 +35,9 @@ export async function GET(
   const stateDbPath = join(root, "state.db");
 
   if (existsSync(stateDbPath)) {
+    let hermesDb: Database.Database | null = null;
     try {
-      const hermesDb = new Database(stateDbPath, { readonly: true });
+      hermesDb = new Database(stateDbPath, { readonly: true });
 
       // Check if this session exists in Hermes state.db
       const sessionRow = hermesDb
@@ -59,7 +60,6 @@ export async function GET(
             tool_calls: string | null; tool_call_id: string | null;
             finish_reason: string | null; reasoning: string | null; timestamp: number;
           }>;
-        hermesDb.close();
 
         const messages = messageRows.map((m, i) => {
           let toolCalls = null;
@@ -79,12 +79,13 @@ export async function GET(
           };
         });
 
-        const size = Math.max(
-          (sessionRow.message_count ?? 0) * 200 + (sessionRow.api_call_count ?? 0) * 50,
+        const size = estimateSessionSize(
+          sessionRow.message_count,
+          sessionRow.api_call_count,
           messages.length * 300,
         );
 
-        return NextResponse.json({
+        const response = NextResponse.json({
           data: {
             id: sanitizedId,
             filename: sanitizedId,
@@ -100,18 +101,19 @@ export async function GET(
               : null,
           },
         });
+        return response;
       }
-
-      hermesDb.close();
     } catch (err) {
       logApiError("GET /api/sessions/[id]", "reading Hermes state.db for " + sanitizedId, err);
       // Non-fatal — fall through to file-based lookup
+    } finally {
+      if (hermesDb) { try { hermesDb.close(); } catch { /* already closed */ } }
     }
   }
 
   // ── Step 2: Legacy file-based sessions (~/.hermes/sessions/) ──────────
   const sessionsPath = getActiveHermesPaths().sessions;
-  const fullPath = sessionsPath + "/" + sanitizedId;
+  const fullPath = join(sessionsPath, sanitizedId);
   let filePath = "";
 
   if (existsSync(fullPath)) {
@@ -142,7 +144,7 @@ export async function GET(
             data: {
               id: sanitizedId,
               filename: sessionPath.split("/").pop(),
-              format: dbSession.missionId ? "mission-output" : "db",
+              format: "mission-output",
               title: dbSession.title || sanitizedId,
               model: dbSession.modelId || "",
               source: dbSession.source,

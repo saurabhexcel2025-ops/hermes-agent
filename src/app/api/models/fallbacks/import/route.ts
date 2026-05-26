@@ -111,7 +111,6 @@ export async function POST(request: NextRequest) {
 
       // Upsert the model (creates if missing, updates if exists)
       const modelResult = upsertModel({
-        importKey: key,
         name: entry.model,
         provider: entry.provider,
         modelId: entry.model,

@@ -145,65 +145,52 @@ export function useModelsPage() {
     [credentials]
   );
 
-  const handlePush = useCallback(
-    async (modelId: string, options?: { pushCredential?: boolean }): Promise<SyncActionResult> => {
+  /** Shared sync helper — both push and pull follow the same pattern. */
+  const syncModel = useCallback(
+    async (
+      action: "push" | "pull",
+      modelId: string,
+      options?: Record<string, unknown>,
+    ): Promise<SyncActionResult> => {
+      const label = action === "push" ? "Push" : "Pull";
       try {
-        const res = await fetch(`/api/models/sync/push`, {
+        const res = await fetch(`/api/models/sync/${action}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelId, pushCredential: options?.pushCredential !== false }),
+          body: JSON.stringify({ modelId, ...options }),
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error || "Push failed");
+          throw new Error(data.error || `${label} failed`);
         }
-        showToast("Model pushed to Hermes", "success");
+        showToast(`Model ${action}ed to Hermes`, "success");
         void loadAll();
         return { success: true, backupPath: null, details: [] };
       } catch (err) {
         showToast(
-          err instanceof Error ? err.message : "Push failed",
-          "error"
+          err instanceof Error ? err.message : `${label} failed`,
+          "error",
         );
         return {
           success: false,
           backupPath: null,
-          details: [{ action: "push", detail: err instanceof Error ? err.message : "Push failed" }],
+          details: [{ action, detail: err instanceof Error ? err.message : `${label} failed` }],
         };
       }
     },
-    [loadAll, showToast]
+    [loadAll, showToast],
+  );
+
+  const handlePush = useCallback(
+    (modelId: string, options?: { pushCredential?: boolean }): Promise<SyncActionResult> =>
+      syncModel("push", modelId, { pushCredential: options?.pushCredential !== false }),
+    [syncModel],
   );
 
   const handlePull = useCallback(
-    async (modelId: string, options?: { excluded?: Set<string> }): Promise<SyncActionResult> => {
-      try {
-        const excluded = options?.excluded ?? new Set<string>();
-        const res = await fetch(`/api/models/sync/pull`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelId, excluded: [...excluded] }),
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error || "Pull failed");
-        }
-        showToast("Model pulled from Hermes", "success");
-        void loadAll();
-        return { success: true, backupPath: null, details: [] };
-      } catch (err) {
-        showToast(
-          err instanceof Error ? err.message : "Pull failed",
-          "error"
-        );
-        return {
-          success: false,
-          backupPath: null,
-          details: [{ action: "pull", detail: err instanceof Error ? err.message : "Pull failed" }],
-        };
-      }
-    },
-    [loadAll, showToast]
+    (modelId: string, options?: { excluded?: Set<string> }): Promise<SyncActionResult> =>
+      syncModel("pull", modelId, { excluded: [...(options?.excluded ?? new Set<string>())] }),
+    [syncModel],
   );
 
   const handleSaved = useCallback(() => {
@@ -604,8 +591,6 @@ export function useModelsPage() {
     try {
       const res = await fetch("/api/models/fallbacks/import", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error("Import failed");
       await loadAll();

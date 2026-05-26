@@ -62,7 +62,6 @@ export async function POST(request: NextRequest) {
     for (const model of parsed.models) {
       try {
         const result = upsertModel({
-          importKey: model.importKey,
           name: model.name,
           provider: model.provider,
           modelId: model.modelId,

@@ -19,6 +19,7 @@ import {
   MessageSquare,
   HardDrive,
   ChevronRight,
+  Globe,
   Filter,
   Bot,
   Zap,
@@ -28,34 +29,16 @@ import PageHeader from "@/components/layout/PageHeader";
 import { SearchInput } from "@/components/ui/Input";
 import { LoadingSpinner, EmptyState } from "@/components/ui/LoadingSpinner";
 import Badge from "@/components/ui/Badge";
+import Pagination from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
 import { timeAgo } from "@/lib/utils";
 import AppPageShell from "@/components/layout/AppPageShell";
+import type { SessionRecord, SessionSource } from "@/lib/session-repository";
 
 // ── Types ────────────────────────────────────────────────────
 
-type SessionStatus = "active" | "completed" | "failed";
-type SessionSource = "cli" | "cron" | "mission" | "api";
-
-interface Session {
-  id: string;
-  agentType: string;
-  source: SessionSource;
-  missionId: string | null;
-  profileName: string | null;
-  modelId: string | null;
-  provider: string | null;
-  title: string | null;
-  size: number;
-  startedAt: string;
-  endedAt: string | null;
-  status: SessionStatus;
-  exitCode: number | null;
-  error: string | null;
-}
-
 interface SessionsResponse {
-  sessions: Session[];
+  sessions: SessionRecord[];
   total: number;
 }
 
@@ -70,13 +53,13 @@ const SOURCE_META: Record<
   cli: { label: "CLI", colorClass: "bg-neon-orange/10 text-neon-orange", icon: <Bot className="w-3 h-3" /> },
   cron: { label: "Cron", colorClass: "bg-neon-cyan/10 text-neon-cyan", icon: <Calendar className="w-3 h-3" /> },
   mission: { label: "Mission", colorClass: "bg-neon-green/10 text-neon-green", icon: <Zap className="w-3 h-3" /> },
-  api: { label: "API", colorClass: "bg-neon-purple/10 text-neon-purple", icon: <ChevronRight className="w-3 h-3" /> },
+  api: { label: "API", colorClass: "bg-neon-purple/10 text-neon-purple", icon: <Globe className="w-3 h-3" /> },
 };
 
 // ── Helpers ─────────────────────────────────────────────────
 
 
-function formatTitle(session: Session): string {
+function formatTitle(session: SessionRecord): string {
   if (session.title) return session.title;
   if (session.source === "cron" && session.profileName) {
     return `Cron: ${session.profileName}`;
@@ -89,7 +72,7 @@ function formatTitle(session: Session): string {
 
 // ── Components ───────────────────────────────────────────────
 
-function SessionCard({ session }: { session: Session }) {
+function SessionCard({ session }: { session: SessionRecord }) {
   const title = formatTitle(session);
   const meta = SOURCE_META[session.source] ?? SOURCE_META.cli;
   const statusColor =
@@ -178,15 +161,13 @@ export default function SessionsPage() {
     void loadSessions(0);
   }, [loadSessions]);
 
+  // Stable reference for downstream useMemo hooks — prevents unnecessary recomputation
+  // on renders where data hasn't changed. Using data?.sessions as dependency is safe:
+  // it only produces a new reference when the API response changes.
   const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
 
-  const sources = useMemo(() => {
-    const srcs = new Set<SessionSource>();
-    for (const s of sessions) {
-      srcs.add(s.source);
-    }
-    return Array.from(srcs).sort() as SessionSource[];
-  }, [sessions]);
+  // All known session source types — always show filter buttons regardless of current page contents
+  const sources = Object.keys(SOURCE_META) as SessionSource[];
 
   const filteredSessions = useMemo(() => {
     if (!search) return sessions;
@@ -221,7 +202,7 @@ export default function SessionsPage() {
               accentColor="orange"
             />
           </div>
-          {sources.length > 1 && (
+          {sources.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-4 h-4 text-white/30 flex-shrink-0" />
               <button
@@ -273,33 +254,14 @@ export default function SessionsPage() {
               ))}
             </div>
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-white/10">
-                <button
-                  onClick={() => {
-                    const newPage = Math.max(0, page - 1);
-                    setPage(newPage);
-                    void loadSessions(newPage * PAGE_SIZE);
-                  }}
-                  disabled={page === 0}
-                  className="text-xs font-mono px-3 py-1.5 rounded bg-white/5 text-white/40 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-xs text-white/30 font-mono">
-                  Page {page + 1} of {totalPages}
-                </span>
-                <button
-                  onClick={() => {
-                    const newPage = Math.min(totalPages - 1, page + 1);
-                    setPage(newPage);
-                    void loadSessions(newPage * PAGE_SIZE);
-                  }}
-                  disabled={page >= totalPages - 1}
-                  className="text-xs font-mono px-3 py-1.5 rounded bg-white/5 text-white/40 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={(newPage) => {
+                  setPage(newPage);
+                  void loadSessions(newPage * PAGE_SIZE);
+                }}
+              />
             )}
           </>
         )}

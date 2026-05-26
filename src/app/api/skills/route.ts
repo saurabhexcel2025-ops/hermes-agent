@@ -8,7 +8,7 @@ import { listSkills } from "@/lib/skills-repository";
 import { skillsRootForProfile } from "@/lib/skills-config";
 import { resolveSafeProfileName } from "@/lib/path-security";
 import { scanDiskSkillsCatalog } from "@/lib/hermes-profile-sync";
-import { existsSync, statSync } from "fs";
+import { statSync } from "fs";
 
 interface Skill {
   name: string;
@@ -45,15 +45,13 @@ export async function GET(request: NextRequest) {
       const path = skillsDir + "/" + row.skillKey + "/SKILL.md";
       let size = row.content.length;
       let lastModified = row.updatedAt;
-      if (existsSync(path)) {
-        try {
-          const st = statSync(path);
-          size = st.size;
-          lastModified = st.mtime.toISOString();
-        }
-        catch {
-          // use db metadata
-        }
+      try {
+        const st = statSync(path);
+        size = st.size;
+        lastModified = st.mtime.toISOString();
+      }
+      catch {
+        // statSync not essential — fall back to DB metadata if file unavailable
       }
       const category = row.category || row.skillKey.split("/")[0] || "uncategorized";
       return {
@@ -67,6 +65,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Merge disk-only skills (not yet in DB) using the shared catalog scanner
     for (const { skillKey, path } of scanDiskSkillsCatalog()) {
       if (dbKeys.has(skillKey)) continue;
       try {
@@ -83,7 +82,7 @@ export async function GET(request: NextRequest) {
         });
       }
       catch {
-        // skip
+        // disk-only skill file may have been removed since scan; skip silently
       }
     }
 
