@@ -480,9 +480,8 @@ export function syncHermesSessionsToDb(): { synced: number; skipped: number } {
       .prepare(/* sql */ `
         UPDATE sessions
         SET status = 'completed',
-            ended_at = started_at
+            ended_at = COALESCE(ended_at, started_at)
         WHERE status = 'active'
-          AND ended_at IS NULL
           AND source IN ('api', 'cli')
           AND size > 0
           AND started_at < ?
